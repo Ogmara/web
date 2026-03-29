@@ -1,0 +1,22 @@
+{
+  "name": "@ogmara/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ogmara web application — decentralized chat and news PWA",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ogmara/sdk": "file:../sdk-js",
+    "solid-js": "^1.9.7",
+    "i18next": "^25.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-solid": "^2.11.6"
+  }
+}
