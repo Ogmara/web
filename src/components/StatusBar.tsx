@@ -1,11 +1,13 @@
 import { Component } from 'solid-js';
 import { t } from '../i18n/init';
+import { NodeSelector } from './NodeSelector';
 
 export const StatusBar: Component = () => {
   return (
     <footer class="status-bar">
       <span class="status-indicator connected" />
       <span class="status-text">{t('status_connected')}</span>
+      <NodeSelector />
       <span class="status-version">v{__APP_VERSION__}</span>
 
       <style>{`
