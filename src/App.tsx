@@ -3,10 +3,11 @@ import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { ChatView } from './pages/ChatView';
 import { NewsView } from './pages/NewsView';
+import { BookmarksView } from './pages/BookmarksView';
 import { SettingsView } from './pages/SettingsView';
 import { StatusBar } from './components/StatusBar';
 
-export type View = 'chat' | 'news' | 'settings';
+export type View = 'chat' | 'news' | 'bookmarks' | 'settings';
 
 export const App: Component = () => {
   const [currentView, setCurrentView] = createSignal<View>('chat');
@@ -36,6 +37,9 @@ export const App: Component = () => {
           </Show>
           <Show when={currentView() === 'news'}>
             <NewsView />
+          </Show>
+          <Show when={currentView() === 'bookmarks'}>
+            <BookmarksView />
           </Show>
           <Show when={currentView() === 'settings'}>
             <SettingsView />
