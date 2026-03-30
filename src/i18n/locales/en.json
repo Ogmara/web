@@ -82,5 +82,21 @@
   "channel_unpin": "Unpin",
   "channel_invite": "Invite",
   "channel_reply": "Reply",
-  "channel_reply_preview": "Replying to"
+  "channel_reply_preview": "Replying to",
+  "anchor_verified": "Verified",
+  "anchor_active": "Active Anchorer",
+  "anchor_tooltip_active": "Actively anchoring state on-chain for 7+ days",
+  "anchor_tooltip_verified": "Recently anchored state on-chain",
+  "anchor_since": "Anchoring since",
+  "anchor_last": "Last anchor",
+  "anchor_ago_minutes": "{{count}} minutes ago",
+  "anchor_ago_hours": "{{count}} hours ago",
+  "anchor_ago_days": "{{count}} days ago",
+  "node_info_title": "Connected Node",
+  "node_info_status": "Status",
+  "node_info_verified": "Verified",
+  "node_info_peers": "Peers",
+  "node_info_version": "Version",
+  "node_info_switch": "Switch Node",
+  "node_info_disconnect": "Disconnect"
 }

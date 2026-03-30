@@ -59,5 +59,21 @@
   "confirm_delete": "¿Estás seguro de que quieres eliminar esto?",
   "cancel": "Cancelar",
   "save": "Guardar",
-  "done": "Hecho"
+  "done": "Hecho",
+  "anchor_verified": "Verificado",
+  "anchor_active": "Anclador Activo",
+  "anchor_tooltip_active": "Anclando estado on-chain activamente por más de 7 días",
+  "anchor_tooltip_verified": "Ancló estado on-chain recientemente",
+  "anchor_since": "Anclando desde",
+  "anchor_last": "Último anclaje",
+  "anchor_ago_minutes": "hace {{count}} minutos",
+  "anchor_ago_hours": "hace {{count}} horas",
+  "anchor_ago_days": "hace {{count}} días",
+  "node_info_title": "Nodo Conectado",
+  "node_info_status": "Estado",
+  "node_info_verified": "Verificado",
+  "node_info_peers": "Pares",
+  "node_info_version": "Versión",
+  "node_info_switch": "Cambiar Nodo",
+  "node_info_disconnect": "Desconectar"
 }

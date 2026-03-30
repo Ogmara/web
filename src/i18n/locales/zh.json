@@ -59,5 +59,21 @@
   "confirm_delete": "确定要删除吗？",
   "cancel": "取消",
   "save": "保存",
-  "done": "完成"
+  "done": "完成",
+  "anchor_verified": "已验证",
+  "anchor_active": "活跃锚定者",
+  "anchor_tooltip_active": "已连续7天以上在链上锚定状态",
+  "anchor_tooltip_verified": "最近在链上锚定了状态",
+  "anchor_since": "锚定开始于",
+  "anchor_last": "上次锚定",
+  "anchor_ago_minutes": "{{count}}分钟前",
+  "anchor_ago_hours": "{{count}}小时前",
+  "anchor_ago_days": "{{count}}天前",
+  "node_info_title": "已连接节点",
+  "node_info_status": "状态",
+  "node_info_verified": "已验证",
+  "node_info_peers": "节点",
+  "node_info_version": "版本",
+  "node_info_switch": "切换节点",
+  "node_info_disconnect": "断开连接"
 }

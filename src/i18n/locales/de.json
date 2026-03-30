@@ -59,5 +59,21 @@
   "confirm_delete": "Möchtest du das wirklich löschen?",
   "cancel": "Abbrechen",
   "save": "Speichern",
-  "done": "Fertig"
+  "done": "Fertig",
+  "anchor_verified": "Verifiziert",
+  "anchor_active": "Aktiver Ankerer",
+  "anchor_tooltip_active": "Verankert seit 7+ Tagen aktiv den Status on-chain",
+  "anchor_tooltip_verified": "Hat kürzlich den Status on-chain verankert",
+  "anchor_since": "Verankert seit",
+  "anchor_last": "Letzter Anker",
+  "anchor_ago_minutes": "vor {{count}} Minuten",
+  "anchor_ago_hours": "vor {{count}} Stunden",
+  "anchor_ago_days": "vor {{count}} Tagen",
+  "node_info_title": "Verbundener Knoten",
+  "node_info_status": "Status",
+  "node_info_verified": "Verifiziert",
+  "node_info_peers": "Peers",
+  "node_info_version": "Version",
+  "node_info_switch": "Knoten wechseln",
+  "node_info_disconnect": "Trennen"
 }
