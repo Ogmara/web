@@ -59,5 +59,21 @@
   "confirm_delete": "Tem certeza de que deseja excluir?",
   "cancel": "Cancelar",
   "save": "Salvar",
-  "done": "Concluído"
+  "done": "Concluído",
+  "anchor_verified": "Verificado",
+  "anchor_active": "Ancorador Ativo",
+  "anchor_tooltip_active": "Ancorando estado on-chain ativamente por mais de 7 dias",
+  "anchor_tooltip_verified": "Ancorou estado on-chain recentemente",
+  "anchor_since": "Ancorando desde",
+  "anchor_last": "Última âncora",
+  "anchor_ago_minutes": "há {{count}} minutos",
+  "anchor_ago_hours": "há {{count}} horas",
+  "anchor_ago_days": "há {{count}} dias",
+  "node_info_title": "Nó Conectado",
+  "node_info_status": "Status",
+  "node_info_verified": "Verificado",
+  "node_info_peers": "Pares",
+  "node_info_version": "Versão",
+  "node_info_switch": "Trocar Nó",
+  "node_info_disconnect": "Desconectar"
 }

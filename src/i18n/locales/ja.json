@@ -59,5 +59,21 @@
   "confirm_delete": "本当に削除しますか？",
   "cancel": "キャンセル",
   "save": "保存",
-  "done": "完了"
+  "done": "完了",
+  "anchor_verified": "認証済み",
+  "anchor_active": "アクティブアンカー",
+  "anchor_tooltip_active": "7日以上オンチェーンでステートをアンカー中",
+  "anchor_tooltip_verified": "最近オンチェーンでステートをアンカー済み",
+  "anchor_since": "アンカー開始",
+  "anchor_last": "最終アンカー",
+  "anchor_ago_minutes": "{{count}}分前",
+  "anchor_ago_hours": "{{count}}時間前",
+  "anchor_ago_days": "{{count}}日前",
+  "node_info_title": "接続中のノード",
+  "node_info_status": "ステータス",
+  "node_info_verified": "認証済み",
+  "node_info_peers": "ピア",
+  "node_info_version": "バージョン",
+  "node_info_switch": "ノードを切替",
+  "node_info_disconnect": "切断"
 }

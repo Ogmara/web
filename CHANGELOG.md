@@ -5,6 +5,21 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-03-30
+
+### Added
+
+- **Node Anchor Verification Badges** — green checkmark SVG badge for nodes
+  that anchor L2 state on-chain
+- `AnchorBadge` component — reusable inline badge with tooltip, renders
+  checkmark for `active`/`verified` levels, nothing for `none`
+- Anchor badges shown in NodeSelector dropdown next to each node
+- Anchor badge shown in StatusBar connection indicator
+- **Node Info Dialog** — click the connection indicator in the status bar to
+  view detailed node information (status, verification level, anchoring since,
+  last anchor age, peers, version)
+- 17 new i18n keys across all 6 languages for anchor and node info labels
+
 ## [0.3.0] - 2026-03-30
 
 ### Added

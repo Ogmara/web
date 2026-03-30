@@ -10,6 +10,7 @@ import { t } from '../i18n/init';
 import { getCurrentNodeUrl, getAvailableNodes, switchNode } from '../lib/api';
 import type { NodeWithPing } from '@ogmara/sdk';
 import { pingNode } from '@ogmara/sdk';
+import { AnchorBadge } from './AnchorBadge';
 
 export const NodeSelector: Component = () => {
   const [open, setOpen] = createSignal(false);
@@ -63,7 +64,12 @@ export const NodeSelector: Component = () => {
                   class={`node-option ${node.url === currentUrl() ? 'active' : ''}`}
                   onClick={() => handleSelect(node.url)}
                 >
-                  <span class="node-option-url">{node.url.replace(/^https?:\/\//, '')}</span>
+                  <span class="node-option-left">
+                    <span class="node-option-url">{node.url.replace(/^https?:\/\//, '')}</span>
+                    <Show when={node.anchorStatus && node.anchorStatus.level !== 'none'}>
+                      <AnchorBadge level={node.anchorStatus!.level} showLabel={false} />
+                    </Show>
+                  </span>
                   <span class="node-ping" style={{ color: pingColor(node.ping) }}>
                     {node.ping}ms ({pingLabel(node.ping)})
                   </span>
@@ -166,6 +172,11 @@ export const NodeSelector: Component = () => {
         }
         .node-option:hover { background: var(--color-bg-tertiary); }
         .node-option.active { background: var(--color-bg-tertiary); font-weight: 600; }
+        .node-option-left {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-xs);
+        }
         .node-option-url { color: var(--color-text-primary); }
         .node-ping { font-size: var(--font-size-xs); font-weight: 600; }
         .node-loading {
