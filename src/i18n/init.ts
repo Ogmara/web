@@ -13,8 +13,9 @@ import es from './locales/es.json';
 import pt from './locales/pt.json';
 import ja from './locales/ja.json';
 import zh from './locales/zh.json';
+import ru from './locales/ru.json';
 
-export const SUPPORTED_LANGUAGES = ['en', 'de', 'es', 'pt', 'ja', 'zh'] as const;
+export const SUPPORTED_LANGUAGES = ['en', 'de', 'es', 'pt', 'ja', 'zh', 'ru'] as const;
 export type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number];
 
 export function initI18n(): void {
@@ -33,6 +34,7 @@ export function initI18n(): void {
       pt: { translation: pt },
       ja: { translation: ja },
       zh: { translation: zh },
+      ru: { translation: ru },
     },
     interpolation: {
       escapeValue: false,

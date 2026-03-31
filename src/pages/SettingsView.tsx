@@ -10,6 +10,7 @@ const LANGUAGE_NAMES: Record<string, string> = {
   pt: 'Português',
   ja: '日本語',
   zh: '中文',
+  ru: 'Русский',
 };
 
 export const SettingsView: Component = () => {

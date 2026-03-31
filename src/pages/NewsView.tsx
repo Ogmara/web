@@ -1,6 +1,12 @@
+/**
+ * NewsView — news feed with reactions, bookmarks, reposts (auth-gated).
+ */
+
 import { Component, createResource, createSignal, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
+import { authStatus, getSigner } from '../lib/auth';
+import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 
 /** Predefined reaction emojis for news posts. */
@@ -23,11 +29,19 @@ export const NewsView: Component = () => {
     }
   });
 
+  const handleNewPost = () => {
+    if (authStatus() !== 'ready') {
+      navigate('/wallet');
+      return;
+    }
+    navigate('/compose');
+  };
+
   return (
     <div class="news-view">
       <div class="news-header">
         <h2>{t('news_title')}</h2>
-        <button class="new-post-btn">{t('news_new_post')}</button>
+        <button class="new-post-btn" onClick={handleNewPost}>{t('news_new_post')}</button>
       </div>
       <div class="news-feed">
         <Show
@@ -59,7 +73,13 @@ export const NewsView: Component = () => {
           padding: var(--spacing-lg);
         }
         .news-card-header { display: flex; justify-content: space-between; margin-bottom: var(--spacing-sm); }
-        .news-author { font-weight: 600; color: var(--color-accent-primary); font-size: var(--font-size-sm); }
+        .news-author {
+          font-weight: 600;
+          color: var(--color-accent-primary);
+          font-size: var(--font-size-sm);
+          cursor: pointer;
+        }
+        .news-author:hover { text-decoration: underline; }
         .news-time { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
         .news-card-body { line-height: 1.6; margin-bottom: var(--spacing-md); }
         .news-empty { text-align: center; color: var(--color-text-secondary); padding: var(--spacing-xl); }
@@ -98,18 +118,38 @@ export const NewsView: Component = () => {
         }
         .action-btn:hover { color: var(--color-accent-primary); }
         .action-btn.bookmarked { color: var(--color-accent-primary); }
+        .tip-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 4px 8px;
+          border-radius: var(--radius-sm);
+          font-size: var(--font-size-sm);
+          color: var(--color-warning);
+          cursor: pointer;
+        }
+        .tip-btn:hover { color: var(--color-accent-primary); }
       `}</style>
     </div>
   );
 };
 
-/** Individual news card with reactions, repost, bookmark. */
+/** Individual news card with reactions, repost, bookmark, tip. */
 const NewsCard: Component<{ post: any }> = (props) => {
   const [reactionCounts, setReactionCounts] = createSignal<Record<string, number>>({});
   const [bookmarked, setBookmarked] = createSignal(false);
   const [reposted, setReposted] = createSignal(false);
 
+  const requireAuthOrRedirect = (): boolean => {
+    if (!getSigner()) {
+      navigate('/wallet');
+      return false;
+    }
+    return true;
+  };
+
   const handleReaction = async (emoji: string) => {
+    if (!requireAuthOrRedirect()) return;
     try {
       const client = getClient();
       const current = reactionCounts()[emoji] ?? 0;
@@ -121,6 +161,7 @@ const NewsCard: Component<{ post: any }> = (props) => {
   };
 
   const handleBookmark = async () => {
+    if (!requireAuthOrRedirect()) return;
     try {
       const client = getClient();
       if (bookmarked()) {
@@ -136,6 +177,7 @@ const NewsCard: Component<{ post: any }> = (props) => {
   };
 
   const handleRepost = async () => {
+    if (!requireAuthOrRedirect()) return;
     if (reposted()) return;
     try {
       const client = getClient();
@@ -146,11 +188,17 @@ const NewsCard: Component<{ post: any }> = (props) => {
     }
   };
 
+  const truncateAddress = (addr: string) =>
+    `${addr.slice(0, 8)}...${addr.slice(-4)}`;
+
   return (
     <article class="news-card">
       <div class="news-card-header">
-        <span class="news-author">
-          {props.post.author.slice(0, 8)}...{props.post.author.slice(-4)}
+        <span
+          class="news-author"
+          onClick={() => navigate(`/user/${props.post.author}`)}
+        >
+          {truncateAddress(props.post.author)}
         </span>
         <span class="news-time">
           {new Date(props.post.timestamp).toLocaleDateString()}
@@ -185,6 +233,13 @@ const NewsCard: Component<{ post: any }> = (props) => {
           title={bookmarked() ? t('news_bookmarked') : t('news_bookmark')}
         >
           {bookmarked() ? '★' : '☆'} {bookmarked() ? t('news_bookmarked') : t('news_bookmark')}
+        </button>
+        <button
+          class="tip-btn"
+          onClick={() => navigate('/wallet')}
+          title={t('chat_tip')}
+        >
+          💰 {t('chat_tip')}
         </button>
       </div>
     </article>
