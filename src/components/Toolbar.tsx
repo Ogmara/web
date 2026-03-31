@@ -1,13 +1,25 @@
+/**
+ * Toolbar — top navigation bar with route-based navigation and wallet button.
+ */
+
 import { Component } from 'solid-js';
 import { t } from '../i18n/init';
-import type { View } from '../App';
+import { navigate, route } from '../lib/router';
+import { WalletButton } from './WalletButton';
 
 interface ToolbarProps {
   onToggleSidebar: () => void;
-  onNavigate: (view: View) => void;
 }
 
 export const Toolbar: Component<ToolbarProps> = (props) => {
+  const isActive = (view: string) => {
+    const r = route();
+    if (view === 'chat') return r.view === 'chat';
+    if (view === 'news') return r.view === 'news' || r.view === 'news-detail' || r.view === 'compose';
+    if (view === 'dm') return r.view === 'dm' || r.view === 'dm-conversation';
+    return false;
+  };
+
   return (
     <header class="toolbar">
       <div class="toolbar-left">
@@ -18,26 +30,53 @@ export const Toolbar: Component<ToolbarProps> = (props) => {
         >
           ☰
         </button>
-        <span class="toolbar-brand">{t('app_name')}</span>
+        <span class="toolbar-brand" onClick={() => navigate('/chat')} style="cursor:pointer">
+          {t('app_name')}
+        </span>
       </div>
       <div class="toolbar-center">
-        <button class="toolbar-nav" onClick={() => props.onNavigate('chat')}>
+        <button
+          class={`toolbar-nav ${isActive('chat') ? 'active' : ''}`}
+          onClick={() => navigate('/chat')}
+        >
           {t('nav_chat')}
         </button>
-        <button class="toolbar-nav" onClick={() => props.onNavigate('news')}>
+        <button
+          class={`toolbar-nav ${isActive('news') ? 'active' : ''}`}
+          onClick={() => navigate('/news')}
+        >
           {t('nav_news')}
+        </button>
+        <button
+          class={`toolbar-nav ${isActive('dm') ? 'active' : ''}`}
+          onClick={() => navigate('/dm')}
+        >
+          {t('nav_dms')}
         </button>
       </div>
       <div class="toolbar-right">
-        <button class="toolbar-btn" aria-label={t('nav_search')}>🔍</button>
-        <button class="toolbar-btn" aria-label={t('nav_notifications')}>🔔</button>
         <button
           class="toolbar-btn"
-          onClick={() => props.onNavigate('settings')}
+          aria-label={t('nav_search')}
+          onClick={() => navigate('/search')}
+        >
+          🔍
+        </button>
+        <button
+          class="toolbar-btn"
+          onClick={() => navigate('/bookmarks')}
+          aria-label={t('bookmarks_title')}
+        >
+          ★
+        </button>
+        <button
+          class="toolbar-btn"
+          onClick={() => navigate('/settings')}
           aria-label={t('nav_settings')}
         >
           ⚙
         </button>
+        <WalletButton />
       </div>
 
       <style>{`
@@ -66,6 +105,10 @@ export const Toolbar: Component<ToolbarProps> = (props) => {
           font-weight: 500;
         }
         .toolbar-nav:hover { background: var(--color-bg-tertiary); }
+        .toolbar-nav.active {
+          background: var(--color-accent-primary);
+          color: var(--color-text-inverse);
+        }
       `}</style>
     </header>
   );

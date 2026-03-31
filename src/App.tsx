@@ -1,49 +1,79 @@
-import { Component, createSignal, Show } from 'solid-js';
+/**
+ * App — root component with hash-based routing and auth context.
+ */
+
+import { Component, createSignal, Show, Switch, Match } from 'solid-js';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { ChatView } from './pages/ChatView';
 import { NewsView } from './pages/NewsView';
 import { BookmarksView } from './pages/BookmarksView';
 import { SettingsView } from './pages/SettingsView';
+import { WalletView } from './pages/WalletView';
+import { ComposeView } from './pages/ComposeView';
+import { DmListView } from './pages/DmListView';
+import { DmConversationView } from './pages/DmConversationView';
+import { UserProfileView } from './pages/UserProfileView';
+import { SearchView } from './pages/SearchView';
 import { StatusBar } from './components/StatusBar';
-
-export type View = 'chat' | 'news' | 'bookmarks' | 'settings';
+import { route } from './lib/router';
 
 export const App: Component = () => {
-  const [currentView, setCurrentView] = createSignal<View>('chat');
-  const [currentChannel, setCurrentChannel] = createSignal<number | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
+
+  const channelId = () => {
+    const r = route();
+    if (r.view === 'chat' && r.params.channelId) {
+      return parseInt(r.params.channelId, 10);
+    }
+    return null;
+  };
 
   return (
     <div class="app-layout">
       <Toolbar
         onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed())}
-        onNavigate={setCurrentView}
       />
       <div class="app-body">
         <Show when={!sidebarCollapsed()}>
-          <Sidebar
-            currentChannel={currentChannel()}
-            onSelectChannel={(id) => {
-              setCurrentChannel(id);
-              setCurrentView('chat');
-            }}
-            onNavigate={setCurrentView}
-          />
+          <Sidebar />
         </Show>
         <main class="main-content">
-          <Show when={currentView() === 'chat'}>
-            <ChatView channelId={currentChannel()} />
-          </Show>
-          <Show when={currentView() === 'news'}>
-            <NewsView />
-          </Show>
-          <Show when={currentView() === 'bookmarks'}>
-            <BookmarksView />
-          </Show>
-          <Show when={currentView() === 'settings'}>
-            <SettingsView />
-          </Show>
+          <Switch>
+            <Match when={route().view === 'chat'}>
+              <ChatView channelId={channelId()} />
+            </Match>
+            <Match when={route().view === 'news'}>
+              <NewsView />
+            </Match>
+            <Match when={route().view === 'news-detail'}>
+              <NewsView />
+            </Match>
+            <Match when={route().view === 'compose'}>
+              <ComposeView />
+            </Match>
+            <Match when={route().view === 'bookmarks'}>
+              <BookmarksView />
+            </Match>
+            <Match when={route().view === 'settings'}>
+              <SettingsView />
+            </Match>
+            <Match when={route().view === 'wallet'}>
+              <WalletView />
+            </Match>
+            <Match when={route().view === 'dm'}>
+              <DmListView />
+            </Match>
+            <Match when={route().view === 'dm-conversation'}>
+              <DmConversationView peerAddress={route().params.address} />
+            </Match>
+            <Match when={route().view === 'user'}>
+              <UserProfileView address={route().params.address} />
+            </Match>
+            <Match when={route().view === 'search'}>
+              <SearchView />
+            </Match>
+          </Switch>
         </main>
       </div>
       <StatusBar />

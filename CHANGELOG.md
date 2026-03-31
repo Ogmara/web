@@ -5,6 +5,90 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-03-31
+
+### Added
+
+- **Wallet Management** — full browser wallet with IndexedDB + SubtleCrypto vault
+  - Create new wallet (Ed25519 keypair generation)
+  - Import wallet from hex private key
+  - AES-256-GCM encrypted key storage with PBKDF2 passphrase derivation
+  - Private key reveal with security warning
+  - Wallet disconnect and wipe
+- **Klever Extension Integration** — on-chain features via browser extension
+  - Auto-detection with polling on page load
+  - User registration on Ogmara smart contract (~4.4 KLV)
+  - On-chain channel creation (~4.8 KLV)
+  - KLV tipping to message/post authors
+  - Device delegation and revocation
+  - Governance voting
+  - Smart contract TX builder (type 63 InvokeContract)
+- **K5 Mobile Wallet** — deep link flow for mobile browser delegation
+  - Device keypair generation + klever:// deep link
+  - Delegation callback handling
+  - Mobile browser detection
+- **Authentication System** — reactive Solid.js auth state
+  - Module-level signals for global auth state
+  - Automatic signer attachment to API client
+  - Auth guards on all write operations (chat, news, reactions, DMs)
+  - Three wallet sources: built-in, Klever Extension, K5 delegation
+- **Hash-Based URL Router** — proper URL routing replaces state-based nav
+  - All views are now linkable (#/chat, #/news, #/dm, #/user, etc.)
+  - Route parameters for channels, users, conversations
+  - Query parameter support for search
+  - Browser back/forward navigation
+- **WebSocket Real-Time Updates** — live message delivery
+  - Channel message subscription with auto-reconnect
+  - DM real-time updates
+  - Event handler registration with cleanup
+- **Chat Messaging** — fully functional message sending
+  - Send messages with auth (signed envelopes via SDK)
+  - Reply-to support with preview
+  - Real-time message append via WebSocket
+  - Auth prompt for unauthenticated users
+- **News Posting** — create and publish news posts
+  - ComposeView with title, content, tags
+  - Auth-gated publishing
+  - Redirect to feed after posting
+- **Direct Messages** — full DM system
+  - DmListView with conversation list and unread badges
+  - DmConversationView with real-time messaging
+  - New conversation by entering klv1 address
+  - Own/peer message styling (left/right bubbles)
+- **User Profiles** — view any user's profile
+  - Avatar, display name, bio, address display
+  - Post listing (filtered from news feed)
+  - Follower/following counts
+  - Follow/unfollow with auth guard
+  - DM and tip action buttons
+- **Search** — multi-type search
+  - Search posts by tag via API
+  - Search channels by name/slug (client-side filter)
+  - Navigate to user profile by entering klv1 address
+  - Mixed results display (channels + posts)
+- **Toolbar Updates** — route-based navigation with active indicators
+  - Chat, News, Messages tabs with active state highlighting
+  - WalletButton component shows connection status
+  - Search and bookmarks quick-access buttons
+- **Sidebar Updates** — DM conversations + channel creation
+  - DM conversation list with unread badges
+  - Channel creation shortcut
+  - Connect wallet prompt for unauthenticated users
+- **Russian Language** — 7th language added to all apps
+  - Full translation of all 130+ keys for web and mobile
+  - Language selector updated with Русский option
+- **Tip Button** — KLV tipping on news posts (via Klever Extension)
+- **Clickable Authors** — all author addresses link to user profiles
+
+### Changed
+
+- App.tsx rewritten with Switch/Match routing (replaces Show-based view switching)
+- Toolbar uses route-based navigation instead of callback props
+- Sidebar uses route-based navigation, shows DM conversations when authenticated
+- ChatView wired to SDK sendMessage with auth guard and real-time updates
+- NewsView reactions/bookmarks/reposts now require auth (redirect to wallet if not connected)
+- index.tsx initializes auth, WebSocket, Klever detection, and K5 detection on startup
+
 ## [0.4.0] - 2026-03-30
 
 ### Added
