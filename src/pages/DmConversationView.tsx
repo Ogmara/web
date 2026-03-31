@@ -9,6 +9,7 @@ import { authStatus, walletAddress } from '../lib/auth';
 import { onWsEvent } from '../lib/ws';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
+import { getPayloadContent } from '../lib/payload';
 
 interface DmConversationProps {
   peerAddress: string;
@@ -104,7 +105,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
                 class={`dm-msg ${msg.author === walletAddress() ? 'own' : 'peer'}`}
               >
                 <div class="dm-msg-body">
-                  <FormattedText content={msg.payload} />
+                  <FormattedText content={getPayloadContent(msg.payload)} />
                 </div>
                 <span class="dm-msg-time">
                   {new Date(msg.timestamp).toLocaleTimeString(undefined, {

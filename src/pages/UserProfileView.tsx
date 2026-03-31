@@ -8,6 +8,7 @@ import { getClient } from '../lib/api';
 import { authStatus, walletAddress } from '../lib/auth';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
+import { getPayloadContent } from '../lib/payload';
 
 interface UserProfileProps {
   address: string;
@@ -148,7 +149,7 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
                   {new Date(post.timestamp).toLocaleDateString()}
                 </div>
                 <div class="profile-post-body">
-                  <FormattedText content={post.payload} />
+                  <FormattedText content={getPayloadContent(post.payload)} />
                 </div>
               </article>
             )}

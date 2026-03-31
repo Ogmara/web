@@ -9,6 +9,7 @@ import { authStatus, getSigner } from '../lib/auth';
 import { onWsEvent, wsSubscribeChannels, wsUnsubscribeChannels } from '../lib/ws';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
+import { getPayloadContent } from '../lib/payload';
 
 interface ChatViewProps {
   channelId: number | null;
@@ -181,7 +182,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                       ↩
                     </button>
                   </div>
-                  <div class="message-body"><FormattedText content={msg.payload} /></div>
+                  <div class="message-body"><FormattedText content={getPayloadContent(msg.payload)} /></div>
                 </div>
               )}
             </For>
