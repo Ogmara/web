@@ -8,6 +8,7 @@ import { getClient } from '../lib/api';
 import { authStatus, getSigner } from '../lib/auth';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
+import { getPayloadContent, getPayloadTitle } from '../lib/payload';
 
 /** Predefined reaction emojis for news posts. */
 const NEWS_REACTIONS = [
@@ -204,7 +205,10 @@ const NewsCard: Component<{ post: any }> = (props) => {
           {new Date(props.post.timestamp).toLocaleDateString()}
         </span>
       </div>
-      <div class="news-card-body"><FormattedText content={props.post.payload} /></div>
+      <Show when={getPayloadTitle(props.post.payload)}>
+        <h3 class="news-title">{getPayloadTitle(props.post.payload)}</h3>
+      </Show>
+      <div class="news-card-body"><FormattedText content={getPayloadContent(props.post.payload)} /></div>
       <div class="news-actions">
         <For each={NEWS_REACTIONS}>
           {(r) => (

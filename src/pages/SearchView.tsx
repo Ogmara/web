@@ -7,6 +7,7 @@ import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { navigate, queryParam } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
+import { getPayloadContent } from '../lib/payload';
 
 export const SearchView: Component = () => {
   const [query, setQuery] = createSignal(queryParam('q') || '');
@@ -110,7 +111,7 @@ export const SearchView: Component = () => {
                     </span>
                   </div>
                   <div class="search-post-body">
-                    <FormattedText content={post.payload} />
+                    <FormattedText content={getPayloadContent(post.payload)} />
                   </div>
                 </article>
               )}
