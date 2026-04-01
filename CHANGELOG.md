@@ -5,6 +5,17 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-04-01
+
+### Added
+- **Device-to-wallet identity mapping** — when connecting via Klever Extension,
+  the web app now registers the local device key on the L2 node under the
+  wallet address. All messages/data from this device are indexed under the
+  wallet identity. Uses wallet-signed claim via `window.kleverWeb.signMessage()`.
+  Registration is cached in localStorage to avoid re-registration on page reload.
+  Falls back gracefully if the node is unreachable.
+- `signer.walletAddress` is restored on app startup for extension/K5 sessions.
+
 ## [0.7.5] - 2026-04-01
 
 ### Added
