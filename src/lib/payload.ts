@@ -32,7 +32,9 @@ export function decodePayload(payload: number[] | Uint8Array): DecodedPayload {
       content: (decoded.content as string) ?? '',
       title: decoded.title as string | undefined,
       channel_id: decoded.channel_id as number | undefined,
-      reply_to: decoded.reply_to as number[] | null | undefined,
+      reply_to: decoded.reply_to instanceof Uint8Array
+        ? Array.from(decoded.reply_to)
+        : (decoded.reply_to as number[] | null | undefined),
       mentions: decoded.mentions as string[] | undefined,
       tags: decoded.tags as string[] | undefined,
       media_cid: decoded.media_cid as string | null | undefined,
