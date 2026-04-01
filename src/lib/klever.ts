@@ -23,8 +23,10 @@ interface KleverWeb {
   getWalletAddress(): Promise<string>;
   /** Sign a Klever transaction object. */
   signTransaction(tx: unknown): Promise<unknown>;
-  /** Broadcast a signed transaction to the network. */
-  broadcastTransaction(tx: unknown): Promise<{ txHash: string }>;
+  /** Broadcast signed transactions to the network. */
+  broadcastTransactions(txs: unknown[]): Promise<{ data?: { txsHashes?: string[] } }>;
+  /** Broadcast a single signed transaction (older extension versions). */
+  broadcastTransaction?(tx: unknown): Promise<{ txHash: string }>;
   /** Build a transaction from contract specs. */
   buildTransaction(contracts: unknown[], txData?: unknown[]): Promise<unknown>;
   /** Sign an arbitrary message. */
@@ -131,6 +133,20 @@ export function setContractAddress(address: string): void {
   if (address) scAddress = address;
 }
 
+/** Broadcast a signed TX — handles both extension API versions. */
+async function broadcast(signedTx: unknown): Promise<string> {
+  const kw = window.kleverWeb!;
+  if (kw.broadcastTransactions) {
+    const result = await kw.broadcastTransactions([signedTx]);
+    return result?.data?.txsHashes?.[0] ?? '';
+  }
+  if (kw.broadcastTransaction) {
+    const result = await kw.broadcastTransaction(signedTx);
+    return result.txHash;
+  }
+  throw new Error('No broadcast method available on Klever Extension');
+}
+
 interface ScInvokeParams {
   functionName: string;
   args: string[];
@@ -171,10 +187,8 @@ async function invokeContract(params: ScInvokeParams): Promise<string> {
       payload,
     }]);
     const signedTx = await window.kleverWeb.signTransaction(unsignedTx);
-    const result = await window.kleverWeb.broadcastTransaction(signedTx);
-    return result.txHash;
+    return await broadcast(signedTx);
   } catch (err: any) {
-    // Extract detailed error from the extension for debugging
     const detail = err?.data?.error || err?.message || String(err);
     console.error('[Klever SC]', { scAddress, data: [data], payload, error: detail });
     throw new Error(detail);
@@ -257,8 +271,7 @@ export async function sendTip(
       },
     }], txData);
     const signedTx = await window.kleverWeb.signTransaction(unsignedTx);
-    const result = await window.kleverWeb.broadcastTransaction(signedTx);
-    return result.txHash;
+    return await broadcast(signedTx);
   } catch (err: any) {
     const detail = err?.data?.error || err?.message || String(err);
     console.error('[Klever Tip]', { recipient, amountAtomic, error: detail });
