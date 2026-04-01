@@ -147,6 +147,7 @@
   "media_uploading": "Wird hochgeladen...",
   "media_too_large": "Datei zu groß (max. 10 MB)",
   "media_upload_failed": "Upload fehlgeschlagen",
+  "media_hint": "Bilder, Video, Audio, PDF, Text — max. 10 MB",
   "news_repost_own": "Eigene Beiträge können nicht geteilt werden",
   "status_connected": "Verbunden",
   "status_disconnected": "Getrennt",
