@@ -5,6 +5,14 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-04-01
+
+### Changed
+- **Tipping uses direct KLV transfer** — tip now sends KLV directly from the
+  user's wallet to the recipient (type 0 Transfer) instead of going through
+  the smart contract. Note is sent as a base64-encoded memo. Can be upgraded
+  to SC-based tip with on-chain attribution when the contract is deployed.
+
 ## [0.6.2] - 2026-04-01
 
 ### Fixed
