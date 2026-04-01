@@ -166,12 +166,17 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
         </div>
       </div>
 
-      {/* Own profile: edit button */}
+      {/* Own profile: edit / setup */}
       <Show when={isOwnProfile() && authStatus() === 'ready'}>
         <Show when={!editing()}>
+          <Show when={!profile()?.user?.display_name}>
+            <div class="profile-setup-hint">
+              You haven't set up your profile yet. Add a name and avatar so others can recognize you.
+            </div>
+          </Show>
           <div class="profile-actions">
             <button class="profile-action-btn" onClick={startEditing}>
-              Edit Profile
+              {profile()?.user?.display_name ? 'Edit Profile' : 'Set Up Profile'}
             </button>
           </div>
         </Show>
@@ -349,6 +354,15 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
         .profile-post-time { font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-bottom: var(--spacing-xs); }
         .profile-post-body { line-height: 1.6; }
         .profile-no-posts { text-align: center; color: var(--color-text-secondary); padding: var(--spacing-xl); }
+        .profile-setup-hint {
+          padding: var(--spacing-sm) var(--spacing-md);
+          background: var(--color-bg-tertiary);
+          border: 1px solid var(--color-accent-primary);
+          border-radius: var(--radius-md);
+          font-size: var(--font-size-sm);
+          color: var(--color-text-secondary);
+          margin-bottom: var(--spacing-sm);
+        }
         .profile-edit-form {
           display: flex;
           flex-direction: column;
