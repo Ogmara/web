@@ -32,12 +32,6 @@ import {
   delegateDevice,
   revokeDevice,
 } from '../lib/klever';
-import {
-  k5Available,
-  k5Connecting,
-  k5DelegationPending,
-  initiateK5Connection,
-} from '../lib/k5';
 import { navigate } from '../lib/router';
 
 export const WalletView: Component = () => {
@@ -88,15 +82,6 @@ export const WalletView: Component = () => {
     try {
       const address = await connectExtension();
       await connectKleverExtension(address);
-    } catch (e: any) {
-      setError(e.message);
-    }
-  };
-
-  const handleK5Connect = async () => {
-    setError('');
-    try {
-      await initiateK5Connection();
     } catch (e: any) {
       setError(e.message);
     }
@@ -200,7 +185,7 @@ export const WalletView: Component = () => {
 
         {/* Klever Extension */}
         <section class="wallet-section">
-          <h3>{t('wallet_klever_extension')}</h3>
+          <h3>{t('wallet_connect')}</h3>
           <Show
             when={kleverAvailable()}
             fallback={
@@ -212,28 +197,10 @@ export const WalletView: Component = () => {
               onClick={handleKleverConnect}
               disabled={kleverConnecting()}
             >
-              {kleverConnecting() ? t('loading') : t('wallet_klever_connect')}
+              {kleverConnecting() ? t('loading') : t('wallet_connect')}
             </button>
           </Show>
         </section>
-
-        {/* K5 Mobile Wallet */}
-        <Show when={k5Available()}>
-          <section class="wallet-section">
-            <h3>K5 Wallet</h3>
-            <p class="wallet-desc">{t('wallet_k5_description')}</p>
-            <button
-              class="wallet-btn k5"
-              onClick={handleK5Connect}
-              disabled={k5Connecting()}
-            >
-              {k5Connecting() ? t('loading') : t('wallet_k5_connect')}
-            </button>
-            <Show when={k5DelegationPending()}>
-              <p class="wallet-desc muted">Waiting for K5 delegation confirmation...</p>
-            </Show>
-          </section>
-        </Show>
       </Show>
 
       {/* Wallet connected */}
@@ -247,8 +214,7 @@ export const WalletView: Component = () => {
             </button>
           </div>
           <p class="wallet-source">
-            {walletSource() === 'klever-extension' ? 'Klever Extension' :
-             walletSource() === 'k5-delegation' ? 'K5 Delegation' : 'Built-in Wallet'}
+            {walletSource() === 'klever-extension' ? 'Klever Extension' : 'Built-in Wallet'}
           </p>
         </section>
 
