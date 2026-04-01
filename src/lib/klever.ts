@@ -23,18 +23,16 @@ interface KleverWeb {
   getWalletAddress(): Promise<string>;
   /** Sign a Klever transaction object. */
   signTransaction(tx: unknown): Promise<unknown>;
-  /** Broadcast signed transactions. */
-  broadcastTransactions(txs: unknown[]): Promise<{ data: { txsHashes: string[] } }>;
-  /** Build a transaction from parameters. */
+  /** Broadcast a signed transaction to the network. */
+  broadcastTransaction(tx: unknown): Promise<{ txHash: string }>;
+  /** Build a transaction from contract specs. */
   buildTransaction(contracts: unknown[], txData?: unknown[]): Promise<unknown>;
   /** Sign an arbitrary message. */
   signMessage(message: string): Promise<string>;
   /** Initialize the extension. */
   initialize(): Promise<void>;
-  /** Set the network provider (must be called before initialize). */
+  /** Network provider (must be set before initialize). */
   provider?: KleverProvider;
-  /** Alternative setter for the network provider. */
-  setProvider?(provider: KleverProvider): void;
 }
 
 declare global {
@@ -133,13 +131,11 @@ export function setContractAddress(address: string): void {
   if (address) scAddress = address;
 }
 
-/** TX type 63 = SmartContract, scType 0 = InvokeContract */
-const TX_TYPE_SMART_CONTRACT = 63;
-
 interface ScInvokeParams {
   functionName: string;
   args: string[];
-  value?: number; // KLV amount to send (in atomic units)
+  /** KLV amount to send in atomic units (1 KLV = 1_000_000). */
+  value?: number;
 }
 
 /**
@@ -157,29 +153,25 @@ async function invokeContract(params: ScInvokeParams): Promise<string> {
   window.kleverWeb.provider = kleverProvider;
   await window.kleverWeb.initialize();
 
-  const contract = [{
-    typeUrl: 'github.com/klever-io/klever-go/core/proto;proto.SmartContractCallContract',
-    parameter: {
-      scType: 0, // InvokeContract
-      address: scAddress,
-      callValue: params.value ? { KLV: params.value } : undefined,
-      input: encodeFunctionCall(params.functionName, params.args),
-    },
-  }];
+  // Encode function call: "functionName@hexArg1@hexArg2..."
+  const data = [params.functionName, ...params.args].join('@');
 
-  const unsignedTx = await window.kleverWeb.buildTransaction(contract);
+  const payload: Record<string, unknown> = {
+    address: scAddress,
+    scType: 0, // InvokeContract
+    data: [data],
+  };
+  if (params.value) {
+    payload.callValue = { KLV: params.value.toString() };
+  }
+
+  const unsignedTx = await window.kleverWeb.buildTransaction([{
+    type: 63, // SmartContract
+    payload,
+  }]);
   const signedTx = await window.kleverWeb.signTransaction(unsignedTx);
-  const result = await window.kleverWeb.broadcastTransactions([signedTx]);
-  return result.data.txsHashes[0];
-}
-
-/**
- * Encode a function call for the Klever VM.
- * Format: functionName@hexArg1@hexArg2...
- */
-function encodeFunctionCall(name: string, args: string[]): string {
-  const parts = [name, ...args];
-  return parts.join('@');
+  const result = await window.kleverWeb.broadcastTransaction(signedTx);
+  return result.txHash;
 }
 
 function stringToHex(str: string): string {

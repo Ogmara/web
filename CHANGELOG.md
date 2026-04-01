@@ -5,6 +5,16 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-04-01
+
+### Fixed
+- **Klever Extension TX format** — smart contract invocations now use the
+  correct `{ type: 63, payload: { address, scType, data, callValue } }` format
+  matching the actual Klever Extension API. Was using a wrong proto-based format
+  that caused 400 Bad Request on transaction send.
+- `broadcastTransaction` (singular) instead of `broadcastTransactions` (plural)
+- `callValue.KLV` now passed as string (extension expects string, not number)
+
 ## [0.6.1] - 2026-04-01
 
 ### Added
