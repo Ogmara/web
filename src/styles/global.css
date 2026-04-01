@@ -87,12 +87,10 @@ html, body, #root {
   }
 }
 
-/* Mobile: ensure content doesn't overflow viewport */
+/* Minimum app width to prevent breaking layout */
 @media (max-width: 480px) {
   html, body, #root {
-    min-width: 0;
-    width: 100%;
-    overflow-x: hidden;
+    min-width: 360px;
   }
 }
 
@@ -107,8 +105,6 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  min-width: 0;
-  width: 100%;
 }
 
 /* Scrollbar styling */
@@ -159,22 +155,8 @@ html, body, #root {
   /* Toolbar: hide brand text, shrink padding */
   .toolbar-brand { display: none; }
   .toolbar { padding: var(--spacing-xs) var(--spacing-sm); }
-
-  /* Page views: ensure padding works on narrow screens */
-  .news-view,
-  .news-detail-view,
-  .bookmarks-view,
-  .wallet-view,
-  .compose-view,
-  .profile-view,
-  .settings-view,
-  .search-view,
-  .dm-view,
-  .chat-view {
-    padding: var(--spacing-sm) !important;
-    max-width: 100% !important;
-    box-sizing: border-box;
-  }
+  .toolbar-nav { padding: var(--spacing-xs) var(--spacing-sm); font-size: var(--font-size-xs); }
+  .toolbar-btn { padding: var(--spacing-xs); font-size: var(--font-size-sm); }
 }
 
 /* Button base */
