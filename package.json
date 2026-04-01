@@ -1,6 +1,6 @@
 {
   "name": "@ogmara/web",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Ogmara web application — decentralized chat and news PWA",
   "scripts": {
