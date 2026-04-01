@@ -21,22 +21,27 @@ function ensureHexMsgId(msgId: unknown): string {
 }
 
 /** Profile cache + in-flight deduplication to avoid redundant fetches. */
-const profileCache = new Map<string, { display_name?: string; avatar_cid?: string }>();
-const profileInflight = new Map<string, Promise<{ display_name?: string; avatar_cid?: string }>>();
+interface CachedProfile { display_name?: string; avatar_cid?: string; verified?: boolean }
+const profileCache = new Map<string, CachedProfile>();
+const profileInflight = new Map<string, Promise<CachedProfile>>();
 
-async function resolveProfile(address: string): Promise<{ display_name?: string; avatar_cid?: string }> {
+async function resolveProfile(address: string): Promise<CachedProfile> {
   if (profileCache.has(address)) return profileCache.get(address)!;
-  // Deduplicate concurrent requests for the same address
   if (profileInflight.has(address)) return profileInflight.get(address)!;
   const promise = (async () => {
     try {
       const client = getClient();
       const resp = await client.getUserProfile(address);
-      const profile = { display_name: resp.user?.display_name, avatar_cid: resp.user?.avatar_cid };
+      const pk = resp.user?.public_key;
+      const profile: CachedProfile = {
+        display_name: resp.user?.display_name,
+        avatar_cid: resp.user?.avatar_cid,
+        verified: !!(pk && pk.length > 0),
+      };
       profileCache.set(address, profile);
       return profile;
     } catch {
-      const empty = {};
+      const empty: CachedProfile = {};
       profileCache.set(address, empty);
       return empty;
     } finally {
@@ -141,6 +146,19 @@ export const NewsView: Component = () => {
           font-weight: 600;
           color: var(--color-accent-primary);
           font-size: var(--font-size-sm);
+        }
+        .news-verified {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 16px;
+          height: 16px;
+          border-radius: var(--radius-full);
+          background: var(--color-accent-primary);
+          color: var(--color-text-inverse);
+          font-size: 10px;
+          font-weight: 700;
+          flex-shrink: 0;
         }
         .news-time { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
         .news-tags {
@@ -415,6 +433,9 @@ const NewsCard: Component<{ post: any }> = (props) => {
             </span>
           </Show>
           <span class="news-author">{displayName()}</span>
+          <Show when={profile().verified}>
+            <span class="news-verified" title="On-chain verified">✓</span>
+          </Show>
         </div>
         <span class="news-time">{formatLocalTime(props.post.timestamp)}</span>
       </div>

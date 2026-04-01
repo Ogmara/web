@@ -3,12 +3,40 @@
  */
 
 import { Component, createResource, createSignal, For, Show } from 'solid-js';
+import { JSX } from 'solid-js/jsx-runtime';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, walletAddress, getSigner } from '../lib/auth';
+import { kleverAvailable, registerUser } from '../lib/klever';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent } from '../lib/payload';
+
+/** Render bio text with URLs as clickable links. */
+const URL_RE = /(https?:\/\/[^\s<]+)/g;
+const BioText: Component<{ text: string }> = (props) => {
+  const parts = () => {
+    const result: JSX.Element[] = [];
+    let lastIndex = 0;
+    URL_RE.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = URL_RE.exec(props.text)) !== null) {
+      if (match.index > lastIndex) {
+        result.push(<>{props.text.slice(lastIndex, match.index)}</>);
+      }
+      const url = match[0];
+      result.push(
+        <a href={url} target="_blank" rel="noopener noreferrer" class="bio-link">{url}</a>,
+      );
+      lastIndex = match.index + url.length;
+    }
+    if (lastIndex < props.text.length) {
+      result.push(<>{props.text.slice(lastIndex)}</>);
+    }
+    return result;
+  };
+  return <>{parts()}</>;
+};
 
 interface UserProfileProps {
   address: string;
@@ -25,6 +53,11 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
   const [avatarFile, setAvatarFile] = createSignal<File | null>(null);
 
   const isOwnProfile = () => walletAddress() === props.address;
+  const isVerified = () => {
+    const pk = profile()?.user?.public_key;
+    return pk && pk.length > 0;
+  };
+  const [regPending, setRegPending] = createSignal(false);
 
   const [profile, { refetch: refetchProfile }] = createResource(
     () => props.address,
@@ -129,6 +162,23 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
     }
   };
 
+  const handleRegister = async () => {
+    const signer = getSigner();
+    if (!signer) return;
+    setRegPending(true);
+    setEditError('');
+    try {
+      const txHash = await registerUser(signer.publicKeyHex);
+      setEditSuccess(`Registered on-chain! TX: ${txHash.slice(0, 16)}...`);
+      // Refetch to get the public_key set by chain scanner
+      setTimeout(() => refetchProfile(), 5000);
+    } catch (e: any) {
+      setEditError(e?.message || 'Registration failed');
+    } finally {
+      setRegPending(false);
+    }
+  };
+
   const truncateAddress = (addr: string) =>
     `${addr.slice(0, 12)}...${addr.slice(-6)}`;
 
@@ -143,10 +193,13 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
         <div class="profile-info">
           <h2 class="profile-name">
             {profile()?.user?.display_name || truncateAddress(props.address)}
+            <Show when={isVerified()}>
+              <span class="verified-badge" title="On-chain verified">✓</span>
+            </Show>
           </h2>
           <code class="profile-address-text">{props.address}</code>
           <Show when={profile()?.user?.bio}>
-            <p class="profile-bio-text">{profile()!.user.bio}</p>
+            <p class="profile-bio-text"><BioText text={profile()!.user.bio!} /></p>
           </Show>
         </div>
       </div>
@@ -178,7 +231,25 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
             <button class="profile-action-btn" onClick={startEditing}>
               {profile()?.user?.display_name ? 'Edit Profile' : 'Set Up Profile'}
             </button>
+            <Show when={!isVerified() && kleverAvailable()}>
+              <button
+                class="profile-action-btn verify"
+                onClick={handleRegister}
+                disabled={regPending()}
+              >
+                {regPending() ? 'Registering...' : 'Verify On-Chain'}
+              </button>
+            </Show>
+            <Show when={isVerified()}>
+              <span class="profile-verified-status">✓ On-chain verified</span>
+            </Show>
           </div>
+          <Show when={editError()}>
+            <div class="edit-error">{editError()}</div>
+          </Show>
+          <Show when={editSuccess()}>
+            <div class="edit-success">{editSuccess()}</div>
+          </Show>
         </Show>
         <Show when={editing()}>
           <div class="profile-edit-form">
@@ -299,7 +370,20 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
           object-fit: cover;
         }
         .profile-info { flex: 1; min-width: 0; }
-        .profile-name { font-size: var(--font-size-xl); margin-bottom: var(--spacing-xs); }
+        .profile-name { font-size: var(--font-size-xl); margin-bottom: var(--spacing-xs); display: flex; align-items: center; gap: var(--spacing-xs); }
+        .verified-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 22px;
+          border-radius: var(--radius-full);
+          background: var(--color-accent-primary);
+          color: var(--color-text-inverse);
+          font-size: 13px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
         .profile-address-text {
           font-size: var(--font-size-xs);
           color: var(--color-text-secondary);
@@ -308,6 +392,8 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
           margin-bottom: var(--spacing-xs);
         }
         .profile-bio-text { font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.5; }
+        .bio-link { color: var(--color-accent-primary); text-decoration: underline; word-break: break-all; }
+        .bio-link:hover { opacity: 0.8; }
         .profile-stats {
           display: flex;
           gap: var(--spacing-xl);
@@ -339,6 +425,18 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
         .profile-action-btn.tip {
           background: var(--color-warning);
           color: #1a1a1a;
+        }
+        .profile-action-btn.verify {
+          background: var(--color-success);
+          color: #1a1a1a;
+        }
+        .profile-verified-status {
+          font-size: var(--font-size-sm);
+          color: var(--color-success);
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-xs);
         }
         .profile-posts h3 {
           font-size: var(--font-size-md);
