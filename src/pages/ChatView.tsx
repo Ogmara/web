@@ -126,6 +126,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     if (prevChannelId) wsUnsubscribeChannels([prevChannelId]);
     if (id) {
       wsSubscribeChannels([id]);
+      // Mark channel as read when entering
+      if (authStatus() === 'ready') {
+        getClient().markChannelRead(parseInt(id, 10)).catch(() => {});
+      }
       setTimeout(() => inputRef?.focus(), 50);
     }
     prevChannelId = id;
