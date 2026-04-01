@@ -7,7 +7,7 @@ import { JSX } from 'solid-js/jsx-runtime';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, walletAddress, walletSource, l2Address, getSigner } from '../lib/auth';
-import { kleverAvailable, registerUser } from '../lib/klever';
+import { kleverAvailable, registerUser, addressToPubkeyHex } from '../lib/klever';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent } from '../lib/payload';
@@ -173,12 +173,13 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
   };
 
   const handleRegister = async () => {
-    const signer = getSigner();
-    if (!signer) return;
+    if (!walletAddress()) return;
     setRegPending(true);
     setEditError('');
     try {
-      const txHash = await registerUser(signer.publicKeyHex);
+      // Use the on-chain wallet address (extension), not the device key
+      const pubkeyHex = addressToPubkeyHex(walletAddress()!);
+      const txHash = await registerUser(pubkeyHex);
       setEditSuccess(`Registered on-chain! TX: ${txHash.slice(0, 16)}...`);
       // Refetch to get the public_key set by chain scanner
       setTimeout(() => refetchProfile(), 5000);

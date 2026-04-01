@@ -201,6 +201,34 @@ async function invokeContract(params: ScInvokeParams): Promise<string> {
   }
 }
 
+/** Decode a klv1... bech32 address to its 32-byte public key as hex. */
+export function addressToPubkeyHex(address: string): string {
+  // Klever bech32 addresses: "klv" prefix + 1 separator + data
+  // bech32 data is 5-bit groups → convert to 8-bit bytes
+  const CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+  const hrpEnd = address.lastIndexOf('1');
+  const dataPart = address.slice(hrpEnd + 1, -6); // exclude 6-char checksum
+  const values: number[] = [];
+  for (const c of dataPart) {
+    const v = CHARSET.indexOf(c);
+    if (v === -1) throw new Error('Invalid bech32 character');
+    values.push(v);
+  }
+  // Convert 5-bit values to 8-bit bytes
+  let bits = 0;
+  let value = 0;
+  const bytes: number[] = [];
+  for (const v of values) {
+    value = (value << 5) | v;
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((value >> bits) & 0xff);
+    }
+  }
+  return bytes.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 function stringToHex(str: string): string {
   return Array.from(new TextEncoder().encode(str))
     .map((b) => b.toString(16).padStart(2, '0'))
