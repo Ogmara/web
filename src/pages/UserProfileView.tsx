@@ -26,7 +26,7 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
 
   const isOwnProfile = () => walletAddress() === props.address;
 
-  const [profile] = createResource(
+  const [profile, { refetch: refetchProfile }] = createResource(
     () => props.address,
     async (address) => {
       if (!address) return null;
@@ -101,8 +101,11 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
       const client = getClient();
       let avatarCid = profile()?.user?.avatar_cid;
 
-      // Upload new avatar if selected
+      // Upload new avatar if selected (max 5 MB)
       if (avatarFile()) {
+        if (avatarFile()!.size > 5 * 1024 * 1024) {
+          throw new Error('Image too large (max 5 MB)');
+        }
         const result = await client.uploadMedia(avatarFile()!);
         avatarCid = result.cid;
       }
@@ -114,8 +117,7 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
       });
       setEditSuccess('Profile updated!');
       setEditing(false);
-      // Refetch profile to show updated data
-      window.location.reload();
+      refetchProfile();
     } catch (e: any) {
       setEditError(e?.message || 'Failed to save profile');
     } finally {

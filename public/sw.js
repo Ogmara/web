@@ -1,5 +1,5 @@
 /**
- * Ogmara PWA Service Worker — cache-first for app shell, network-first for API.
+ * Ogmara PWA Service Worker — network-first for HTML, cache-first for hashed assets.
  */
 
 const CACHE_NAME = 'ogmara-v1';
@@ -29,17 +29,40 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for app shell assets
+  // Network-first for HTML (ensures fresh app on deploy)
+  if (event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/app/') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Cache-first for hashed assets (JS/CSS bundles from Vite)
+  if (url.pathname.startsWith('/app/assets/')) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        return cached || fetch(event.request).then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        });
+      })
+    );
+    return;
+  }
+
+  // Static files (favicon, manifest, icons) — cache-first
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return cached || fetch(event.request).then((response) => {
-        // Cache successful responses for static assets
-        if (response.ok && event.request.method === 'GET') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      });
-    })
+    caches.match(event.request).then((cached) => cached || fetch(event.request))
   );
 });

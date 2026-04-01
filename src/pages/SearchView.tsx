@@ -24,8 +24,8 @@ export const SearchView: Component = () => {
     const q = query().trim();
     if (!q) return;
 
-    // If it looks like a klv1 address, navigate to user profile
-    if (q.startsWith('klv1') && q.length > 20) {
+    // If it looks like a klv1 bech32 address, navigate to user profile
+    if (/^klv1[a-z0-9]{38,}$/.test(q)) {
       navigate(`/user/${q}`);
       return;
     }
@@ -57,7 +57,7 @@ export const SearchView: Component = () => {
           // For hashtag search, match against tags array and content
           try {
             const decoded = decodePayload(post.payload);
-            const tags = (decoded.tags ?? []).map((t: string) => t.toLowerCase());
+            const tags = (decoded.tags ?? []).map((tag: string) => tag.toLowerCase());
             if (tags.includes(searchTerm)) return true;
           } catch { /* ignore */ }
           return content.includes('#' + searchTerm) || content.includes(searchTerm);
