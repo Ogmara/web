@@ -464,7 +464,8 @@ export const WalletView: Component = () => {
         }
         .wallet-address {
           font-size: var(--font-size-sm);
-          word-break: break-all;
+          word-break: keep-all;
+          overflow-wrap: anywhere;
           color: var(--color-accent-primary);
         }
         .wallet-source {

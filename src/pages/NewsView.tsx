@@ -9,6 +9,16 @@ import { authStatus, getSigner } from '../lib/auth';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent, getPayloadTitle, decodePayload } from '../lib/payload';
+import { sendTip, kleverAvailable } from '../lib/klever';
+
+/** Convert msg_id to hex string — handles both hex strings and byte arrays from the API. */
+function ensureHexMsgId(msgId: unknown): string {
+  if (typeof msgId === 'string') return msgId;
+  if (Array.isArray(msgId)) {
+    return msgId.map((b: number) => b.toString(16).padStart(2, '0')).join('');
+  }
+  return String(msgId);
+}
 
 /** Simple in-memory profile cache to avoid redundant fetches. */
 const profileCache = new Map<string, { display_name?: string; avatar_cid?: string }>();
@@ -192,6 +202,50 @@ export const NewsView: Component = () => {
           cursor: pointer;
         }
         .tip-btn:hover { color: var(--color-accent-primary); }
+        .tip-dialog {
+          margin-top: var(--spacing-sm);
+          padding: var(--spacing-md);
+          background: var(--color-bg-tertiary);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-md);
+        }
+        .tip-dialog-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: var(--spacing-sm);
+          font-size: var(--font-size-sm);
+        }
+        .tip-dialog-close {
+          color: var(--color-text-secondary);
+          font-size: var(--font-size-md);
+          cursor: pointer;
+        }
+        .tip-dialog-close:hover { color: var(--color-text-primary); }
+        .tip-dialog-body { display: flex; flex-direction: column; gap: var(--spacing-xs); }
+        .tip-label { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+        .tip-input {
+          padding: var(--spacing-xs) var(--spacing-sm);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-sm);
+          background: var(--color-bg-secondary);
+          color: var(--color-text-primary);
+          font-family: inherit;
+          font-size: var(--font-size-sm);
+        }
+        .tip-input:focus { outline: none; border-color: var(--color-accent-primary); }
+        .tip-confirm-btn {
+          margin-top: var(--spacing-xs);
+          padding: var(--spacing-sm);
+          background: var(--color-warning);
+          color: #1a1a1a;
+          border-radius: var(--radius-md);
+          font-weight: 600;
+          font-size: var(--font-size-sm);
+          cursor: pointer;
+        }
+        .tip-confirm-btn:hover { opacity: 0.9; }
+        .tip-confirm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
       `}</style>
     </div>
   );
@@ -220,6 +274,10 @@ const NewsCard: Component<{ post: any }> = (props) => {
   const [reposted, setReposted] = createSignal(false);
   const [actionError, setActionError] = createSignal('');
   const [profile, setProfile] = createSignal<{ display_name?: string; avatar_cid?: string }>({});
+  const [showTip, setShowTip] = createSignal(false);
+  const [tipAmount, setTipAmount] = createSignal('1');
+  const [tipNote, setTipNote] = createSignal('');
+  const [tipPending, setTipPending] = createSignal(false);
 
   // Resolve author profile (username + avatar)
   createEffect(() => {
@@ -240,7 +298,7 @@ const NewsCard: Component<{ post: any }> = (props) => {
     try {
       const client = getClient();
       const current = reactionCounts()[emoji] ?? 0;
-      await client.reactToNews(props.post.msg_id, emoji);
+      await client.reactToNews(ensureHexMsgId(props.post.msg_id), emoji);
       setReactionCounts((prev) => ({ ...prev, [emoji]: current + 1 }));
     } catch (e: any) {
       setActionError(e?.message || 'Reaction failed');
@@ -253,10 +311,10 @@ const NewsCard: Component<{ post: any }> = (props) => {
     try {
       const client = getClient();
       if (bookmarked()) {
-        await client.removeBookmark(props.post.msg_id);
+        await client.removeBookmark(ensureHexMsgId(props.post.msg_id));
         setBookmarked(false);
       } else {
-        await client.saveBookmark(props.post.msg_id);
+        await client.saveBookmark(ensureHexMsgId(props.post.msg_id));
         setBookmarked(true);
       }
     } catch (e: any) {
@@ -270,10 +328,36 @@ const NewsCard: Component<{ post: any }> = (props) => {
     setActionError('');
     try {
       const client = getClient();
-      await client.repostNews(props.post.msg_id, props.post.author);
+      await client.repostNews(ensureHexMsgId(props.post.msg_id), props.post.author);
       setReposted(true);
     } catch (e: any) {
       setActionError(e?.message || 'Repost failed');
+    }
+  };
+
+  const handleTip = async () => {
+    if (!requireAuthOrRedirect()) return;
+    if (!kleverAvailable()) {
+      setActionError('Klever Extension required for tipping');
+      return;
+    }
+    const amount = parseFloat(tipAmount());
+    if (isNaN(amount) || amount <= 0) {
+      setActionError('Enter a valid tip amount');
+      return;
+    }
+    setActionError('');
+    setTipPending(true);
+    try {
+      const msgId = ensureHexMsgId(props.post.msg_id);
+      await sendTip(props.post.author, msgId, 0, tipNote(), amount);
+      setShowTip(false);
+      setTipAmount('1');
+      setTipNote('');
+    } catch (e: any) {
+      setActionError(e?.message || 'Tip failed');
+    } finally {
+      setTipPending(false);
     }
   };
 
@@ -362,12 +446,50 @@ const NewsCard: Component<{ post: any }> = (props) => {
         </button>
         <button
           class="tip-btn"
-          onClick={() => navigate('/wallet')}
+          onClick={() => {
+            if (!requireAuthOrRedirect()) return;
+            setShowTip(!showTip());
+          }}
           title={t('chat_tip')}
         >
           💰 {t('chat_tip')}
         </button>
       </div>
+      <Show when={showTip()}>
+        <div class="tip-dialog">
+          <div class="tip-dialog-header">
+            <strong>Tip {displayName()}</strong>
+            <button class="tip-dialog-close" onClick={() => setShowTip(false)}>✕</button>
+          </div>
+          <div class="tip-dialog-body">
+            <label class="tip-label">Amount (KLV)</label>
+            <input
+              type="number"
+              class="tip-input"
+              min="0.1"
+              step="0.1"
+              value={tipAmount()}
+              onInput={(e) => setTipAmount(e.currentTarget.value)}
+            />
+            <label class="tip-label">Note (optional)</label>
+            <input
+              type="text"
+              class="tip-input"
+              maxLength={128}
+              placeholder="Say thanks..."
+              value={tipNote()}
+              onInput={(e) => setTipNote(e.currentTarget.value)}
+            />
+            <button
+              class="tip-confirm-btn"
+              onClick={handleTip}
+              disabled={tipPending()}
+            >
+              {tipPending() ? 'Sending...' : `Send ${tipAmount()} KLV`}
+            </button>
+          </div>
+        </div>
+      </Show>
     </article>
   );
 };
