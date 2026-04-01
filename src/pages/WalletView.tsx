@@ -80,6 +80,7 @@ export const WalletView: Component = () => {
     await disconnectWallet();
     setShowExport(false);
     setExportedKey('');
+    navigate('/news');
   };
 
   const handleKleverConnect = async () => {
