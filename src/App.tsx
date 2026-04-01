@@ -19,8 +19,10 @@ import { NewsDetailView } from './pages/NewsDetailView';
 import { StatusBar } from './components/StatusBar';
 import { route } from './lib/router';
 
+const isMobile = () => window.innerWidth <= 768;
+
 export const App: Component = () => {
-  const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = createSignal(isMobile());
 
   const channelId = () => {
     const r = route();
@@ -37,7 +39,7 @@ export const App: Component = () => {
       />
       <div class="app-body">
         <Show when={!sidebarCollapsed()}>
-          <Sidebar />
+          <Sidebar onNavigate={() => { if (isMobile()) setSidebarCollapsed(true); }} />
         </Show>
         <main class="main-content">
           <Switch>
