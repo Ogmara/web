@@ -5,7 +5,7 @@ import { initI18n } from './i18n/init';
 import { initTheme } from './lib/theme';
 import { initAuth } from './lib/auth';
 import { initWs } from './lib/ws';
-import { detectKleverExtension, setContractAddress } from './lib/klever';
+import { detectKleverExtension, setContractAddress, setKleverNetwork } from './lib/klever';
 import { detectK5, checkK5Callback } from './lib/k5';
 import { vaultGetSigner } from './lib/vault';
 import { getClient } from './lib/api';
@@ -32,11 +32,10 @@ initAuth().then(() => {
   }
 });
 
-// Fetch contract address from node stats for on-chain operations
+// Fetch node config for on-chain operations (contract address + network)
 getClient().networkStats().then((stats: any) => {
-  if (stats?.contract_address) {
-    setContractAddress(stats.contract_address);
-  }
+  if (stats?.contract_address) setContractAddress(stats.contract_address);
+  if (stats?.network) setKleverNetwork(stats.network);
 }).catch(() => { /* node may be unreachable at startup */ });
 
 const root = document.getElementById('root');

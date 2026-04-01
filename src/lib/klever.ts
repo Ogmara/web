@@ -13,6 +13,11 @@ import { createSignal } from 'solid-js';
 
 // --- TypeScript declarations for Klever Extension ---
 
+interface KleverProvider {
+  api: string;
+  node: string;
+}
+
 interface KleverWeb {
   /** Get the connected wallet address. */
   getWalletAddress(): Promise<string>;
@@ -26,11 +31,39 @@ interface KleverWeb {
   signMessage(message: string): Promise<string>;
   /** Initialize the extension. */
   initialize(): Promise<void>;
+  /** Set the network provider (must be called before initialize). */
+  provider?: KleverProvider;
+  /** Alternative setter for the network provider. */
+  setProvider?(provider: KleverProvider): void;
 }
 
 declare global {
   interface Window {
     kleverWeb?: KleverWeb;
+  }
+}
+
+/**
+ * Klever network provider URLs.
+ * Set from L2 node stats (testnet or mainnet). Defaults to mainnet.
+ */
+let kleverProvider: KleverProvider = {
+  api: 'https://api.klever.org',
+  node: 'https://node.klever.org',
+};
+
+/** Set the Klever network provider URLs (called after fetching node stats). */
+export function setKleverNetwork(network: string): void {
+  if (network === 'testnet') {
+    kleverProvider = {
+      api: 'https://api.testnet.klever.org',
+      node: 'https://node.testnet.klever.org',
+    };
+  } else {
+    kleverProvider = {
+      api: 'https://api.klever.org',
+      node: 'https://node.klever.org',
+    };
   }
 }
 
@@ -71,6 +104,8 @@ export async function connectExtension(): Promise<string> {
   }
   setKleverConnecting(true);
   try {
+    // Set network provider before initializing (testnet or mainnet)
+    window.kleverWeb.provider = kleverProvider;
     await window.kleverWeb.initialize();
     const address = await window.kleverWeb.getWalletAddress();
     setKleverAddress(address);
@@ -118,7 +153,8 @@ async function invokeContract(params: ScInvokeParams): Promise<string> {
   if (!scAddress) {
     throw new Error('Smart contract address not configured');
   }
-  // Ensure the extension provider is initialized before building TXs
+  // Set network provider and initialize before building TXs
+  window.kleverWeb.provider = kleverProvider;
   await window.kleverWeb.initialize();
 
   const contract = [{
