@@ -5,6 +5,23 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-04-01
+
+### Changed
+- **Toolbar redesign** — stripped down to hamburger menu + app name + profile
+  avatar/name/checkmark. All navigation moved to sidebar.
+- **Sidebar restructured** — now contains: News, Channels (collapsible),
+  Messages, Bookmarks, Search, Settings. Channels section can be collapsed
+  to save space when there are many.
+- **Dark theme is now the default** — `:root` defaults to dark instead of
+  light, preventing flash of light theme in browsers that don't report
+  `prefers-color-scheme` (e.g., in-app wallet browsers).
+- **Removed K5 wallet connect** — only Klever Extension connect remains,
+  renamed to generic "Connect Wallet".
+- **Profile cache with TTL** — cached profiles now expire (5 min for
+  populated, 30 sec for not-found) to prevent stale data after profile
+  updates.
+
 ## [0.11.0] - 2026-04-01
 
 ### Added
