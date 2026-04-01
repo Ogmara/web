@@ -118,6 +118,8 @@ async function invokeContract(params: ScInvokeParams): Promise<string> {
   if (!scAddress) {
     throw new Error('Smart contract address not configured');
   }
+  // Ensure the extension provider is initialized before building TXs
+  await window.kleverWeb.initialize();
 
   const contract = [{
     typeUrl: 'github.com/klever-io/klever-go/core/proto;proto.SmartContractCallContract',
