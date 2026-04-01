@@ -80,9 +80,7 @@ export const WalletView: Component = () => {
     await disconnectWallet();
     setShowExport(false);
     setExportedKey('');
-    // Full reload to ensure IndexedDB wipe completes and all state is clean
-    window.location.href = '#/wallet';
-    window.location.reload();
+    navigate('/news');
   };
 
   const handleKleverConnect = async () => {

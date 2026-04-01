@@ -113,8 +113,11 @@ export async function generateWallet(): Promise<string> {
  * local device key for L2 operations (messages, reactions, etc.).
  */
 export async function connectKleverExtension(extensionAddress: string): Promise<void> {
-  // Generate a local device key for L2 signing
-  const deviceAddress = await vaultGenerate();
+  // Reuse existing device key if available, otherwise generate a new one
+  let deviceAddress = await vaultInit();
+  if (!deviceAddress) {
+    deviceAddress = await vaultGenerate();
+  }
   const signer = vaultGetSigner()!;
   getClient().withSigner(signer);
   // Extension address = on-chain identity, device key = L2 signing
@@ -144,7 +147,14 @@ export function connectK5Delegation(deviceAddress: string): void {
 
 /** Disconnect wallet and wipe vault. */
 export async function disconnectWallet(): Promise<void> {
-  await vaultWipe();
+  const source = walletSource();
+  if (source === 'klever-extension' || source === 'k5-delegation') {
+    // Keep the device key — only clear the extension/delegation association
+    // so the same L2 identity is reused on reconnect
+  } else {
+    // Built-in wallet: wipe everything
+    await vaultWipe();
+  }
   setSetting('walletSource', '');
   setSetting('walletAddress', '');
   setWalletAddress(null);
