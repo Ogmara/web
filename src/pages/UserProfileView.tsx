@@ -142,8 +142,8 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
         try {
           const result = await client.uploadMedia(avatarFile()!);
           avatarCid = result.cid;
-        } catch {
-          throw new Error('Avatar upload failed — media upload not available on this node');
+        } catch (uploadErr: any) {
+          throw new Error(`Avatar upload failed: ${uploadErr?.message || 'unknown error'}`);
         }
       }
 
