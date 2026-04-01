@@ -106,8 +106,12 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
         if (avatarFile()!.size > 5 * 1024 * 1024) {
           throw new Error('Image too large (max 5 MB)');
         }
-        const result = await client.uploadMedia(avatarFile()!);
-        avatarCid = result.cid;
+        try {
+          const result = await client.uploadMedia(avatarFile()!);
+          avatarCid = result.cid;
+        } catch {
+          throw new Error('Avatar upload failed — media upload not available on this node');
+        }
       }
 
       await client.updateProfile({
