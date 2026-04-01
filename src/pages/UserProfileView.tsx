@@ -6,7 +6,7 @@ import { Component, createResource, createSignal, For, Show } from 'solid-js';
 import { JSX } from 'solid-js/jsx-runtime';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, walletAddress, getSigner } from '../lib/auth';
+import { authStatus, walletAddress, walletSource, l2Address, getSigner } from '../lib/auth';
 import { kleverAvailable, registerUser } from '../lib/klever';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
@@ -52,7 +52,17 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
   const [editSuccess, setEditSuccess] = createSignal('');
   const [avatarFile, setAvatarFile] = createSignal<File | null>(null);
 
-  const isOwnProfile = () => walletAddress() === props.address;
+  const isOwnProfile = () =>
+    walletAddress() === props.address || l2Address() === props.address;
+
+  /** The L2 address used for profile data (device key when using extension). */
+  const profileL2Address = () => {
+    if (isOwnProfile() && walletSource() === 'klever-extension' && l2Address()) {
+      return l2Address()!;
+    }
+    return props.address;
+  };
+
   const isVerified = () => {
     const pk = profile()?.user?.public_key;
     return pk && pk.length > 0;
@@ -60,7 +70,7 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
   const [regPending, setRegPending] = createSignal(false);
 
   const [profile, { refetch: refetchProfile }] = createResource(
-    () => props.address,
+    () => profileL2Address(),
     async (address) => {
       if (!address) return null;
       try {
@@ -198,6 +208,11 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
             </Show>
           </h2>
           <code class="profile-address-text">{props.address}</code>
+          <Show when={isOwnProfile() && l2Address() && l2Address() !== props.address}>
+            <div class="profile-l2-hint">
+              L2 signing key: <code>{l2Address()!.slice(0, 12)}...{l2Address()!.slice(-6)}</code>
+            </div>
+          </Show>
           <Show when={profile()?.user?.bio}>
             <p class="profile-bio-text"><BioText text={profile()!.user.bio!} /></p>
           </Show>
@@ -391,6 +406,13 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
           display: block;
           margin-bottom: var(--spacing-xs);
         }
+        .profile-l2-hint {
+          font-size: var(--font-size-xs);
+          color: var(--color-text-secondary);
+          opacity: 0.6;
+          margin-bottom: var(--spacing-xs);
+        }
+        .profile-l2-hint code { font-size: inherit; }
         .profile-bio-text { font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.5; }
         .bio-link { color: var(--color-accent-primary); text-decoration: underline; word-break: break-all; }
         .bio-link:hover { opacity: 0.8; }

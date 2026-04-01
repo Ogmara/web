@@ -5,6 +5,15 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] - 2026-04-01
+
+### Fixed
+- **Profile data mismatch with Klever Extension** — profile updates were stored
+  under the device key address but the profile page fetched from the extension
+  address. Added `l2Address` signal tracking the device signing key. Profile
+  page now fetches L2 data from the device key address when using the extension.
+  Shows "L2 signing key" hint when addresses differ.
+
 ## [0.7.3] - 2026-04-01
 
 ### Fixed
