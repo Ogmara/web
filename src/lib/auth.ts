@@ -16,6 +16,7 @@ import {
   vaultGetAddress,
 } from './vault';
 import { getClient } from './api';
+import { getSetting, setSetting } from './settings';
 
 export type AuthStatus = 'none' | 'loading' | 'locked' | 'ready';
 export type WalletSource = 'builtin' | 'klever-extension' | 'k5-delegation' | null;
@@ -48,8 +49,21 @@ export async function initAuth(): Promise<void> {
       const signer = vaultGetSigner();
       if (signer) {
         getClient().withSigner(signer);
-        setWalletAddress(address);
-        setWalletSource('builtin');
+
+        // Restore wallet source and address from persisted settings
+        const savedSource = getSetting('walletSource') as WalletSource;
+        const savedAddress = getSetting('walletAddress');
+
+        if (savedSource === 'klever-extension' && savedAddress) {
+          setWalletAddress(savedAddress);
+          setWalletSource('klever-extension');
+        } else if (savedSource === 'k5-delegation' && savedAddress) {
+          setWalletAddress(savedAddress);
+          setWalletSource('k5-delegation');
+        } else {
+          setWalletAddress(address);
+          setWalletSource('builtin');
+        }
         setAuthStatus('ready');
         return;
       }
@@ -67,6 +81,8 @@ export async function connectWithKey(hexKey: string): Promise<string> {
   getClient().withSigner(signer);
   setWalletAddress(address);
   setWalletSource('builtin');
+  setSetting('walletSource', 'builtin');
+  setSetting('walletAddress', address);
   setAuthStatus('ready');
   return address;
 }
@@ -78,6 +94,8 @@ export async function generateWallet(): Promise<string> {
   getClient().withSigner(signer);
   setWalletAddress(address);
   setWalletSource('builtin');
+  setSetting('walletSource', 'builtin');
+  setSetting('walletAddress', address);
   setAuthStatus('ready');
   return address;
 }
@@ -96,6 +114,8 @@ export async function connectKleverExtension(extensionAddress: string): Promise<
   // The local key is used for L2 operations (until device delegation is set up)
   setWalletAddress(extensionAddress);
   setWalletSource('klever-extension');
+  setSetting('walletSource', 'klever-extension');
+  setSetting('walletAddress', extensionAddress);
   setAuthStatus('ready');
 }
 
@@ -109,6 +129,8 @@ export function connectK5Delegation(deviceAddress: string): void {
     getClient().withSigner(signer);
     setWalletAddress(deviceAddress);
     setWalletSource('k5-delegation');
+    setSetting('walletSource', 'k5-delegation');
+    setSetting('walletAddress', deviceAddress);
     setAuthStatus('ready');
   }
 }
@@ -116,6 +138,8 @@ export function connectK5Delegation(deviceAddress: string): void {
 /** Disconnect wallet and wipe vault. */
 export async function disconnectWallet(): Promise<void> {
   await vaultWipe();
+  setSetting('walletSource', '');
+  setSetting('walletAddress', '');
   setWalletAddress(null);
   setWalletSource(null);
   setAuthStatus('none');

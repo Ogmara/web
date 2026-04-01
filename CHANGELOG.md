@@ -5,6 +5,17 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-04-01
+
+### Fixed
+- **Wallet address persistence** — Klever Extension address was lost on page
+  reload (initAuth restored the built-in device key address instead). Now
+  persists walletSource and walletAddress to localStorage and restores them
+  on startup. Fixes wrong address on profile, missing verified badge, and
+  verify button still showing after successful registration.
+- **SC register call format** — base64-encoded txData, hex-encoded public key
+  string for the ManagedBuffer(64) check in the smart contract
+
 ## [0.7.1] - 2026-04-01
 
 ### Added
