@@ -396,9 +396,11 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
         .profile-address-text {
           font-size: var(--font-size-xs);
           color: var(--color-text-secondary);
-          word-break: break-all;
+          overflow-wrap: anywhere;
+          word-break: break-word;
           display: block;
           margin-bottom: var(--spacing-xs);
+          max-width: 100%;
         }
         .profile-l2-hint {
           font-size: var(--font-size-xs);

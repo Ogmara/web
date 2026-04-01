@@ -147,6 +147,7 @@ export const NewsView: Component = () => {
           align-items: center;
           border-top: 1px solid var(--color-border);
           padding-top: var(--spacing-sm);
+          flex-wrap: wrap;
         }
         .reaction-btn {
           display: inline-flex;
