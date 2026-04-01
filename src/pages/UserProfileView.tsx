@@ -63,12 +63,9 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
     return props.address;
   };
 
-  const isVerified = () => {
-    const pk = profile()?.user?.public_key;
-    return pk && pk.length > 0;
-  };
   const [regPending, setRegPending] = createSignal(false);
 
+  // Fetch L2 profile data (display name, bio, avatar) from the device key address
   const [profile, { refetch: refetchProfile }] = createResource(
     () => profileL2Address(),
     async (address) => {
@@ -77,11 +74,32 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
         const client = getClient();
         return await client.getUserProfile(address);
       } catch {
-        // Endpoint may 404 — degrade gracefully
         return null;
       }
     },
   );
+
+  // Fetch on-chain registration status from the wallet address (may differ from L2 address)
+  const [onChainProfile] = createResource(
+    () => props.address,
+    async (address) => {
+      if (!address) return null;
+      // If same as L2 address, reuse profile data
+      if (address === profileL2Address()) return profile();
+      try {
+        const client = getClient();
+        return await client.getUserProfile(address);
+      } catch {
+        return null;
+      }
+    },
+  );
+
+  const isVerified = () => {
+    // Check both the on-chain profile and L2 profile for public_key
+    const pk = onChainProfile()?.user?.public_key || profile()?.user?.public_key;
+    return pk && pk.length > 0;
+  };
 
   const [posts] = createResource(
     () => props.address,
