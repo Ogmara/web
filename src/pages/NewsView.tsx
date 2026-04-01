@@ -147,6 +147,7 @@ export const NewsView: Component = () => {
           align-items: center;
           border-top: 1px solid var(--color-border);
           padding-top: var(--spacing-sm);
+          flex-wrap: wrap;
         }
         .reaction-btn {
           display: inline-flex;
@@ -171,7 +172,6 @@ export const NewsView: Component = () => {
           font-size: var(--font-size-sm);
           color: var(--color-text-secondary);
           cursor: pointer;
-          margin-left: auto;
         }
         .action-btn:hover { color: var(--color-accent-primary); }
         .action-btn.bookmarked { color: var(--color-accent-primary); }
