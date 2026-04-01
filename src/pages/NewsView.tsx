@@ -257,14 +257,14 @@ export const NewsView: Component = () => {
         .tip-confirm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .tip-success {
           padding: var(--spacing-sm);
-          background: var(--color-success);
-          color: #fff;
+          background: var(--color-accent-primary);
+          color: var(--color-text-inverse);
           border-radius: var(--radius-md);
           font-size: var(--font-size-sm);
           font-weight: 600;
           text-align: center;
         }
-        .tip-tx-link { color: #fff; text-decoration: underline; }
+        .tip-tx-link { color: var(--color-text-inverse); text-decoration: underline; }
       `}</style>
     </div>
   );
