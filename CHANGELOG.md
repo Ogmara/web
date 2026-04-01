@@ -5,6 +5,14 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-04-01
+
+### Added
+- **Unread message badges** on sidebar channels. Polls server every 30s
+  for per-channel unread counts. Total unread shown on collapsed channels
+  heading. Channels marked as read when entering the chat view.
+  Synced across devices via L2 node read-state storage.
+
 ## [0.16.0] - 2026-04-01
 
 ### Added

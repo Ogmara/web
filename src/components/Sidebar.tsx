@@ -5,7 +5,7 @@
  * Messages, Bookmarks, Search, Settings.
  */
 
-import { Component, createResource, createSignal, For, Show } from 'solid-js';
+import { Component, createResource, createSignal, createEffect, For, Show, onCleanup } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus } from '../lib/auth';
@@ -13,6 +13,7 @@ import { navigate, route } from '../lib/router';
 
 export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
   const [channelsOpen, setChannelsOpen] = createSignal(false);
+  const [unreadCounts, setUnreadCounts] = createSignal<Record<string, number>>({});
 
   /** Navigate and auto-close sidebar on mobile. */
   const go = (path: string) => {
@@ -29,6 +30,25 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
       return [];
     }
   });
+
+  // Poll unread counts every 30 seconds when authenticated
+  let unreadTimer: ReturnType<typeof setInterval> | null = null;
+  const fetchUnread = async () => {
+    if (authStatus() !== 'ready') return;
+    try {
+      const client = getClient();
+      const resp = await client.getUnreadCounts();
+      setUnreadCounts(resp.unread ?? {});
+    } catch { /* ignore */ }
+  };
+  createEffect(() => {
+    if (unreadTimer) clearInterval(unreadTimer);
+    if (authStatus() === 'ready') {
+      fetchUnread();
+      unreadTimer = setInterval(fetchUnread, 30000);
+    }
+  });
+  onCleanup(() => { if (unreadTimer) clearInterval(unreadTimer); });
 
   const currentChannelId = () => {
     const r = route();
@@ -69,6 +89,11 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           >
             <span class={`collapse-arrow ${channelsOpen() ? 'open' : ''}`}>▸</span>
             <h3 class="sidebar-heading">{t('sidebar_channels')}</h3>
+            <Show when={!channelsOpen() && Object.values(unreadCounts()).reduce((a, b) => a + b, 0) > 0}>
+              <span class="unread-badge">
+                {Object.values(unreadCounts()).reduce((a, b) => a + b, 0)}
+              </span>
+            </Show>
           </button>
           <Show when={authStatus() === 'ready'}>
             <button
@@ -90,6 +115,9 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
                 >
                   <span class="channel-hash">#</span>
                   <span class="channel-name">{channel.display_name || channel.slug}</span>
+                  <Show when={(unreadCounts()[String(channel.channel_id)] ?? 0) > 0}>
+                    <span class="unread-badge">{unreadCounts()[String(channel.channel_id)]}</span>
+                  </Show>
                 </button>
               )}
             </For>
@@ -235,6 +263,17 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         .sidebar-item:hover { background: var(--color-bg-tertiary); }
         .sidebar-item.active { background: var(--color-accent-primary); color: var(--color-text-inverse); }
         .channel-hash { opacity: 0.5; font-weight: 700; }
+        .unread-badge {
+          margin-left: auto;
+          background: var(--color-accent-primary);
+          color: var(--color-text-inverse);
+          font-size: 10px;
+          font-weight: 700;
+          padding: 1px 6px;
+          border-radius: var(--radius-full);
+          min-width: 18px;
+          text-align: center;
+        }
         .sidebar-loading {
           padding: var(--spacing-sm) var(--spacing-lg);
           font-size: var(--font-size-sm);
