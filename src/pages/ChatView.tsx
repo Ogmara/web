@@ -1,15 +1,18 @@
 /**
- * ChatView — channel messaging with real-time updates and send functionality.
+ * ChatView — channel messaging with real-time updates, emoji picker,
+ * profile resolution, and optimistic message display.
  */
 
 import { Component, createResource, createSignal, createEffect, createMemo, For, Show, onCleanup } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, getSigner } from '../lib/auth';
+import { authStatus, getSigner, walletAddress } from '../lib/auth';
 import { onWsEvent, wsSubscribeChannels, wsUnsubscribeChannels } from '../lib/ws';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
+import { EmojiPicker } from '../components/EmojiPicker';
 import { getPayloadContent, decodePayload } from '../lib/payload';
+import { resolveProfile, type CachedProfile } from '../lib/profile';
 
 /** Convert a msg_id (hex string, byte array, or Uint8Array) to a consistent hex string. */
 function msgIdToHex(msgId: unknown): string {
@@ -25,9 +28,7 @@ function msgIdToHex(msgId: unknown): string {
 
 /** Extract the reply_to msg_id from a message's payload as a hex string, or null. */
 function getReplyToHex(msg: any): string | null {
-  // First check if the node already provides reply_to_preview
   if (msg.reply_to_preview?.msg_id) return msgIdToHex(msg.reply_to_preview.msg_id);
-  // Otherwise decode from payload
   try {
     const decoded = decodePayload(msg.payload);
     if (decoded.reply_to) return msgIdToHex(decoded.reply_to);
@@ -42,7 +43,7 @@ function formatMessageTime(timestamp: string | number): string {
   });
 }
 
-/** Get a date label for message grouping. Returns "Today", "Yesterday", or a localized date. */
+/** Get a date label for message grouping. */
 function getDateLabel(timestamp: string | number): string {
   const date = new Date(timestamp);
   const now = new Date();
@@ -63,14 +64,14 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [replyTo, setReplyTo] = createSignal<{ msgId: string; author: string; preview: string } | null>(null);
   const [localMessages, setLocalMessages] = createSignal<any[]>([]);
   const [sending, setSending] = createSignal(false);
-  let inputRef: HTMLInputElement | undefined;
+  const [showEmoji, setShowEmoji] = createSignal(false);
+  const [profiles, setProfiles] = createSignal<Map<string, CachedProfile>>(new Map());
+  let inputRef: HTMLTextAreaElement | undefined;
   let messagesRef: HTMLDivElement | undefined;
 
-  /** Scroll chat to the bottom (latest messages). */
+  /** Scroll chat to the bottom. */
   const scrollToBottom = () => {
-    if (messagesRef) {
-      messagesRef.scrollTop = messagesRef.scrollHeight;
-    }
+    if (messagesRef) messagesRef.scrollTop = messagesRef.scrollHeight;
   };
 
   const [messages, { refetch }] = createResource(
@@ -110,7 +111,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       const msg = event.envelope;
       if (msg.channel_id === props.channelId || msg.channel_id === String(props.channelId)) {
         setLocalMessages((prev) => {
-          // Cap local messages to prevent unbounded growth
           const next = [...prev, msg];
           return next.length > MAX_LOCAL_MESSAGES ? next.slice(-MAX_LOCAL_MESSAGES) : next;
         });
@@ -119,14 +119,13 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   });
   onCleanup(wsCleanup);
 
-  // Reactive channel subscription — runs when channelId changes
+  // Reactive channel subscription
   let prevChannelId: string | null = null;
   createEffect(() => {
     const id = props.channelId ? String(props.channelId) : null;
     if (prevChannelId) wsUnsubscribeChannels([prevChannelId]);
     if (id) {
       wsSubscribeChannels([id]);
-      // Auto-focus input when switching channels
       setTimeout(() => inputRef?.focus(), 50);
     }
     prevChannelId = id;
@@ -135,32 +134,53 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     if (prevChannelId) wsUnsubscribeChannels([prevChannelId]);
   });
 
-  // Deduplicate messages by msg_id and sort chronologically
+  // Deduplicate and sort messages
   const allMessages = createMemo(() => {
     const seen = new Set<string>();
     const combined = [...(messages() || []), ...localMessages()];
     const deduped = combined.filter((msg) => {
-      if (!msg.msg_id || seen.has(msg.msg_id)) return false;
-      seen.add(msg.msg_id);
+      const id = msgIdToHex(msg.msg_id);
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
       return true;
     });
-    // Sort oldest first
     deduped.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     return deduped;
   });
 
-  /** Lookup map: hex msg_id → message object, for resolving reply references. */
+  // Resolve profiles for all unique authors
+  createEffect(() => {
+    const msgs = allMessages();
+    const authors = new Set(msgs.map((m) => m.author));
+    authors.forEach((addr) => {
+      if (!profiles().has(addr)) {
+        resolveProfile(addr).then((p) => {
+          setProfiles((prev) => {
+            const next = new Map(prev);
+            next.set(addr, p);
+            return next;
+          });
+        });
+      }
+    });
+  });
+
+  const getProfile = (addr: string) => profiles().get(addr);
+
+  const displayName = (addr: string) => {
+    const p = getProfile(addr);
+    return p?.display_name || `${addr.slice(0, 8)}...${addr.slice(-4)}`;
+  };
+
+  /** Lookup map: hex msg_id -> message object. */
   const msgById = createMemo(() => {
     const map = new Map<string, any>();
-    for (const msg of allMessages()) {
-      map.set(msgIdToHex(msg.msg_id), msg);
-    }
+    for (const msg of allMessages()) map.set(msgIdToHex(msg.msg_id), msg);
     return map;
   });
 
-  /** Resolve a reply reference to { author, content, msg_id } or null. */
+  /** Resolve a reply reference. */
   const resolveReply = (msg: any): { author: string; content: string; msgId: string } | null => {
-    // If the node already provides reply_to_preview, use it
     if (msg.reply_to_preview?.author) {
       return {
         author: msg.reply_to_preview.author,
@@ -168,7 +188,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         msgId: msgIdToHex(msg.reply_to_preview.msg_id),
       };
     }
-    // Otherwise resolve from payload reply_to against loaded messages
     const replyHex = getReplyToHex(msg);
     if (!replyHex) return null;
     const original = msgById().get(replyHex);
@@ -180,21 +199,18 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         msgId: replyHex,
       };
     }
-    // Original not in loaded batch — show minimal reply indicator
     return { author: '...', content: '(original message not loaded)', msgId: replyHex };
   };
 
-  // Auto-refresh: poll for new messages every 15 seconds as a fallback for WebSocket
+  // Poll fallback every 15s
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   createEffect(() => {
     if (pollTimer) clearInterval(pollTimer);
-    if (props.channelId) {
-      pollTimer = setInterval(() => refetch(), 15000);
-    }
+    if (props.channelId) pollTimer = setInterval(() => refetch(), 15000);
   });
   onCleanup(() => { if (pollTimer) clearInterval(pollTimer); });
 
-  // Auto-scroll to latest message when messages change (only if user is near bottom)
+  // Auto-scroll on new messages
   createEffect(() => {
     const msgs = allMessages();
     if (msgs.length > 0) {
@@ -202,7 +218,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         if (!messagesRef) return;
         const { scrollTop, scrollHeight, clientHeight } = messagesRef;
         const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
-        // Scroll if near bottom or first load (scrollTop === 0)
         if (isNearBottom || scrollTop === 0) scrollToBottom();
       }, 50);
     }
@@ -211,23 +226,28 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const handleSend = async () => {
     const text = messageInput().trim();
     if (!text || !props.channelId) return;
-
-    if (!getSigner()) {
-      // No auth — prompt user
-      navigate('/wallet');
-      return;
-    }
+    if (!getSigner()) { navigate('/wallet'); return; }
 
     setSending(true);
     try {
       const client = getClient();
       const options: any = {};
-      if (replyTo()) {
-        options.replyTo = replyTo()!.msgId;
-      }
+      if (replyTo()) options.replyTo = replyTo()!.msgId;
       await client.sendMessage(props.channelId, text, options);
+
+      // Optimistic: add message locally for instant display
+      const addr = walletAddress() || '';
+      setLocalMessages((prev) => [...prev, {
+        msg_id: `local-${Date.now()}`,
+        author: addr,
+        timestamp: Date.now(),
+        payload: text, // string payloads are handled by getPayloadContent
+        _optimistic: true,
+      }]);
+
       setMessageInput('');
       setReplyTo(null);
+      setShowEmoji(false);
       inputRef?.focus();
     } catch {
       // Send failed
@@ -239,15 +259,24 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const handleReply = (msg: any) => {
     const content = getPayloadContent(msg.payload);
     const preview = content.length > 80 ? content.slice(0, 80) + '...' : content;
-    setReplyTo({
-      msgId: msgIdToHex(msg.msg_id),
-      author: msg.author,
-      preview,
-    });
+    setReplyTo({ msgId: msgIdToHex(msg.msg_id), author: msg.author, preview });
     inputRef?.focus();
   };
 
-  /** Scroll to a message by msg_id and briefly highlight it. */
+  const insertEmoji = (emoji: string) => {
+    if (!inputRef) return;
+    const start = inputRef.selectionStart ?? messageInput().length;
+    const end = inputRef.selectionEnd ?? start;
+    const current = messageInput();
+    setMessageInput(current.slice(0, start) + emoji + current.slice(end));
+    // Restore cursor after emoji
+    setTimeout(() => {
+      inputRef?.focus();
+      const pos = start + emoji.length;
+      inputRef?.setSelectionRange(pos, pos);
+    }, 0);
+  };
+
   const scrollToMessage = (msgId: string) => {
     const el = document.querySelector(`[data-msg-id="${CSS.escape(msgId)}"]`) as HTMLElement | null;
     if (el) {
@@ -259,18 +288,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
   const cancelReply = () => setReplyTo(null);
 
-  const truncateAddress = (addr: string) =>
-    `${addr.slice(0, 8)}...${addr.slice(-4)}`;
-
   return (
     <div class="chat-view">
       <Show
         when={props.channelId}
-        fallback={
-          <div class="chat-empty">
-            <p>{t('chat_no_channel')}</p>
-          </div>
-        }
+        fallback={<div class="chat-empty"><p>{t('chat_no_channel')}</p></div>}
       >
         {/* Pinned messages bar */}
         <Show when={pinnedMessages() && pinnedMessages()!.length > 0}>
@@ -293,6 +315,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                 const prevDate = prevMsg ? getDateLabel(prevMsg.timestamp) : null;
                 const showDateSep = currentDate !== prevDate;
                 const reply = resolveReply(msg);
+                const prof = () => getProfile(msg.author);
 
                 return (
                   <>
@@ -302,33 +325,33 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                       </div>
                     </Show>
                     <div class="message" data-msg-id={msgIdToHex(msg.msg_id)}>
-                      {/* Reply preview — clickable to scroll to original */}
                       <Show when={reply}>
-                        <div
-                          class="reply-preview"
-                          onClick={() => scrollToMessage(reply!.msgId)}
-                        >
-                          <span class="reply-preview-author">
-                            {truncateAddress(reply!.author)}
-                          </span>
-                          <span class="reply-preview-text">
-                            {reply!.content}
-                          </span>
+                        <div class="reply-preview" onClick={() => scrollToMessage(reply!.msgId)}>
+                          <span class="reply-preview-author">{displayName(reply!.author)}</span>
+                          <span class="reply-preview-text">{reply!.content}</span>
                         </div>
                       </Show>
                       <div class="message-header">
-                        <span
-                          class="message-author"
-                          onClick={() => navigate(`/user/${msg.author}`)}
-                        >
-                          {truncateAddress(msg.author)}
+                        <Show when={prof()?.avatar_cid}>
+                          <img
+                            class="msg-avatar"
+                            src={getClient().getMediaUrl(prof()!.avatar_cid!)}
+                            alt=""
+                          />
+                        </Show>
+                        <Show when={!prof()?.avatar_cid}>
+                          <span class="msg-avatar-placeholder">
+                            {(prof()?.display_name || msg.author).slice(0, 2).toUpperCase()}
+                          </span>
+                        </Show>
+                        <span class="message-author" onClick={() => navigate(`/user/${msg.author}`)}>
+                          {displayName(msg.author)}
                         </span>
-                        <span class="message-time">
-                          {formatMessageTime(msg.timestamp)}
-                        </span>
-                        <button class="reply-btn" onClick={() => handleReply(msg)} title={t('chat_reply')}>
-                          ↩
-                        </button>
+                        <Show when={prof()?.verified}>
+                          <span class="msg-verified">✓</span>
+                        </Show>
+                        <span class="message-time">{formatMessageTime(msg.timestamp)}</span>
+                        <button class="reply-btn" onClick={() => handleReply(msg)} title={t('chat_reply')}>↩</button>
                       </div>
                       <div class="message-body"><FormattedText content={getPayloadContent(msg.payload)} /></div>
                     </div>
@@ -339,39 +362,60 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           </Show>
         </div>
 
-        {/* Reply indicator above input */}
+        {/* Reply indicator */}
         <Show when={replyTo()}>
           <div class="reply-indicator">
             <div class="reply-indicator-content">
-              <span class="reply-indicator-author">{truncateAddress(replyTo()!.author)}</span>
+              <span class="reply-indicator-author">{displayName(replyTo()!.author)}</span>
               <span class="reply-indicator-text">{replyTo()!.preview}</span>
             </div>
             <button class="reply-cancel" onClick={cancelReply}>✕</button>
           </div>
         </Show>
 
-        <div class="chat-input">
-          <input
-            ref={inputRef}
-            type="text"
-            placeholder={authStatus() === 'ready' ? t('chat_placeholder') : t('auth_connect_prompt')}
-            value={messageInput()}
-            onInput={(e) => setMessageInput(e.currentTarget.value)}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter' && messageInput().trim()) {
-                handleSend();
-              }
-            }}
-            disabled={sending()}
-          />
-          <button
-            class="send-btn"
-            aria-label={t('chat_send')}
-            onClick={handleSend}
-            disabled={sending() || !messageInput().trim()}
-          >
-            {t('chat_send')}
-          </button>
+        {/* Input area */}
+        <div class="chat-input-area">
+          <div class="chat-input">
+            <textarea
+              ref={inputRef}
+              class="chat-textarea"
+              rows={3}
+              placeholder={authStatus() === 'ready' ? t('chat_placeholder') : t('auth_connect_prompt')}
+              value={messageInput()}
+              onInput={(e) => setMessageInput(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && messageInput().trim()) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              disabled={sending()}
+            />
+            <div class="chat-input-actions">
+              <div class="emoji-container">
+                <button
+                  class="emoji-toggle"
+                  onClick={() => setShowEmoji(!showEmoji())}
+                  title="Emoji"
+                >
+                  😊
+                </button>
+                <Show when={showEmoji()}>
+                  <EmojiPicker
+                    onSelect={insertEmoji}
+                    onClose={() => setShowEmoji(false)}
+                  />
+                </Show>
+              </div>
+              <button
+                class="send-btn"
+                onClick={handleSend}
+                disabled={sending() || !messageInput().trim()}
+              >
+                {t('chat_send')}
+              </button>
+            </div>
+          </div>
         </div>
       </Show>
 
@@ -397,7 +441,27 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           font-weight: 600;
         }
         .message { padding: var(--spacing-sm) 0; }
-        .message-header { display: flex; gap: var(--spacing-sm); align-items: baseline; }
+        .message-header { display: flex; gap: var(--spacing-sm); align-items: center; }
+        .msg-avatar {
+          width: 22px;
+          height: 22px;
+          border-radius: var(--radius-full);
+          object-fit: cover;
+          flex-shrink: 0;
+        }
+        .msg-avatar-placeholder {
+          width: 22px;
+          height: 22px;
+          border-radius: var(--radius-full);
+          background: var(--color-accent-secondary);
+          color: var(--color-text-inverse);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 9px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
         .message-author {
           font-weight: 600;
           font-size: var(--font-size-sm);
@@ -405,6 +469,19 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           cursor: pointer;
         }
         .message-author:hover { text-decoration: underline; }
+        .msg-verified {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 14px;
+          height: 14px;
+          border-radius: var(--radius-full);
+          background: var(--color-accent-primary);
+          color: var(--color-text-inverse);
+          font-size: 9px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
         .message-time { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
         .message-body { margin-top: var(--spacing-xs); font-size: var(--font-size-md); line-height: 1.5; }
         .reply-btn {
@@ -446,9 +523,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           line-height: 1.3;
         }
 
-        .message-highlight {
-          animation: msg-flash 1.5s ease-out;
-        }
+        .message-highlight { animation: msg-flash 1.5s ease-out; }
         @keyframes msg-flash {
           0% { background: var(--color-accent-primary); border-radius: var(--radius-sm); }
           100% { background: transparent; }
@@ -470,11 +545,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           padding-left: var(--spacing-sm);
           min-width: 0;
         }
-        .reply-indicator-author {
-          font-size: var(--font-size-xs);
-          font-weight: 700;
-          color: var(--color-accent-primary);
-        }
+        .reply-indicator-author { font-size: var(--font-size-xs); font-weight: 700; color: var(--color-accent-primary); }
         .reply-indicator-text {
           font-size: var(--font-size-xs);
           color: var(--color-text-secondary);
@@ -505,13 +576,16 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         .pinned-icon { font-size: var(--font-size-md); }
         .pinned-count { color: var(--color-accent-primary); font-weight: 600; }
 
+        .chat-input-area {
+          border-top: 1px solid var(--color-border);
+          padding: var(--spacing-sm) var(--spacing-md);
+        }
         .chat-input {
           display: flex;
           gap: var(--spacing-sm);
-          padding: var(--spacing-md);
-          border-top: 1px solid var(--color-border);
+          align-items: flex-end;
         }
-        .chat-input input {
+        .chat-textarea {
           flex: 1;
           padding: var(--spacing-sm) var(--spacing-md);
           border: 1px solid var(--color-border);
@@ -520,9 +594,25 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           color: var(--color-text-primary);
           font-family: inherit;
           font-size: var(--font-size-md);
+          resize: none;
+          line-height: 1.4;
         }
-        .chat-input input:focus { outline: none; border-color: var(--color-accent-primary); }
-        .chat-input input:disabled { opacity: 0.6; }
+        .chat-textarea:focus { outline: none; border-color: var(--color-accent-primary); }
+        .chat-textarea:disabled { opacity: 0.6; }
+        .chat-input-actions {
+          display: flex;
+          flex-direction: column;
+          gap: var(--spacing-xs);
+          align-items: center;
+        }
+        .emoji-container { position: relative; }
+        .emoji-toggle {
+          font-size: var(--font-size-lg);
+          padding: var(--spacing-xs);
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+        }
+        .emoji-toggle:hover { background: var(--color-bg-tertiary); }
         .send-btn {
           padding: var(--spacing-sm) var(--spacing-lg);
           background: var(--color-accent-primary);
@@ -530,6 +620,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           border-radius: var(--radius-md);
           font-weight: 600;
           font-size: var(--font-size-sm);
+          white-space: nowrap;
         }
         .send-btn:hover { opacity: 0.9; }
         .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }

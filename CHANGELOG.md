@@ -5,6 +5,17 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-04-01
+
+### Added
+- **Chat improvements:**
+  - 3-line textarea instead of single-line input (Enter sends, Shift+Enter newline)
+  - Cursor focus returns to input after sending
+  - Emoji picker (😊 button) with categorized standard emojis, inserts at cursor position
+  - Messages show author avatar + display name + verified badge instead of wallet address
+  - Optimistic local message display — sent messages appear instantly before server confirmation
+- `media_hint` i18n key showing allowed file types and max size below attach button.
+
 ## [0.15.0] - 2026-04-01
 
 ### Added
