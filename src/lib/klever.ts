@@ -89,10 +89,14 @@ export function disconnectExtension(): void {
 
 /**
  * Ogmara KApp smart contract address.
- * Set via environment variable or configuration.
- * On testnet: deployed contract address for testing.
+ * Fetched from L2 node stats, falls back to env var.
  */
-const SC_ADDRESS = (import.meta as any).env?.VITE_OGMARA_CONTRACT_ADDRESS || '';
+let scAddress = (import.meta as any).env?.VITE_OGMARA_CONTRACT_ADDRESS || '';
+
+/** Set the smart contract address (called after fetching node stats). */
+export function setContractAddress(address: string): void {
+  if (address) scAddress = address;
+}
 
 /** TX type 63 = SmartContract, scType 0 = InvokeContract */
 const TX_TYPE_SMART_CONTRACT = 63;
@@ -111,7 +115,7 @@ async function invokeContract(params: ScInvokeParams): Promise<string> {
   if (!window.kleverWeb) {
     throw new Error('Klever Extension not available');
   }
-  if (!SC_ADDRESS) {
+  if (!scAddress) {
     throw new Error('Smart contract address not configured');
   }
 
@@ -119,7 +123,7 @@ async function invokeContract(params: ScInvokeParams): Promise<string> {
     typeUrl: 'github.com/klever-io/klever-go/core/proto;proto.SmartContractCallContract',
     parameter: {
       scType: 0, // InvokeContract
-      address: SC_ADDRESS,
+      address: scAddress,
       callValue: params.value ? { KLV: params.value } : undefined,
       input: encodeFunctionCall(params.functionName, params.args),
     },
