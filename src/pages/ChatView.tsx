@@ -150,11 +150,23 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   };
 
   const handleReply = (msg: any) => {
+    const content = getPayloadContent(msg.payload);
+    const preview = content.length > 80 ? content.slice(0, 80) + '...' : content;
     setReplyTo({
       msgId: msg.msg_id,
       author: msg.author,
-      preview: '[message]',
+      preview,
     });
+  };
+
+  /** Scroll to a message by msg_id and briefly highlight it. */
+  const scrollToMessage = (msgId: string) => {
+    const el = document.querySelector(`[data-msg-id="${msgId}"]`) as HTMLElement | null;
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('message-highlight');
+      setTimeout(() => el.classList.remove('message-highlight'), 1500);
+    }
   };
 
   const cancelReply = () => setReplyTo(null);
@@ -200,14 +212,19 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                         <span class="date-separator-label">{currentDate}</span>
                       </div>
                     </Show>
-                    <div class="message">
-                      {/* Reply preview (if this message is a reply) */}
+                    <div class="message" data-msg-id={msg.msg_id}>
+                      {/* Reply preview — clickable to scroll to original */}
                       <Show when={msg.reply_to_preview}>
-                        <div class="reply-preview">
-                          <span class="reply-author">
-                            {msg.reply_to_preview?.author?.slice(0, 8)}...
+                        <div
+                          class="reply-preview"
+                          onClick={() => scrollToMessage(msg.reply_to_preview?.msg_id)}
+                        >
+                          <span class="reply-preview-author">
+                            {truncateAddress(msg.reply_to_preview?.author || '')}
                           </span>
-                          <span class="reply-text">{msg.reply_to_preview?.content_preview}</span>
+                          <span class="reply-preview-text">
+                            {msg.reply_to_preview?.content_preview || '...'}
+                          </span>
                         </div>
                       </Show>
                       <div class="message-header">
@@ -233,10 +250,13 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           </Show>
         </div>
 
-        {/* Reply indicator */}
+        {/* Reply indicator above input */}
         <Show when={replyTo()}>
           <div class="reply-indicator">
-            <span>{t('channel_reply_preview')} <strong>{replyTo()!.author.slice(0, 8)}...</strong></span>
+            <div class="reply-indicator-content">
+              <span class="reply-indicator-author">{truncateAddress(replyTo()!.author)}</span>
+              <span class="reply-indicator-text">{replyTo()!.preview}</span>
+            </div>
             <button class="reply-cancel" onClick={cancelReply}>✕</button>
           </div>
         </Show>
@@ -309,28 +329,75 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         .reply-btn:hover { color: var(--color-accent-primary); }
 
         .reply-preview {
+          display: flex;
+          flex-direction: column;
+          border-left: 3px solid var(--color-accent-primary);
+          background: var(--color-bg-tertiary);
+          border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+          padding: var(--spacing-xs) var(--spacing-sm);
+          margin-bottom: var(--spacing-xs);
+          cursor: pointer;
+          transition: background 0.15s;
+          max-width: 400px;
+        }
+        .reply-preview:hover { background: var(--color-bg-secondary); }
+        .reply-preview-author {
+          font-size: var(--font-size-xs);
+          font-weight: 700;
+          color: var(--color-accent-primary);
+          line-height: 1.3;
+        }
+        .reply-preview-text {
           font-size: var(--font-size-xs);
           color: var(--color-text-secondary);
-          border-left: 2px solid var(--color-accent-primary);
-          padding-left: var(--spacing-sm);
-          margin-bottom: var(--spacing-xs);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          line-height: 1.3;
         }
-        .reply-author { font-weight: 600; margin-right: var(--spacing-xs); }
-        .reply-text { font-style: italic; }
+
+        .message-highlight {
+          animation: msg-flash 1.5s ease-out;
+        }
+        @keyframes msg-flash {
+          0% { background: var(--color-accent-primary); border-radius: var(--radius-sm); }
+          100% { background: transparent; }
+        }
 
         .reply-indicator {
           display: flex;
-          align-items: center;
-          justify-content: space-between;
+          align-items: stretch;
+          gap: var(--spacing-sm);
           padding: var(--spacing-xs) var(--spacing-md);
           background: var(--color-bg-tertiary);
           border-top: 1px solid var(--color-border);
-          font-size: var(--font-size-sm);
+        }
+        .reply-indicator-content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          border-left: 3px solid var(--color-accent-primary);
+          padding-left: var(--spacing-sm);
+          min-width: 0;
+        }
+        .reply-indicator-author {
+          font-size: var(--font-size-xs);
+          font-weight: 700;
+          color: var(--color-accent-primary);
+        }
+        .reply-indicator-text {
+          font-size: var(--font-size-xs);
+          color: var(--color-text-secondary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .reply-cancel {
           cursor: pointer;
           color: var(--color-text-secondary);
           font-size: var(--font-size-md);
+          align-self: center;
+          padding: var(--spacing-xs);
         }
         .reply-cancel:hover { color: var(--color-text-primary); }
 
