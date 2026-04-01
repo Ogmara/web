@@ -11,9 +11,12 @@ import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent, decodePayload } from '../lib/payload';
 
-/** Convert a msg_id (hex string or byte array) to a consistent hex string for lookups. */
+/** Convert a msg_id (hex string, byte array, or Uint8Array) to a consistent hex string. */
 function msgIdToHex(msgId: unknown): string {
   if (typeof msgId === 'string') return msgId;
+  if (msgId instanceof Uint8Array) {
+    return Array.from(msgId).map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
   if (Array.isArray(msgId)) {
     return msgId.map((b: number) => b.toString(16).padStart(2, '0')).join('');
   }
@@ -60,6 +63,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [replyTo, setReplyTo] = createSignal<{ msgId: string; author: string; preview: string } | null>(null);
   const [localMessages, setLocalMessages] = createSignal<any[]>([]);
   const [sending, setSending] = createSignal(false);
+  let inputRef: HTMLInputElement | undefined;
 
   const [messages, { refetch }] = createResource(
     () => props.channelId,
@@ -112,7 +116,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   createEffect(() => {
     const id = props.channelId ? String(props.channelId) : null;
     if (prevChannelId) wsUnsubscribeChannels([prevChannelId]);
-    if (id) wsSubscribeChannels([id]);
+    if (id) {
+      wsSubscribeChannels([id]);
+      // Auto-focus input when switching channels
+      setTimeout(() => inputRef?.focus(), 50);
+    }
     prevChannelId = id;
   });
   onCleanup(() => {
@@ -156,13 +164,16 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const replyHex = getReplyToHex(msg);
     if (!replyHex) return null;
     const original = msgById().get(replyHex);
-    if (!original) return null;
-    const content = getPayloadContent(original.payload);
-    return {
-      author: original.author,
-      content: content.length > 100 ? content.slice(0, 100) + '...' : content,
-      msgId: replyHex,
-    };
+    if (original) {
+      const content = getPayloadContent(original.payload);
+      return {
+        author: original.author,
+        content: content.length > 100 ? content.slice(0, 100) + '...' : content,
+        msgId: replyHex,
+      };
+    }
+    // Original not in loaded batch — show minimal reply indicator
+    return { author: '...', content: '(original message not loaded)', msgId: replyHex };
   };
 
   // Auto-refresh: poll for new messages every 15 seconds as a fallback for WebSocket
@@ -195,6 +206,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       await client.sendMessage(props.channelId, text, options);
       setMessageInput('');
       setReplyTo(null);
+      inputRef?.focus();
     } catch {
       // Send failed
     } finally {
@@ -210,6 +222,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       author: msg.author,
       preview,
     });
+    inputRef?.focus();
   };
 
   /** Scroll to a message by msg_id and briefly highlight it. */
@@ -317,6 +330,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
         <div class="chat-input">
           <input
+            ref={inputRef}
             type="text"
             placeholder={authStatus() === 'ready' ? t('chat_placeholder') : t('auth_connect_prompt')}
             value={messageInput()}
