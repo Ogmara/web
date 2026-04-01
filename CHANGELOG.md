@@ -5,6 +5,18 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-04-01
+
+### Added
+- **Media attachment rendering** — images display inline in news posts,
+  thread view, and comments. Non-image attachments show as download links.
+  Thumbnails used when available. Images clickable to open full size.
+- Payload decoder now extracts `attachments` array from MessagePack payloads.
+
+### Fixed
+- Payload decoding optimized — single decode per post/comment instead of
+  5 separate decodes for title/content/tags/attachments.
+
 ## [0.14.0] - 2026-04-01
 
 ### Changed

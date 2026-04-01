@@ -12,7 +12,7 @@ import { getClient } from '../lib/api';
 import { authStatus, getSigner, l2Address, walletAddress } from '../lib/auth';
 import { navigate, goBack, routeParam } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
-import { getPayloadContent, getPayloadTitle, decodePayload } from '../lib/payload';
+import { getPayloadContent, getPayloadTitle, getPayloadAttachments, decodePayload } from '../lib/payload';
 import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
 import { sendTip, kleverAvailable, getExplorerUrl } from '../lib/klever';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
@@ -56,6 +56,26 @@ const CommentCard: Component<{ comment: any; onReply: (msgId: string, author: st
       <div class="comment-body">
         <FormattedText content={getPayloadContent(props.comment.payload)} />
       </div>
+      <Show when={getPayloadAttachments(props.comment.payload).length > 0}>
+        <div class="comment-attachments">
+          <For each={getPayloadAttachments(props.comment.payload)}>
+            {(att) => (
+              <Show
+                when={att.mime_type.startsWith('image/')}
+                fallback={
+                  <a class="detail-file-link" href={getClient().getMediaUrl(att.cid)} target="_blank" rel="noopener noreferrer">
+                    📎 {att.filename || att.cid.slice(0, 12)}
+                  </a>
+                }
+              >
+                <a href={getClient().getMediaUrl(att.cid)} target="_blank" rel="noopener noreferrer">
+                  <img class="comment-attachment-img" src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)} alt={att.filename || ''} loading="lazy" />
+                </a>
+              </Show>
+            )}
+          </For>
+        </div>
+      </Show>
       <div class="comment-actions">
         <button
           class="comment-reply-btn"
@@ -298,6 +318,26 @@ export const NewsDetailView: Component = () => {
           <div class="detail-body">
             <FormattedText content={getPayloadContent(postData()!.post.payload)} />
           </div>
+          <Show when={getPayloadAttachments(postData()!.post.payload).length > 0}>
+            <div class="detail-attachments">
+              <For each={getPayloadAttachments(postData()!.post.payload)}>
+                {(att) => (
+                  <Show
+                    when={att.mime_type.startsWith('image/')}
+                    fallback={
+                      <a class="detail-file-link" href={getClient().getMediaUrl(att.cid)} target="_blank" rel="noopener noreferrer">
+                        📎 {att.filename || att.cid.slice(0, 12)}
+                      </a>
+                    }
+                  >
+                    <a href={getClient().getMediaUrl(att.cid)} target="_blank" rel="noopener noreferrer">
+                      <img class="detail-attachment-img" src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)} alt={att.filename || ''} loading="lazy" />
+                    </a>
+                  </Show>
+                )}
+              </For>
+            </div>
+          </Show>
 
           <Show when={postTags().length > 0}>
             <div class="detail-tags">
@@ -564,6 +604,40 @@ export const NewsDetailView: Component = () => {
         .detail-time { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
         .detail-title { font-size: var(--font-size-xl); margin-bottom: var(--spacing-sm); }
         .detail-body { line-height: 1.7; margin-bottom: var(--spacing-md); font-size: var(--font-size-md); }
+        .detail-attachments, .comment-attachments {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--spacing-sm);
+          margin-bottom: var(--spacing-md);
+        }
+        .detail-attachment-img {
+          max-width: 100%;
+          max-height: 500px;
+          border-radius: var(--radius-md);
+          object-fit: contain;
+          cursor: pointer;
+        }
+        .detail-attachment-img:hover { opacity: 0.9; }
+        .comment-attachment-img {
+          max-width: 100%;
+          max-height: 300px;
+          border-radius: var(--radius-md);
+          object-fit: contain;
+          cursor: pointer;
+        }
+        .comment-attachment-img:hover { opacity: 0.9; }
+        .detail-file-link {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--spacing-xs);
+          padding: var(--spacing-xs) var(--spacing-sm);
+          background: var(--color-bg-tertiary);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-sm);
+          font-size: var(--font-size-sm);
+          color: var(--color-accent-primary);
+        }
+        .detail-file-link:hover { text-decoration: none; background: var(--color-border); }
         .detail-tags {
           display: flex;
           flex-wrap: wrap;
