@@ -146,6 +146,7 @@
   "media_uploading": "Uploading...",
   "media_too_large": "File too large (max 10 MB)",
   "media_upload_failed": "Upload failed",
+  "media_hint": "Images, video, audio, PDF, text — max 10 MB",
   "news_repost_own": "You cannot repost your own post",
   "channel_members": "Members",
   "channel_pins": "Pinned",

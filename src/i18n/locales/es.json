@@ -147,6 +147,7 @@
   "media_uploading": "Subiendo...",
   "media_too_large": "Archivo demasiado grande (máx. 10 MB)",
   "media_upload_failed": "Error al subir",
+  "media_hint": "Imágenes, video, audio, PDF, texto — máx. 10 MB",
   "news_repost_own": "No puedes compartir tu propia publicación",
   "status_connected": "Conectado",
   "status_disconnected": "Desconectado",

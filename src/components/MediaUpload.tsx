@@ -116,6 +116,8 @@ export const MediaUpload: Component<{
         {uploading() ? '⏳' : '📎'} {uploading() ? t('media_uploading') : t('media_attach')}
       </button>
 
+      <span class="media-hint">{t('media_hint')}</span>
+
       <Show when={uploadError()}>
         <span class="media-error">{uploadError()}</span>
       </Show>
@@ -169,6 +171,11 @@ export const MediaUpload: Component<{
         }
         .media-upload-btn:hover { color: var(--color-accent-primary); background: var(--color-bg-tertiary); }
         .media-upload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .media-hint {
+          font-size: var(--font-size-xs);
+          color: var(--color-text-secondary);
+          opacity: 0.7;
+        }
         .media-error {
           font-size: var(--font-size-xs);
           color: var(--color-error);

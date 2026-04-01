@@ -81,6 +81,7 @@
   "media_uploading": "Загрузка...",
   "media_too_large": "Файл слишком большой (макс. 10 МБ)",
   "media_upload_failed": "Ошибка загрузки",
+  "media_hint": "Изображения, видео, аудио, PDF, текст — макс. 10 МБ",
   "news_repost_own": "Нельзя сделать репост своей публикации",
   "channel_members": "Участники",
   "channel_pins": "Закреплённые",

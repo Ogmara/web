@@ -147,6 +147,7 @@
   "media_uploading": "アップロード中...",
   "media_too_large": "ファイルが大きすぎます（最大10 MB）",
   "media_upload_failed": "アップロード失敗",
+  "media_hint": "画像、動画、音声、PDF、テキスト — 最大10 MB",
   "news_repost_own": "自分の投稿はリポストできません",
   "status_connected": "接続済み",
   "status_disconnected": "切断",
