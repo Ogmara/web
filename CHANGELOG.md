@@ -12,6 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with links to "My Profile" and "Wallet Settings" (where disconnect lives).
   Shows "Connect Wallet" button when not connected.
 
+## [0.7.5] - 2026-04-01
+
+### Fixed
+- **CRITICAL: Auth signatures broken** — Vite was resolving `@noble/ed25519`
+  v1.7.5 from `~/node_modules/` instead of v2.3.0 that the SDK was built with.
+  v1.x produces incompatible signatures, causing all authenticated API calls
+  (messages, profile, bookmarks, reactions) to fail with 401. Fixed by adding
+  `@noble/ed25519` v2.3.0 as a direct dependency and aliasing in vite.config.ts.
+- Wallet disconnect now redirects to news, prevents null address crash
+- Settings page shows wallet section with profile/wallet links
+
 ## [0.7.4] - 2026-04-01
 
 ### Fixed
