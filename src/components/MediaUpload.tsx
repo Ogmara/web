@@ -47,11 +47,9 @@ export const MediaUpload: Component<{
 
     setUploading(true);
     setUploadError('');
-    console.log('[MediaUpload] Starting upload:', file.name, file.type, file.size, 'bytes');
     try {
       const client = getClient();
       const result = await client.uploadMedia(file, file.name);
-      console.log('[MediaUpload] Upload succeeded:', result);
       props.onAttach({
         cid: result.cid,
         mime_type: file.type || 'application/octet-stream',
@@ -60,7 +58,6 @@ export const MediaUpload: Component<{
         thumbnail_cid: result.thumbnail_cid,
       });
     } catch (e: any) {
-      console.error('[MediaUpload] Upload failed:', e);
       setUploadError(e?.message || t('media_upload_failed'));
     } finally {
       setUploading(false);

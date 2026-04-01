@@ -8,7 +8,7 @@ import { getClient } from '../lib/api';
 import { authStatus, getSigner, l2Address, walletAddress } from '../lib/auth';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
-import { getPayloadContent, getPayloadTitle, decodePayload } from '../lib/payload';
+import { getPayloadContent, getPayloadTitle, getPayloadAttachments, decodePayload } from '../lib/payload';
 import { sendTip, kleverAvailable, getExplorerUrl } from '../lib/klever';
 import { resolveProfile } from '../lib/profile';
 import { ensureHexMsgId, formatLocalTime, NEWS_REACTIONS, truncateAddress } from '../lib/news-utils';
@@ -139,6 +139,32 @@ export const NewsView: Component = () => {
         .news-title { cursor: pointer; }
         .news-title:hover { color: var(--color-accent-primary); }
         .news-card-body { line-height: 1.6; margin-bottom: var(--spacing-md); }
+        .news-attachments {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--spacing-sm);
+          margin-bottom: var(--spacing-md);
+        }
+        .news-attachment-img {
+          max-width: 100%;
+          max-height: 400px;
+          border-radius: var(--radius-md);
+          object-fit: contain;
+          cursor: pointer;
+        }
+        .news-attachment-img:hover { opacity: 0.9; }
+        .news-file-link {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--spacing-xs);
+          padding: var(--spacing-xs) var(--spacing-sm);
+          background: var(--color-bg-tertiary);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-sm);
+          font-size: var(--font-size-sm);
+          color: var(--color-accent-primary);
+        }
+        .news-file-link:hover { text-decoration: none; background: var(--color-border); }
         .news-empty { text-align: center; color: var(--color-text-secondary); padding: var(--spacing-xl); }
 
         .news-actions {
@@ -355,14 +381,14 @@ const NewsCard: Component<{ post: any }> = (props) => {
   const displayName = () => profile().display_name || truncateAddress(props.post.author);
 
   // Extract tags from decoded payload
-  const postTags = () => {
-    if (typeof props.post.payload === 'string') return [];
-    try {
-      return decodePayload(props.post.payload).tags ?? [];
-    } catch {
-      return [];
-    }
+  // Decode payload once, reuse for title/content/tags/attachments
+  const decoded = () => {
+    if (typeof props.post.payload === 'string') return { content: props.post.payload as string };
+    try { return decodePayload(props.post.payload); }
+    catch { return { content: '' }; }
   };
+
+  const postTags = () => decoded().tags ?? [];
 
   return (
     <article class="news-card">
@@ -388,12 +414,37 @@ const NewsCard: Component<{ post: any }> = (props) => {
         </div>
         <span class="news-time">{formatLocalTime(props.post.timestamp)}</span>
       </div>
-      <Show when={getPayloadTitle(props.post.payload)}>
+      <Show when={decoded().title}>
         <h3 class="news-title" onClick={() => navigate(`/news/${ensureHexMsgId(props.post.msg_id)}`)}>
-          {getPayloadTitle(props.post.payload)}
+          {decoded().title}
         </h3>
       </Show>
-      <div class="news-card-body"><FormattedText content={getPayloadContent(props.post.payload)} /></div>
+      <div class="news-card-body"><FormattedText content={decoded().content} /></div>
+      <Show when={(decoded().attachments ?? []).length > 0}>
+        <div class="news-attachments">
+          <For each={decoded().attachments!}>
+            {(att) => (
+              <Show
+                when={att.mime_type.startsWith('image/')}
+                fallback={
+                  <a class="news-file-link" href={getClient().getMediaUrl(att.cid)} target="_blank" rel="noopener noreferrer">
+                    📎 {att.filename || att.cid.slice(0, 12)}
+                  </a>
+                }
+              >
+                <a href={getClient().getMediaUrl(att.cid)} target="_blank" rel="noopener noreferrer">
+                  <img
+                    class="news-attachment-img"
+                    src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)}
+                    alt={att.filename || ''}
+                    loading="lazy"
+                  />
+                </a>
+              </Show>
+            )}
+          </For>
+        </div>
+      </Show>
       <Show when={postTags().length > 0}>
         <div class="news-tags">
           <For each={postTags()}>
