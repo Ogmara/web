@@ -64,11 +64,8 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
       if (!address) return null;
       try {
         const client = getClient();
-        const resp = await client.getUserProfile(address);
-        console.log('[Profile] Fetched', address, resp?.user?.display_name || '(no name)', resp);
-        return resp;
-      } catch (e) {
-        console.warn('[Profile] Failed to fetch', address, e);
+        return await client.getUserProfile(address);
+      } catch {
         return null;
       }
     },
@@ -153,14 +150,11 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
         }
       }
 
-      const profileData = {
+      await client.updateProfile({
         display_name: editName() || undefined,
         avatar_cid: avatarCid || undefined,
         bio: editBio() || undefined,
-      };
-      console.log('[Profile] Saving', profileData);
-      await client.updateProfile(profileData);
-      console.log('[Profile] Save succeeded');
+      });
       setEditSuccess('Profile updated!');
       setEditing(false);
       refetchProfile();
