@@ -9,7 +9,7 @@ import { authStatus, getSigner } from '../lib/auth';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent, getPayloadTitle, decodePayload } from '../lib/payload';
-import { sendTip, kleverAvailable } from '../lib/klever';
+import { sendTip, kleverAvailable, getExplorerUrl } from '../lib/klever';
 
 /** Convert msg_id to hex string — handles both hex strings and byte arrays from the API. */
 function ensureHexMsgId(msgId: unknown): string {
@@ -255,6 +255,16 @@ export const NewsView: Component = () => {
         }
         .tip-confirm-btn:hover { opacity: 0.9; }
         .tip-confirm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .tip-success {
+          padding: var(--spacing-sm);
+          background: var(--color-success);
+          color: #fff;
+          border-radius: var(--radius-md);
+          font-size: var(--font-size-sm);
+          font-weight: 600;
+          text-align: center;
+        }
+        .tip-tx-link { color: #fff; text-decoration: underline; }
       `}</style>
     </div>
   );
@@ -287,6 +297,7 @@ const NewsCard: Component<{ post: any }> = (props) => {
   const [tipAmount, setTipAmount] = createSignal('1');
   const [tipNote, setTipNote] = createSignal('');
   const [tipPending, setTipPending] = createSignal(false);
+  const [tipTxHash, setTipTxHash] = createSignal('');
 
   // Resolve author profile (username + avatar)
   createEffect(() => {
@@ -356,11 +367,12 @@ const NewsCard: Component<{ post: any }> = (props) => {
       return;
     }
     setActionError('');
+    setTipTxHash('');
     setTipPending(true);
     try {
       const msgId = ensureHexMsgId(props.post.msg_id);
-      await sendTip(props.post.author, msgId, 0, tipNote(), amount);
-      setShowTip(false);
+      const txHash = await sendTip(props.post.author, msgId, 0, tipNote(), amount);
+      setTipTxHash(txHash);
       setTipAmount('1');
       setTipNote('');
     } catch (e: any) {
@@ -489,13 +501,28 @@ const NewsCard: Component<{ post: any }> = (props) => {
               value={tipNote()}
               onInput={(e) => setTipNote(e.currentTarget.value)}
             />
-            <button
-              class="tip-confirm-btn"
-              onClick={handleTip}
-              disabled={tipPending()}
-            >
-              {tipPending() ? 'Sending...' : `Send ${tipAmount()} KLV`}
-            </button>
+            <Show when={!tipTxHash()}>
+              <button
+                class="tip-confirm-btn"
+                onClick={handleTip}
+                disabled={tipPending()}
+              >
+                {tipPending() ? 'Sending...' : `Send ${tipAmount()} KLV`}
+              </button>
+            </Show>
+            <Show when={tipTxHash()}>
+              <div class="tip-success">
+                Tip sent!{' '}
+                <a
+                  href={`${getExplorerUrl()}/transaction/${tipTxHash()}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="tip-tx-link"
+                >
+                  {tipTxHash().slice(0, 12)}...
+                </a>
+              </div>
+            </Show>
           </div>
         </div>
       </Show>

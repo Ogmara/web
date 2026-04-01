@@ -51,9 +51,18 @@ let kleverProvider: KleverProvider = {
   api: 'https://api.klever.org',
   node: 'https://node.klever.org',
 };
+let currentNetwork = 'mainnet';
+
+/** Get the Kleverscan explorer base URL for the current network. */
+export function getExplorerUrl(): string {
+  return currentNetwork === 'testnet'
+    ? 'https://testnet.kleverscan.org'
+    : 'https://kleverscan.org';
+}
 
 /** Set the Klever network provider URLs (called after fetching node stats). */
 export function setKleverNetwork(network: string): void {
+  currentNetwork = network;
   if (network === 'testnet') {
     kleverProvider = {
       api: 'https://api.testnet.klever.org',
