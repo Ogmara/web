@@ -1,21 +1,7 @@
 /* Ogmara Global Styles — Design tokens from spec 06-frontend.md section 3.2 */
 
-/* Light theme */
-[data-theme="light"] {
-  --color-bg-primary: #ffffff;
-  --color-bg-secondary: #f5f5f7;
-  --color-bg-tertiary: #e8e8ed;
-  --color-text-primary: #1a1a1a;
-  --color-text-secondary: #6b6b6b;
-  --color-text-inverse: #ffffff;
-  --color-accent-primary: #6c5ce7;
-  --color-accent-secondary: #a29bfe;
-  --color-border: #e0e0e0;
-  --color-success: #00b894;
-  --color-warning: #fdcb6e;
-  --color-error: #d63031;
-  --color-dm: #e17055;
-
+/* Shared design tokens (spacing, fonts, radii) — always available */
+:root {
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 16px;
@@ -34,10 +20,8 @@
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-full: 9999px;
-}
 
-/* Dark theme (default) */
-:root, [data-theme="dark"] {
+  /* Dark theme colors (default) */
   --color-bg-primary: #1a1a2e;
   --color-bg-secondary: #16213e;
   --color-bg-tertiary: #0f3460;
@@ -51,6 +35,23 @@
   --color-warning: #ffeaa7;
   --color-error: #ff7675;
   --color-dm: #fab1a0;
+}
+
+/* Light theme (override colors only) */
+[data-theme="light"] {
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f5f5f7;
+  --color-bg-tertiary: #e8e8ed;
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #6b6b6b;
+  --color-text-inverse: #ffffff;
+  --color-accent-primary: #6c5ce7;
+  --color-accent-secondary: #a29bfe;
+  --color-border: #e0e0e0;
+  --color-success: #00b894;
+  --color-warning: #fdcb6e;
+  --color-error: #d63031;
+  --color-dm: #e17055;
 }
 
 /* Reset */
