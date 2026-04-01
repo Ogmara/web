@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with links to "My Profile" and "Wallet Settings" (where disconnect lives).
   Shows "Connect Wallet" button when not connected.
 
+## [0.7.7] - 2026-04-01
+
+### Fixed
+- **On-chain registration used wrong public key** — was passing the device
+  key's public key to the SC register endpoint instead of the Klever Extension
+  wallet's public key. Now decodes the bech32 wallet address to extract the
+  actual 32-byte Ed25519 public key for registration.
+
 ## [0.7.6] - 2026-04-01
 
 ### Fixed
