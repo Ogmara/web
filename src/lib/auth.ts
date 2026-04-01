@@ -68,15 +68,23 @@ export async function initAuth(): Promise<void> {
           setWalletSource('klever-extension');
           // Restore wallet address on the signer for identity resolution
           signer.walletAddress = savedAddress;
+          setAuthStatus('ready');
         } else if (savedSource === 'k5-delegation' && savedAddress) {
           setWalletAddress(savedAddress);
           setWalletSource('k5-delegation');
           signer.walletAddress = savedAddress;
-        } else {
+          setAuthStatus('ready');
+        } else if (savedSource === 'builtin' && savedAddress) {
           setWalletAddress(address);
           setWalletSource('builtin');
+          setAuthStatus('ready');
+        } else {
+          // Vault has a key but no wallet source saved (e.g. localStorage cleared).
+          // This is an orphaned device key — don't activate as a wallet.
+          // Keep the signer attached for when the user reconnects their wallet,
+          // but don't set auth to 'ready'.
+          setAuthStatus('none');
         }
-        setAuthStatus('ready');
         return;
       }
     }
