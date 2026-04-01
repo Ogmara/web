@@ -5,6 +5,16 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-04-01
+
+### Changed
+- **Dark theme is now the default** — `:root` uses dark colors, preventing
+  flash of light theme in browsers that don't report `prefers-color-scheme`.
+- **Profile cache with TTL** — populated profiles expire after 5 min, empty
+  (not-found) profiles after 30 sec. Prevents stale profile data display.
+- **Removed K5 wallet connect** — only Klever Extension connect remains,
+  renamed to generic "Connect Wallet".
+
 ## [0.12.2] - 2026-04-01
 
 ### Fixed

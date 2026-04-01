@@ -1,7 +1,7 @@
 /* Ogmara Global Styles — Design tokens from spec 06-frontend.md section 3.2 */
 
-/* Light theme (default) */
-:root, [data-theme="light"] {
+/* Light theme */
+[data-theme="light"] {
   --color-bg-primary: #ffffff;
   --color-bg-secondary: #f5f5f7;
   --color-bg-tertiary: #e8e8ed;
@@ -36,8 +36,8 @@
   --radius-full: 9999px;
 }
 
-/* Dark theme */
-[data-theme="dark"] {
+/* Dark theme (default) */
+:root, [data-theme="dark"] {
   --color-bg-primary: #1a1a2e;
   --color-bg-secondary: #16213e;
   --color-bg-tertiary: #0f3460;
