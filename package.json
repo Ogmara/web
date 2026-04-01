@@ -10,10 +10,12 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@ogmara/sdk": "file:../sdk-js",
     "@msgpack/msgpack": "^3.0.0",
-    "solid-js": "^1.9.7",
-    "i18next": "^25.2.0"
+    "@noble/ed25519": "^2.3.0",
+    "@noble/hashes": "^1.8.0",
+    "@ogmara/sdk": "file:../sdk-js",
+    "i18next": "^25.2.0",
+    "solid-js": "^1.9.7"
   },
   "devDependencies": {
     "typescript": "^5.8.3",
