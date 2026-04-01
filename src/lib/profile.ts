@@ -1,8 +1,8 @@
 /**
  * Shared profile resolution with caching and in-flight deduplication.
  *
- * Used by NewsView, NewsDetailView, BookmarksView, Toolbar, and any
- * component that needs to resolve a Klever address to a display name + avatar.
+ * Used by NewsView, NewsDetailView, BookmarksView, and any component
+ * that needs to resolve a Klever address to a display name + avatar.
  */
 
 import { getClient } from './api';
@@ -13,31 +13,16 @@ export interface CachedProfile {
   verified?: boolean;
 }
 
-interface CacheEntry {
-  profile: CachedProfile;
-  timestamp: number;
-}
-
-/** Cache TTL: 5 minutes for populated profiles, 30 seconds for empty (not-found). */
-const TTL_POPULATED = 5 * 60 * 1000;
-const TTL_EMPTY = 30 * 1000;
-
-const profileCache = new Map<string, CacheEntry>();
+const profileCache = new Map<string, CachedProfile>();
 const profileInflight = new Map<string, Promise<CachedProfile>>();
-
-function isCacheValid(entry: CacheEntry): boolean {
-  const ttl = entry.profile.display_name ? TTL_POPULATED : TTL_EMPTY;
-  return Date.now() - entry.timestamp < ttl;
-}
 
 /**
  * Resolve a Klever address to a cached profile. Deduplicates in-flight
  * requests so multiple components requesting the same address only
- * trigger one API call. Cached entries expire after TTL.
+ * trigger one API call.
  */
 export async function resolveProfile(address: string): Promise<CachedProfile> {
-  const cached = profileCache.get(address);
-  if (cached && isCacheValid(cached)) return cached.profile;
+  if (profileCache.has(address)) return profileCache.get(address)!;
   if (profileInflight.has(address)) return profileInflight.get(address)!;
   const promise = (async () => {
     try {
@@ -49,11 +34,11 @@ export async function resolveProfile(address: string): Promise<CachedProfile> {
         avatar_cid: resp.user?.avatar_cid,
         verified: !!(pk && pk.length > 0),
       };
-      profileCache.set(address, { profile, timestamp: Date.now() });
+      profileCache.set(address, profile);
       return profile;
     } catch {
       const empty: CachedProfile = {};
-      profileCache.set(address, { profile: empty, timestamp: Date.now() });
+      profileCache.set(address, empty);
       return empty;
     } finally {
       profileInflight.delete(address);

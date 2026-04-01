@@ -1,7 +1,7 @@
 /* Ogmara Global Styles — Design tokens from spec 06-frontend.md section 3.2 */
 
-/* Light theme */
-[data-theme="light"] {
+/* Light theme (default) */
+:root, [data-theme="light"] {
   --color-bg-primary: #ffffff;
   --color-bg-secondary: #f5f5f7;
   --color-bg-tertiary: #e8e8ed;
@@ -36,8 +36,8 @@
   --radius-full: 9999px;
 }
 
-/* Dark theme (default) */
-:root, [data-theme="dark"] {
+/* Dark theme */
+[data-theme="dark"] {
   --color-bg-primary: #1a1a2e;
   --color-bg-secondary: #16213e;
   --color-bg-tertiary: #0f3460;
@@ -141,22 +141,7 @@ html, body, #root {
 /* Responsive: collapse sidebar below 768px */
 @media (max-width: 768px) {
   .sidebar { display: none; }
-  .sidebar.mobile-open {
-    display: flex;
-    position: fixed;
-    z-index: 100;
-    left: 0;
-    top: 48px;
-    bottom: 0;
-    width: 240px;
-    box-shadow: 4px 0 16px rgba(0,0,0,0.3);
-  }
-
-  /* Toolbar: hide brand text, shrink padding */
-  .toolbar-brand { display: none; }
-  .toolbar { padding: var(--spacing-xs) var(--spacing-sm); }
-  .toolbar-nav { padding: var(--spacing-xs) var(--spacing-sm); font-size: var(--font-size-xs); }
-  .toolbar-btn { padding: var(--spacing-xs); font-size: var(--font-size-sm); }
+  .sidebar.mobile-open { display: flex; position: fixed; z-index: 100; left: 0; top: 0; bottom: 0; }
 }
 
 /* Button base */
