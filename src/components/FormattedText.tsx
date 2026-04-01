@@ -6,8 +6,10 @@
  */
 
 import { Component, For, Show } from 'solid-js';
+import { JSX } from 'solid-js/jsx-runtime';
 import { parseMessageContent, type TextSegment, type Attachment } from '@ogmara/sdk';
 import { getClient } from '../lib/api';
+import { navigate } from '../lib/router';
 
 interface Props {
   content: string;
@@ -17,6 +19,44 @@ interface Props {
 
 /** Image MIME types that should render inline. SVG excluded — can contain scripts. */
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+
+/** Regex for hashtags: # followed by word chars (letters, digits, underscore). */
+const HASHTAG_RE = /#([\w\u00C0-\u024F]+)/g;
+
+/** Render text with newlines preserved and hashtags clickable. */
+function renderTextWithBreaksAndHashtags(text: string): JSX.Element {
+  // Split on newlines first
+  const lines = text.split('\n');
+  const elements: JSX.Element[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0) elements.push(<br />);
+    const line = lines[i];
+    // Parse hashtags within each line
+    let lastIndex = 0;
+    HASHTAG_RE.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = HASHTAG_RE.exec(line)) !== null) {
+      if (match.index > lastIndex) {
+        elements.push(<>{line.slice(lastIndex, match.index)}</>);
+      }
+      const tag = match[1];
+      elements.push(
+        <button
+          class="msg-hashtag"
+          onClick={() => navigate(`/search?q=${encodeURIComponent('#' + tag)}`)}
+        >
+          #{tag}
+        </button>,
+      );
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < line.length) {
+      elements.push(<>{line.slice(lastIndex)}</>);
+    }
+  }
+  return <>{elements}</>;
+}
 
 export const FormattedText: Component<Props> = (props) => {
   const segments = () => parseMessageContent(props.content);
@@ -43,17 +83,17 @@ export const FormattedText: Component<Props> = (props) => {
               );
             }
             case 'bold':
-              return <strong>{seg.content}</strong>;
+              return <strong>{renderTextWithBreaksAndHashtags(seg.content)}</strong>;
             case 'italic':
-              return <em>{seg.content}</em>;
+              return <em>{renderTextWithBreaksAndHashtags(seg.content)}</em>;
             case 'underline':
-              return <u>{seg.content}</u>;
+              return <u>{renderTextWithBreaksAndHashtags(seg.content)}</u>;
             case 'code':
               return <code class="msg-code">{seg.content}</code>;
             case 'strikethrough':
-              return <s>{seg.content}</s>;
+              return <s>{renderTextWithBreaksAndHashtags(seg.content)}</s>;
             default:
-              return <>{seg.content}</>;
+              return renderTextWithBreaksAndHashtags(seg.content);
           }
         }}
       </For>
@@ -131,6 +171,14 @@ export const FormattedText: Component<Props> = (props) => {
           text-decoration: none;
         }
         .msg-file:hover { background: var(--color-bg-secondary); }
+        .msg-hashtag {
+          color: var(--color-accent-primary);
+          font-weight: 600;
+          cursor: pointer;
+          font-size: inherit;
+          font-family: inherit;
+        }
+        .msg-hashtag:hover { text-decoration: underline; }
       `}</style>
     </span>
   );

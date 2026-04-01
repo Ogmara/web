@@ -2,13 +2,31 @@
  * NewsView — news feed with reactions, bookmarks, reposts (auth-gated).
  */
 
-import { Component, createResource, createSignal, For, Show } from 'solid-js';
+import { Component, createResource, createSignal, createEffect, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, getSigner } from '../lib/auth';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
-import { getPayloadContent, getPayloadTitle } from '../lib/payload';
+import { getPayloadContent, getPayloadTitle, decodePayload } from '../lib/payload';
+
+/** Simple in-memory profile cache to avoid redundant fetches. */
+const profileCache = new Map<string, { display_name?: string; avatar_cid?: string }>();
+
+async function resolveProfile(address: string): Promise<{ display_name?: string; avatar_cid?: string }> {
+  if (profileCache.has(address)) return profileCache.get(address)!;
+  try {
+    const client = getClient();
+    const resp = await client.getUserProfile(address);
+    const profile = { display_name: resp.user?.display_name, avatar_cid: resp.user?.avatar_cid };
+    profileCache.set(address, profile);
+    return profile;
+  } catch {
+    const empty = {};
+    profileCache.set(address, empty);
+    return empty;
+  }
+}
 
 /** Predefined reaction emojis for news posts. */
 const NEWS_REACTIONS = [
@@ -73,15 +91,59 @@ export const NewsView: Component = () => {
           border-radius: var(--radius-lg);
           padding: var(--spacing-lg);
         }
-        .news-card-header { display: flex; justify-content: space-between; margin-bottom: var(--spacing-sm); }
+        .news-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm); }
+        .news-author-row {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-sm);
+          cursor: pointer;
+        }
+        .news-author-row:hover .news-author { text-decoration: underline; }
+        .news-avatar {
+          width: 28px;
+          height: 28px;
+          border-radius: var(--radius-full);
+          object-fit: cover;
+        }
+        .news-avatar-placeholder {
+          width: 28px;
+          height: 28px;
+          border-radius: var(--radius-full);
+          background: var(--color-accent-secondary);
+          color: var(--color-text-inverse);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 11px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
         .news-author {
           font-weight: 600;
           color: var(--color-accent-primary);
           font-size: var(--font-size-sm);
+        }
+        .news-time { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+        .news-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--spacing-xs);
+          margin-bottom: var(--spacing-sm);
+        }
+        .news-tag {
+          font-size: var(--font-size-xs);
+          color: var(--color-accent-primary);
+          background: var(--color-bg-tertiary);
+          padding: 2px 8px;
+          border-radius: var(--radius-full);
           cursor: pointer;
         }
-        .news-author:hover { text-decoration: underline; }
-        .news-time { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+        .news-tag:hover { background: var(--color-accent-primary); color: var(--color-text-inverse); }
+        .news-action-error {
+          font-size: var(--font-size-xs);
+          color: var(--color-error);
+          padding: var(--spacing-xs) 0;
+        }
         .news-card-body { line-height: 1.6; margin-bottom: var(--spacing-md); }
         .news-empty { text-align: center; color: var(--color-text-secondary); padding: var(--spacing-xl); }
 
@@ -135,11 +197,34 @@ export const NewsView: Component = () => {
   );
 };
 
+/** Format a timestamp to the user's local date/time. */
+function formatLocalTime(timestamp: string | number): string {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  if (isToday) {
+    return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+  return date.toLocaleString(undefined, {
+    month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
 /** Individual news card with reactions, repost, bookmark, tip. */
 const NewsCard: Component<{ post: any }> = (props) => {
-  const [reactionCounts, setReactionCounts] = createSignal<Record<string, number>>({});
+  const [reactionCounts, setReactionCounts] = createSignal<Record<string, number>>(
+    props.post.reaction_counts ?? {},
+  );
   const [bookmarked, setBookmarked] = createSignal(false);
   const [reposted, setReposted] = createSignal(false);
+  const [actionError, setActionError] = createSignal('');
+  const [profile, setProfile] = createSignal<{ display_name?: string; avatar_cid?: string }>({});
+
+  // Resolve author profile (username + avatar)
+  createEffect(() => {
+    resolveProfile(props.post.author).then(setProfile);
+  });
 
   const requireAuthOrRedirect = (): boolean => {
     if (!getSigner()) {
@@ -151,18 +236,20 @@ const NewsCard: Component<{ post: any }> = (props) => {
 
   const handleReaction = async (emoji: string) => {
     if (!requireAuthOrRedirect()) return;
+    setActionError('');
     try {
       const client = getClient();
       const current = reactionCounts()[emoji] ?? 0;
       await client.reactToNews(props.post.msg_id, emoji);
       setReactionCounts((prev) => ({ ...prev, [emoji]: current + 1 }));
-    } catch {
-      // reaction failed silently
+    } catch (e: any) {
+      setActionError(e?.message || 'Reaction failed');
     }
   };
 
   const handleBookmark = async () => {
     if (!requireAuthOrRedirect()) return;
+    setActionError('');
     try {
       const client = getClient();
       if (bookmarked()) {
@@ -172,48 +259,83 @@ const NewsCard: Component<{ post: any }> = (props) => {
         await client.saveBookmark(props.post.msg_id);
         setBookmarked(true);
       }
-    } catch {
-      // bookmark failed silently
+    } catch (e: any) {
+      setActionError(e?.message || 'Bookmark failed');
     }
   };
 
   const handleRepost = async () => {
     if (!requireAuthOrRedirect()) return;
     if (reposted()) return;
+    setActionError('');
     try {
       const client = getClient();
       await client.repostNews(props.post.msg_id, props.post.author);
       setReposted(true);
-    } catch {
-      // repost failed silently
+    } catch (e: any) {
+      setActionError(e?.message || 'Repost failed');
     }
   };
 
   const truncateAddress = (addr: string) =>
     `${addr.slice(0, 8)}...${addr.slice(-4)}`;
 
+  const displayName = () => profile().display_name || truncateAddress(props.post.author);
+
+  // Extract tags from decoded payload
+  const postTags = () => {
+    if (typeof props.post.payload === 'string') return [];
+    try {
+      return decodePayload(props.post.payload).tags ?? [];
+    } catch {
+      return [];
+    }
+  };
+
   return (
     <article class="news-card">
       <div class="news-card-header">
-        <span
-          class="news-author"
-          onClick={() => navigate(`/user/${props.post.author}`)}
-        >
-          {truncateAddress(props.post.author)}
-        </span>
-        <span class="news-time">
-          {new Date(props.post.timestamp).toLocaleDateString()}
-        </span>
+        <div class="news-author-row" onClick={() => navigate(`/user/${props.post.author}`)}>
+          <Show when={profile().avatar_cid}>
+            <img
+              class="news-avatar"
+              src={getClient().getMediaUrl(profile().avatar_cid!)}
+              alt=""
+              loading="lazy"
+            />
+          </Show>
+          <Show when={!profile().avatar_cid}>
+            <span class="news-avatar-placeholder">
+              {(profile().display_name || props.post.author).slice(0, 2).toUpperCase()}
+            </span>
+          </Show>
+          <span class="news-author">{displayName()}</span>
+        </div>
+        <span class="news-time">{formatLocalTime(props.post.timestamp)}</span>
       </div>
       <Show when={getPayloadTitle(props.post.payload)}>
         <h3 class="news-title">{getPayloadTitle(props.post.payload)}</h3>
       </Show>
       <div class="news-card-body"><FormattedText content={getPayloadContent(props.post.payload)} /></div>
+      <Show when={postTags().length > 0}>
+        <div class="news-tags">
+          <For each={postTags()}>
+            {(tag) => (
+              <button class="news-tag" onClick={() => navigate(`/search?q=${encodeURIComponent('#' + tag)}`)}>
+                #{tag}
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
+      <Show when={actionError()}>
+        <div class="news-action-error">{actionError()}</div>
+      </Show>
       <div class="news-actions">
         <For each={NEWS_REACTIONS}>
           {(r) => (
             <button
-              class="reaction-btn"
+              class={`reaction-btn ${(reactionCounts()[r.emoji] ?? 0) > 0 ? 'active' : ''}`}
               onClick={() => handleReaction(r.emoji)}
               title={r.label}
             >
