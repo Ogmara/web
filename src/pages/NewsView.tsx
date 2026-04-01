@@ -10,56 +10,8 @@ import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent, getPayloadTitle, decodePayload } from '../lib/payload';
 import { sendTip, kleverAvailable, getExplorerUrl } from '../lib/klever';
-
-/** Convert msg_id to hex string — handles both hex strings and byte arrays from the API. */
-function ensureHexMsgId(msgId: unknown): string {
-  if (typeof msgId === 'string') return msgId;
-  if (Array.isArray(msgId)) {
-    return msgId.map((b: number) => b.toString(16).padStart(2, '0')).join('');
-  }
-  return String(msgId);
-}
-
-/** Profile cache + in-flight deduplication to avoid redundant fetches. */
-interface CachedProfile { display_name?: string; avatar_cid?: string; verified?: boolean }
-const profileCache = new Map<string, CachedProfile>();
-const profileInflight = new Map<string, Promise<CachedProfile>>();
-
-async function resolveProfile(address: string): Promise<CachedProfile> {
-  if (profileCache.has(address)) return profileCache.get(address)!;
-  if (profileInflight.has(address)) return profileInflight.get(address)!;
-  const promise = (async () => {
-    try {
-      const client = getClient();
-      const resp = await client.getUserProfile(address);
-      const pk = resp.user?.public_key;
-      const profile: CachedProfile = {
-        display_name: resp.user?.display_name,
-        avatar_cid: resp.user?.avatar_cid,
-        verified: !!(pk && pk.length > 0),
-      };
-      profileCache.set(address, profile);
-      return profile;
-    } catch {
-      const empty: CachedProfile = {};
-      profileCache.set(address, empty);
-      return empty;
-    } finally {
-      profileInflight.delete(address);
-    }
-  })();
-  profileInflight.set(address, promise);
-  return promise;
-}
-
-/** Predefined reaction emojis for news posts. */
-const NEWS_REACTIONS = [
-  { emoji: '👍', label: 'Like' },
-  { emoji: '👎', label: 'Dislike' },
-  { emoji: '❤️', label: 'Love' },
-  { emoji: '🔥', label: 'Fire' },
-  { emoji: '😂', label: 'Funny' },
-];
+import { resolveProfile } from '../lib/profile';
+import { ensureHexMsgId, formatLocalTime, NEWS_REACTIONS, truncateAddress } from '../lib/news-utils';
 
 export const NewsView: Component = () => {
   const [news] = createResource(async () => {
@@ -181,6 +133,8 @@ export const NewsView: Component = () => {
           color: var(--color-error);
           padding: var(--spacing-xs) 0;
         }
+        .news-title { cursor: pointer; }
+        .news-title:hover { color: var(--color-accent-primary); }
         .news-card-body { line-height: 1.6; margin-bottom: var(--spacing-md); }
         .news-empty { text-align: center; color: var(--color-text-secondary); padding: var(--spacing-xl); }
 
@@ -288,19 +242,6 @@ export const NewsView: Component = () => {
   );
 };
 
-/** Format a timestamp to the user's local date/time. */
-function formatLocalTime(timestamp: string | number): string {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const isToday = date.toDateString() === now.toDateString();
-  if (isToday) {
-    return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  }
-  return date.toLocaleString(undefined, {
-    month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
 
 /** Individual news card with reactions, repost, bookmark, tip. */
 const NewsCard: Component<{ post: any }> = (props) => {
@@ -310,7 +251,7 @@ const NewsCard: Component<{ post: any }> = (props) => {
   const [bookmarked, setBookmarked] = createSignal(false);
   const [reposted, setReposted] = createSignal(false);
   const [actionError, setActionError] = createSignal('');
-  const [profile, setProfile] = createSignal<{ display_name?: string; avatar_cid?: string }>({});
+  const [profile, setProfile] = createSignal<{ display_name?: string; avatar_cid?: string; verified?: boolean }>({});
   const [showTip, setShowTip] = createSignal(false);
   const [tipAmount, setTipAmount] = createSignal('1');
   const [tipNote, setTipNote] = createSignal('');
@@ -400,9 +341,6 @@ const NewsCard: Component<{ post: any }> = (props) => {
     }
   };
 
-  const truncateAddress = (addr: string) =>
-    `${addr.slice(0, 8)}...${addr.slice(-4)}`;
-
   const displayName = () => profile().display_name || truncateAddress(props.post.author);
 
   // Extract tags from decoded payload
@@ -440,7 +378,9 @@ const NewsCard: Component<{ post: any }> = (props) => {
         <span class="news-time">{formatLocalTime(props.post.timestamp)}</span>
       </div>
       <Show when={getPayloadTitle(props.post.payload)}>
-        <h3 class="news-title">{getPayloadTitle(props.post.payload)}</h3>
+        <h3 class="news-title" onClick={() => navigate(`/news/${ensureHexMsgId(props.post.msg_id)}`)}>
+          {getPayloadTitle(props.post.payload)}
+        </h3>
       </Show>
       <div class="news-card-body"><FormattedText content={getPayloadContent(props.post.payload)} /></div>
       <Show when={postTags().length > 0}>
@@ -485,6 +425,16 @@ const NewsCard: Component<{ post: any }> = (props) => {
           title={bookmarked() ? t('news_bookmarked') : t('news_bookmark')}
         >
           {bookmarked() ? '★' : '☆'} {bookmarked() ? t('news_bookmarked') : t('news_bookmark')}
+        </button>
+        <button
+          class="action-btn"
+          onClick={() => navigate(`/news/${ensureHexMsgId(props.post.msg_id)}`)}
+          title={t('news_comments')}
+        >
+          💬 {t('news_comments')}
+          <Show when={(props.post.comment_count ?? 0) > 0}>
+            <span class="reaction-count">{props.post.comment_count}</span>
+          </Show>
         </button>
         <button
           class="tip-btn"

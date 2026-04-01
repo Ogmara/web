@@ -15,6 +15,7 @@ import { DmListView } from './pages/DmListView';
 import { DmConversationView } from './pages/DmConversationView';
 import { UserProfileView } from './pages/UserProfileView';
 import { SearchView } from './pages/SearchView';
+import { NewsDetailView } from './pages/NewsDetailView';
 import { StatusBar } from './components/StatusBar';
 import { route } from './lib/router';
 
@@ -47,7 +48,7 @@ export const App: Component = () => {
               <NewsView />
             </Match>
             <Match when={route().view === 'news-detail'}>
-              <NewsView />
+              <NewsDetailView />
             </Match>
             <Match when={route().view === 'compose'}>
               <ComposeView />

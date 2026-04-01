@@ -5,6 +5,29 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-04-01
+
+### Added
+- **News thread view** — new `NewsDetailView` page at `#/news/:msgId` showing
+  the full post with all comments in a threaded layout. Authenticated users can
+  post comments and reply to specific comments with a reply-to indicator.
+- **Comment count on news feed** — each news card now shows a comment count
+  button that links directly to the thread view. Post titles are also clickable.
+- **Bookmarks show full content** — bookmarks page now decodes and displays
+  actual post title, content, and author profile instead of placeholder text.
+  Cards are clickable and navigate to the post's thread view. Added remove
+  bookmark button.
+- Shared utility modules (`lib/profile.ts`, `lib/news-utils.ts`) for profile
+  caching with in-flight deduplication and common news helpers, eliminating
+  code duplication across views.
+- i18n keys for thread/comment UI across all 7 languages (en, de, es, pt,
+  ja, zh, ru).
+
+### Fixed
+- Bookmarks and comment posting now use SolidJS `refetch()` instead of
+  `window.location.reload()`, preserving client-side state.
+- Profile signal type in `NewsCard` now includes `verified` field.
+
 ## [0.8.0] - 2026-04-01
 
 ### Added
