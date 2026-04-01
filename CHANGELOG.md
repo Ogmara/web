@@ -5,6 +5,13 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.2] - 2026-04-01
+
+### Fixed
+- **Reverted toolbar/sidebar redesign** that broke desktop and mobile layouts.
+  Restored v0.11.0 toolbar (nav tabs + wallet button) and sidebar (channels +
+  DMs). Kept dark theme as default and profile cache TTL fix.
+
 ## [0.12.1] - 2026-04-01
 
 ### Fixed

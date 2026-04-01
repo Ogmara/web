@@ -1,18 +1,19 @@
 /**
- * Sidebar — main navigation menu (burger menu on mobile).
- *
- * Structure: News, Chat > Channels (collapsible), Messages, Bookmarks, Search, Settings.
+ * Sidebar — channel list and DM conversations with route-based navigation.
  */
 
-import { Component, createResource, createSignal, For, Show } from 'solid-js';
+import { Component, createResource, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus } from '../lib/auth';
 import { navigate, route } from '../lib/router';
 
 export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
-  const [channelsOpen, setChannelsOpen] = createSignal(true);
-
+  /** Navigate and auto-close sidebar on mobile. */
+  const go = (path: string) => {
+    navigate(path);
+    props.onNavigate?.();
+  };
   const [channels] = createResource(async () => {
     try {
       const client = getClient();
@@ -23,11 +24,9 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     }
   });
 
-  /** Navigate and auto-close sidebar on mobile. */
-  const go = (path: string) => {
-    navigate(path);
-    props.onNavigate?.();
-  };
+  // DM conversations endpoint not yet implemented on L2 node — disabled to
+  // prevent console 405 errors. Re-enable when /api/v1/dm/conversations exists.
+  const dmConversations = () => [] as any[];
 
   const currentChannelId = () => {
     const r = route();
@@ -37,39 +36,14 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     return null;
   };
 
-  const isView = (view: string) => {
-    const r = route();
-    if (view === 'news') return r.view === 'news' || r.view === 'news-detail' || r.view === 'compose';
-    if (view === 'chat') return r.view === 'chat';
-    if (view === 'dm') return r.view === 'dm' || r.view === 'dm-conversation';
-    if (view === 'bookmarks') return r.view === 'bookmarks';
-    if (view === 'search') return r.view === 'search';
-    if (view === 'settings') return r.view === 'settings';
-    return false;
-  };
+  const truncateAddress = (addr: string) =>
+    `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
   return (
     <aside class={`sidebar ${window.innerWidth <= 768 ? 'mobile-open' : ''}`}>
-      {/* Primary navigation */}
-      <div class="sidebar-section">
-        <button
-          class={`sidebar-nav-item ${isView('news') ? 'active' : ''}`}
-          onClick={() => go('/news')}
-        >
-          📰 {t('nav_news')}
-        </button>
-      </div>
-
-      {/* Channels (collapsible) */}
       <div class="sidebar-section">
         <div class="sidebar-heading-row">
-          <button
-            class="sidebar-collapse-btn"
-            onClick={() => setChannelsOpen(!channelsOpen())}
-          >
-            <span class={`collapse-arrow ${channelsOpen() ? 'open' : ''}`}>▸</span>
-            <h3 class="sidebar-heading">{t('sidebar_channels')}</h3>
-          </button>
+          <h3 class="sidebar-heading">{t('sidebar_channels')}</h3>
           <Show when={authStatus() === 'ready'}>
             <button
               class="sidebar-add-btn"
@@ -80,64 +54,71 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
             </button>
           </Show>
         </div>
-        <Show when={channelsOpen()}>
-          <Show when={!channels.loading} fallback={<div class="sidebar-loading">{t('loading')}</div>}>
-            <For each={channels()}>
-              {(channel) => (
+        <Show when={!channels.loading} fallback={<div class="sidebar-loading">{t('loading')}</div>}>
+          <For each={channels()}>
+            {(channel) => (
+              <button
+                class={`sidebar-item ${currentChannelId() === channel.channel_id ? 'active' : ''}`}
+                onClick={() => go(`/chat/${channel.channel_id}`)}
+              >
+                <span class="channel-hash">#</span>
+                <span class="channel-name">{channel.display_name || channel.slug}</span>
+              </button>
+            )}
+          </For>
+        </Show>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-heading-row">
+          <h3 class="sidebar-heading">{t('sidebar_dms')}</h3>
+          <Show when={authStatus() === 'ready'}>
+            <button
+              class="sidebar-add-btn"
+              onClick={() => go('/dm')}
+              title={t('dm_compose')}
+            >
+              +
+            </button>
+          </Show>
+        </div>
+        <Show when={authStatus() === 'ready'}>
+          <Show
+            when={dmConversations() && dmConversations()!.length > 0}
+            fallback={
+              <button class="sidebar-item dm-item" onClick={() => go('/dm')}>
+                <span class="dm-icon">💬</span>
+                <span>{t('nav_dms')}</span>
+              </button>
+            }
+          >
+            <For each={dmConversations()}>
+              {(conv: any) => (
                 <button
-                  class={`sidebar-item ${currentChannelId() === channel.channel_id ? 'active' : ''}`}
-                  onClick={() => go(`/chat/${channel.channel_id}`)}
+                  class={`sidebar-item dm-item ${
+                    route().view === 'dm-conversation' && route().params.address === conv.peer_address
+                      ? 'active'
+                      : ''
+                  }`}
+                  onClick={() => go(`/dm/${conv.peer_address}`)}
                 >
-                  <span class="channel-hash">#</span>
-                  <span class="channel-name">{channel.display_name || channel.slug}</span>
+                  <span class="dm-icon">💬</span>
+                  <span class="dm-peer-name">{truncateAddress(conv.peer_address)}</span>
+                  <Show when={conv.unread_count > 0}>
+                    <span class="dm-badge">{conv.unread_count}</span>
+                  </Show>
                 </button>
               )}
             </For>
           </Show>
         </Show>
-      </div>
-
-      {/* Direct Messages */}
-      <div class="sidebar-section">
-        <button
-          class={`sidebar-nav-item ${isView('dm') ? 'active' : ''}`}
-          onClick={() => go('/dm')}
-        >
-          💬 {t('nav_dms')}
-        </button>
-      </div>
-
-      {/* Divider */}
-      <div class="sidebar-divider" />
-
-      {/* Bookmarks */}
-      <div class="sidebar-section">
-        <button
-          class={`sidebar-nav-item ${isView('bookmarks') ? 'active' : ''}`}
-          onClick={() => go('/bookmarks')}
-        >
-          ★ {t('bookmarks_title')}
-        </button>
-      </div>
-
-      {/* Search */}
-      <div class="sidebar-section">
-        <button
-          class={`sidebar-nav-item ${isView('search') ? 'active' : ''}`}
-          onClick={() => go('/search')}
-        >
-          🔍 {t('nav_search')}
-        </button>
-      </div>
-
-      {/* Settings */}
-      <div class="sidebar-section">
-        <button
-          class={`sidebar-nav-item ${isView('settings') ? 'active' : ''}`}
-          onClick={() => go('/settings')}
-        >
-          ⚙ {t('nav_settings')}
-        </button>
+        <Show when={authStatus() !== 'ready'}>
+          <div class="sidebar-empty">
+            <button class="sidebar-connect-btn" onClick={() => go('/wallet')}>
+              {t('wallet_connect')}
+            </button>
+          </div>
+        </Show>
       </div>
 
       <style>{`
@@ -150,34 +131,13 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           flex-direction: column;
           overflow-y: auto;
         }
-        .sidebar-section { padding: var(--spacing-xs) var(--spacing-sm); }
-        .sidebar-divider {
-          height: 1px;
-          background: var(--color-border);
-          margin: var(--spacing-xs) var(--spacing-md);
-        }
+        .sidebar-section { padding: var(--spacing-sm); }
         .sidebar-heading-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 0 var(--spacing-xs);
+          padding: var(--spacing-xs) var(--spacing-sm);
         }
-        .sidebar-collapse-btn {
-          display: flex;
-          align-items: center;
-          gap: var(--spacing-xs);
-          padding: var(--spacing-xs);
-          border-radius: var(--radius-sm);
-          cursor: pointer;
-        }
-        .sidebar-collapse-btn:hover { background: var(--color-bg-tertiary); }
-        .collapse-arrow {
-          font-size: var(--font-size-xs);
-          color: var(--color-text-secondary);
-          transition: transform 0.15s;
-          display: inline-block;
-        }
-        .collapse-arrow.open { transform: rotate(90deg); }
         .sidebar-heading {
           font-size: var(--font-size-xs);
           text-transform: uppercase;
@@ -197,28 +157,11 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           justify-content: center;
         }
         .sidebar-add-btn:hover { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
-        .sidebar-nav-item {
-          display: flex;
-          align-items: center;
-          gap: var(--spacing-sm);
-          padding: var(--spacing-sm) var(--spacing-sm);
-          border-radius: var(--radius-md);
-          width: 100%;
-          text-align: left;
-          font-size: var(--font-size-sm);
-          font-weight: 500;
-        }
-        .sidebar-nav-item:hover { background: var(--color-bg-tertiary); }
-        .sidebar-nav-item.active {
-          background: var(--color-accent-primary);
-          color: var(--color-text-inverse);
-        }
         .sidebar-item {
           display: flex;
           align-items: center;
           gap: var(--spacing-xs);
           padding: var(--spacing-xs) var(--spacing-sm);
-          padding-left: var(--spacing-lg);
           border-radius: var(--radius-md);
           width: 100%;
           text-align: left;
@@ -227,11 +170,34 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         .sidebar-item:hover { background: var(--color-bg-tertiary); }
         .sidebar-item.active { background: var(--color-accent-primary); color: var(--color-text-inverse); }
         .channel-hash { opacity: 0.5; font-weight: 700; }
-        .sidebar-loading {
-          padding: var(--spacing-sm) var(--spacing-lg);
+        .sidebar-loading, .sidebar-empty {
+          padding: var(--spacing-sm);
           font-size: var(--font-size-sm);
           color: var(--color-text-secondary);
         }
+        .dm-icon { font-size: var(--font-size-xs); }
+        .dm-peer-name { font-size: var(--font-size-sm); }
+        .dm-badge {
+          margin-left: auto;
+          background: var(--color-accent-primary);
+          color: var(--color-text-inverse);
+          font-size: 10px;
+          font-weight: 700;
+          padding: 1px 5px;
+          border-radius: var(--radius-full);
+          min-width: 16px;
+          text-align: center;
+        }
+        .sidebar-connect-btn {
+          color: var(--color-accent-primary);
+          font-size: var(--font-size-sm);
+          font-weight: 600;
+          padding: var(--spacing-xs) var(--spacing-sm);
+          border-radius: var(--radius-md);
+          width: 100%;
+          text-align: left;
+        }
+        .sidebar-connect-btn:hover { background: var(--color-bg-tertiary); }
       `}</style>
     </aside>
   );
