@@ -1,7 +1,9 @@
-import { Component, createSignal } from 'solid-js';
+import { Component, createSignal, Show } from 'solid-js';
 import { t, setLanguage, currentLanguage, SUPPORTED_LANGUAGES } from '../i18n/init';
 import { getTheme, setTheme, type Theme } from '../lib/theme';
 import { getSetting, setSetting } from '../lib/settings';
+import { authStatus, walletAddress, walletSource } from '../lib/auth';
+import { navigate } from '../lib/router';
 
 const LANGUAGE_NAMES: Record<string, string> = {
   en: 'English',
@@ -91,6 +93,34 @@ export const SettingsView: Component = () => {
       </section>
 
       <section class="settings-section">
+        <h3>{t('settings_wallet')}</h3>
+        <Show
+          when={authStatus() === 'ready'}
+          fallback={
+            <button class="settings-wallet-btn" onClick={() => navigate('/wallet')}>
+              {t('wallet_connect')}
+            </button>
+          }
+        >
+          <div class="settings-wallet-info">
+            <span class="settings-wallet-addr">{walletAddress()?.slice(0, 12)}...{walletAddress()?.slice(-6)}</span>
+            <span class="settings-wallet-source">
+              {walletSource() === 'klever-extension' ? 'Klever Extension' :
+               walletSource() === 'k5-delegation' ? 'K5 Delegation' : 'Built-in'}
+            </span>
+          </div>
+          <div class="settings-wallet-actions">
+            <button class="settings-wallet-btn" onClick={() => navigate(`/user/${walletAddress()!}`)}>
+              My Profile
+            </button>
+            <button class="settings-wallet-btn" onClick={() => navigate('/wallet')}>
+              Wallet Settings
+            </button>
+          </div>
+        </Show>
+      </section>
+
+      <section class="settings-section">
         <h3>{t('settings_node_url')}</h3>
         <input
           type="text"
@@ -124,6 +154,34 @@ export const SettingsView: Component = () => {
         .settings-radio-group { display: flex; gap: var(--spacing-lg); }
         .settings-radio { display: flex; align-items: center; gap: var(--spacing-xs); font-size: var(--font-size-sm); cursor: pointer; }
         .settings-toggle { display: flex; align-items: center; gap: var(--spacing-sm); font-size: var(--font-size-sm); cursor: pointer; margin-bottom: var(--spacing-sm); }
+        .settings-wallet-info {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-sm);
+          margin-bottom: var(--spacing-sm);
+        }
+        .settings-wallet-addr {
+          font-family: monospace;
+          font-size: var(--font-size-sm);
+          color: var(--color-accent-primary);
+        }
+        .settings-wallet-source {
+          font-size: var(--font-size-xs);
+          color: var(--color-text-secondary);
+          background: var(--color-bg-tertiary);
+          padding: 2px 6px;
+          border-radius: var(--radius-sm);
+        }
+        .settings-wallet-actions { display: flex; gap: var(--spacing-sm); }
+        .settings-wallet-btn {
+          padding: var(--spacing-sm) var(--spacing-md);
+          border-radius: var(--radius-md);
+          font-weight: 600;
+          font-size: var(--font-size-sm);
+          background: var(--color-bg-tertiary);
+          color: var(--color-text-primary);
+        }
+        .settings-wallet-btn:hover { background: var(--color-accent-primary); color: var(--color-text-inverse); }
       `}</style>
     </div>
   );
