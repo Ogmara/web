@@ -25,8 +25,10 @@ const [authStatus, setAuthStatus] = createSignal<AuthStatus>('none');
 const [walletAddress, setWalletAddress] = createSignal<string | null>(null);
 const [walletSource, setWalletSource] = createSignal<WalletSource>(null);
 const [isRegistered, setIsRegistered] = createSignal(false);
+/** The L2 signing address (device key). Same as walletAddress for built-in wallets. */
+const [l2Address, setL2Address] = createSignal<string | null>(null);
 
-export { authStatus, walletAddress, walletSource, isRegistered };
+export { authStatus, walletAddress, walletSource, isRegistered, l2Address };
 
 /** Get the current signer (from vault or external). */
 export function getSigner(): WalletSigner | null {
@@ -54,6 +56,9 @@ export async function initAuth(): Promise<void> {
         const savedSource = getSetting('walletSource') as WalletSource;
         const savedAddress = getSetting('walletAddress');
 
+        // L2 address is always the device key (signer) address
+        setL2Address(address);
+
         if (savedSource === 'klever-extension' && savedAddress) {
           setWalletAddress(savedAddress);
           setWalletSource('klever-extension');
@@ -80,6 +85,7 @@ export async function connectWithKey(hexKey: string): Promise<string> {
   const signer = vaultGetSigner()!;
   getClient().withSigner(signer);
   setWalletAddress(address);
+  setL2Address(address);
   setWalletSource('builtin');
   setSetting('walletSource', 'builtin');
   setSetting('walletAddress', address);
@@ -93,6 +99,7 @@ export async function generateWallet(): Promise<string> {
   const signer = vaultGetSigner()!;
   getClient().withSigner(signer);
   setWalletAddress(address);
+  setL2Address(address);
   setWalletSource('builtin');
   setSetting('walletSource', 'builtin');
   setSetting('walletAddress', address);
@@ -107,12 +114,12 @@ export async function generateWallet(): Promise<string> {
  */
 export async function connectKleverExtension(extensionAddress: string): Promise<void> {
   // Generate a local device key for L2 signing
-  const address = await vaultGenerate();
+  const deviceAddress = await vaultGenerate();
   const signer = vaultGetSigner()!;
   getClient().withSigner(signer);
-  // The extension address is the on-chain identity
-  // The local key is used for L2 operations (until device delegation is set up)
+  // Extension address = on-chain identity, device key = L2 signing
   setWalletAddress(extensionAddress);
+  setL2Address(deviceAddress);
   setWalletSource('klever-extension');
   setSetting('walletSource', 'klever-extension');
   setSetting('walletAddress', extensionAddress);
@@ -141,6 +148,7 @@ export async function disconnectWallet(): Promise<void> {
   setSetting('walletSource', '');
   setSetting('walletAddress', '');
   setWalletAddress(null);
+  setL2Address(null);
   setWalletSource(null);
   setAuthStatus('none');
   setIsRegistered(false);
