@@ -5,6 +5,20 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-04-01
+
+### Added
+- **On-chain verified badge** — purple checkmark shown next to usernames on
+  profiles and news posts when the user has registered on the Klever blockchain
+  (public_key present in user record from chain scanner)
+- **Verify On-Chain button** — own profile shows "Verify On-Chain" button when
+  Klever Extension is available and user isn't registered yet. Calls registerUser
+  SC endpoint (requires deployed smart contract).
+- **Clickable bio URLs** — URLs in profile bios are now rendered as links that
+  open in a new tab
+- **Chat auto-scroll** — chat view auto-scrolls to the latest message when
+  messages load or new messages arrive
+
 ## [0.7.0] - 2026-04-01
 
 ### Added

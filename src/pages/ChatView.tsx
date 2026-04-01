@@ -64,6 +64,14 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [localMessages, setLocalMessages] = createSignal<any[]>([]);
   const [sending, setSending] = createSignal(false);
   let inputRef: HTMLInputElement | undefined;
+  let messagesRef: HTMLDivElement | undefined;
+
+  /** Scroll chat to the bottom (latest messages). */
+  const scrollToBottom = () => {
+    if (messagesRef) {
+      messagesRef.scrollTop = messagesRef.scrollHeight;
+    }
+  };
 
   const [messages, { refetch }] = createResource(
     () => props.channelId,
@@ -186,6 +194,15 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   });
   onCleanup(() => { if (pollTimer) clearInterval(pollTimer); });
 
+  // Auto-scroll to latest message when messages change
+  createEffect(() => {
+    const msgs = allMessages();
+    if (msgs.length > 0) {
+      // Use setTimeout to ensure DOM has rendered
+      setTimeout(scrollToBottom, 50);
+    }
+  });
+
   const handleSend = async () => {
     const text = messageInput().trim();
     if (!text || !props.channelId) return;
@@ -258,7 +275,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           </div>
         </Show>
 
-        <div class="chat-messages">
+        <div class="chat-messages" ref={messagesRef}>
           <Show
             when={allMessages().length > 0}
             fallback={<div class="chat-empty"><p>{t('chat_no_messages')}</p></div>}
