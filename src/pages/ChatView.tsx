@@ -9,7 +9,28 @@ import { authStatus, getSigner } from '../lib/auth';
 import { onWsEvent, wsSubscribeChannels, wsUnsubscribeChannels } from '../lib/ws';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
-import { getPayloadContent } from '../lib/payload';
+import { getPayloadContent, decodePayload } from '../lib/payload';
+
+/** Convert a msg_id (hex string or byte array) to a consistent hex string for lookups. */
+function msgIdToHex(msgId: unknown): string {
+  if (typeof msgId === 'string') return msgId;
+  if (Array.isArray(msgId)) {
+    return msgId.map((b: number) => b.toString(16).padStart(2, '0')).join('');
+  }
+  return String(msgId);
+}
+
+/** Extract the reply_to msg_id from a message's payload as a hex string, or null. */
+function getReplyToHex(msg: any): string | null {
+  // First check if the node already provides reply_to_preview
+  if (msg.reply_to_preview?.msg_id) return msgIdToHex(msg.reply_to_preview.msg_id);
+  // Otherwise decode from payload
+  try {
+    const decoded = decodePayload(msg.payload);
+    if (decoded.reply_to) return msgIdToHex(decoded.reply_to);
+  } catch { /* ignore */ }
+  return null;
+}
 
 /** Format message time in user's local timezone. */
 function formatMessageTime(timestamp: string | number): string {
@@ -112,6 +133,38 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     return deduped;
   };
 
+  /** Lookup map: hex msg_id → message object, for resolving reply references. */
+  const msgById = () => {
+    const map = new Map<string, any>();
+    for (const msg of allMessages()) {
+      map.set(msgIdToHex(msg.msg_id), msg);
+    }
+    return map;
+  };
+
+  /** Resolve a reply reference to { author, content, msg_id } or null. */
+  const resolveReply = (msg: any): { author: string; content: string; msgId: string } | null => {
+    // If the node already provides reply_to_preview, use it
+    if (msg.reply_to_preview?.author) {
+      return {
+        author: msg.reply_to_preview.author,
+        content: msg.reply_to_preview.content_preview || '...',
+        msgId: msgIdToHex(msg.reply_to_preview.msg_id),
+      };
+    }
+    // Otherwise resolve from payload reply_to against loaded messages
+    const replyHex = getReplyToHex(msg);
+    if (!replyHex) return null;
+    const original = msgById().get(replyHex);
+    if (!original) return null;
+    const content = getPayloadContent(original.payload);
+    return {
+      author: original.author,
+      content: content.length > 100 ? content.slice(0, 100) + '...' : content,
+      msgId: replyHex,
+    };
+  };
+
   // Auto-refresh: poll for new messages every 15 seconds as a fallback for WebSocket
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   createEffect(() => {
@@ -153,7 +206,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const content = getPayloadContent(msg.payload);
     const preview = content.length > 80 ? content.slice(0, 80) + '...' : content;
     setReplyTo({
-      msgId: msg.msg_id,
+      msgId: msgIdToHex(msg.msg_id),
       author: msg.author,
       preview,
     });
@@ -204,6 +257,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                 const currentDate = getDateLabel(msg.timestamp);
                 const prevDate = prevMsg ? getDateLabel(prevMsg.timestamp) : null;
                 const showDateSep = currentDate !== prevDate;
+                const reply = resolveReply(msg);
 
                 return (
                   <>
@@ -212,18 +266,18 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                         <span class="date-separator-label">{currentDate}</span>
                       </div>
                     </Show>
-                    <div class="message" data-msg-id={msg.msg_id}>
+                    <div class="message" data-msg-id={msgIdToHex(msg.msg_id)}>
                       {/* Reply preview — clickable to scroll to original */}
-                      <Show when={msg.reply_to_preview}>
+                      <Show when={reply}>
                         <div
                           class="reply-preview"
-                          onClick={() => scrollToMessage(msg.reply_to_preview?.msg_id)}
+                          onClick={() => scrollToMessage(reply!.msgId)}
                         >
                           <span class="reply-preview-author">
-                            {truncateAddress(msg.reply_to_preview?.author || '')}
+                            {truncateAddress(reply!.author)}
                           </span>
                           <span class="reply-preview-text">
-                            {msg.reply_to_preview?.content_preview || '...'}
+                            {reply!.content}
                           </span>
                         </div>
                       </Show>
