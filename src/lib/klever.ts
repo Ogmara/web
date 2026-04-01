@@ -165,13 +165,20 @@ async function invokeContract(params: ScInvokeParams): Promise<string> {
     payload.callValue = { KLV: params.value.toString() };
   }
 
-  const unsignedTx = await window.kleverWeb.buildTransaction([{
-    type: 63, // SmartContract
-    payload,
-  }]);
-  const signedTx = await window.kleverWeb.signTransaction(unsignedTx);
-  const result = await window.kleverWeb.broadcastTransaction(signedTx);
-  return result.txHash;
+  try {
+    const unsignedTx = await window.kleverWeb.buildTransaction([{
+      type: 63, // SmartContract
+      payload,
+    }]);
+    const signedTx = await window.kleverWeb.signTransaction(unsignedTx);
+    const result = await window.kleverWeb.broadcastTransaction(signedTx);
+    return result.txHash;
+  } catch (err: any) {
+    // Extract detailed error from the extension for debugging
+    const detail = err?.data?.error || err?.message || String(err);
+    console.error('[Klever SC]', { scAddress, data: [data], payload, error: detail });
+    throw new Error(detail);
+  }
 }
 
 function stringToHex(str: string): string {
