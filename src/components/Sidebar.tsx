@@ -19,19 +19,9 @@ export const Sidebar: Component = () => {
     }
   });
 
-  const [dmConversations] = createResource(
-    () => authStatus() === 'ready',
-    async (isReady) => {
-      if (!isReady) return [];
-      try {
-        const client = getClient();
-        const resp = await client.getDmConversations();
-        return resp.conversations?.slice(0, 10) ?? [];
-      } catch {
-        return [];
-      }
-    },
-  );
+  // DM conversations endpoint not yet implemented on L2 node — disabled to
+  // prevent console 405 errors. Re-enable when /api/v1/dm/conversations exists.
+  const dmConversations = () => [] as any[];
 
   const currentChannelId = () => {
     const r = route();
