@@ -2,7 +2,7 @@
  * ChatView — channel messaging with real-time updates and send functionality.
  */
 
-import { Component, createResource, createSignal, createEffect, For, Show, onCleanup } from 'solid-js';
+import { Component, createResource, createSignal, createEffect, createMemo, For, Show, onCleanup } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, getSigner } from '../lib/auth';
@@ -136,7 +136,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   });
 
   // Deduplicate messages by msg_id and sort chronologically
-  const allMessages = () => {
+  const allMessages = createMemo(() => {
     const seen = new Set<string>();
     const combined = [...(messages() || []), ...localMessages()];
     const deduped = combined.filter((msg) => {
@@ -147,16 +147,16 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     // Sort oldest first
     deduped.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     return deduped;
-  };
+  });
 
   /** Lookup map: hex msg_id → message object, for resolving reply references. */
-  const msgById = () => {
+  const msgById = createMemo(() => {
     const map = new Map<string, any>();
     for (const msg of allMessages()) {
       map.set(msgIdToHex(msg.msg_id), msg);
     }
     return map;
-  };
+  });
 
   /** Resolve a reply reference to { author, content, msg_id } or null. */
   const resolveReply = (msg: any): { author: string; content: string; msgId: string } | null => {
@@ -194,12 +194,17 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   });
   onCleanup(() => { if (pollTimer) clearInterval(pollTimer); });
 
-  // Auto-scroll to latest message when messages change
+  // Auto-scroll to latest message when messages change (only if user is near bottom)
   createEffect(() => {
     const msgs = allMessages();
     if (msgs.length > 0) {
-      // Use setTimeout to ensure DOM has rendered
-      setTimeout(scrollToBottom, 50);
+      setTimeout(() => {
+        if (!messagesRef) return;
+        const { scrollTop, scrollHeight, clientHeight } = messagesRef;
+        const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
+        // Scroll if near bottom or first load (scrollTop === 0)
+        if (isNearBottom || scrollTop === 0) scrollToBottom();
+      }, 50);
     }
   });
 
@@ -244,7 +249,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
   /** Scroll to a message by msg_id and briefly highlight it. */
   const scrollToMessage = (msgId: string) => {
-    const el = document.querySelector(`[data-msg-id="${msgId}"]`) as HTMLElement | null;
+    const el = document.querySelector(`[data-msg-id="${CSS.escape(msgId)}"]`) as HTMLElement | null;
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.classList.add('message-highlight');
