@@ -463,9 +463,8 @@ export const WalletView: Component = () => {
           margin-bottom: var(--spacing-xs);
         }
         .wallet-address {
-          font-size: var(--font-size-sm);
-          word-break: keep-all;
-          overflow-wrap: anywhere;
+          font-size: var(--font-size-xs);
+          white-space: nowrap;
           color: var(--color-accent-primary);
         }
         .wallet-source {
