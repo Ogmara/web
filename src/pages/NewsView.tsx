@@ -20,22 +20,31 @@ function ensureHexMsgId(msgId: unknown): string {
   return String(msgId);
 }
 
-/** Simple in-memory profile cache to avoid redundant fetches. */
+/** Profile cache + in-flight deduplication to avoid redundant fetches. */
 const profileCache = new Map<string, { display_name?: string; avatar_cid?: string }>();
+const profileInflight = new Map<string, Promise<{ display_name?: string; avatar_cid?: string }>>();
 
 async function resolveProfile(address: string): Promise<{ display_name?: string; avatar_cid?: string }> {
   if (profileCache.has(address)) return profileCache.get(address)!;
-  try {
-    const client = getClient();
-    const resp = await client.getUserProfile(address);
-    const profile = { display_name: resp.user?.display_name, avatar_cid: resp.user?.avatar_cid };
-    profileCache.set(address, profile);
-    return profile;
-  } catch {
-    const empty = {};
-    profileCache.set(address, empty);
-    return empty;
-  }
+  // Deduplicate concurrent requests for the same address
+  if (profileInflight.has(address)) return profileInflight.get(address)!;
+  const promise = (async () => {
+    try {
+      const client = getClient();
+      const resp = await client.getUserProfile(address);
+      const profile = { display_name: resp.user?.display_name, avatar_cid: resp.user?.avatar_cid };
+      profileCache.set(address, profile);
+      return profile;
+    } catch {
+      const empty = {};
+      profileCache.set(address, empty);
+      return empty;
+    } finally {
+      profileInflight.delete(address);
+    }
+  })();
+  profileInflight.set(address, promise);
+  return promise;
 }
 
 /** Predefined reaction emojis for news posts. */
