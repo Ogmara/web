@@ -15,8 +15,9 @@ export const WalletButton: Component = () => {
     <button
       class="wallet-button"
       onClick={() => {
-        if (authStatus() === 'ready') {
-          navigate(`/user/${walletAddress()!}`);
+        const addr = walletAddress();
+        if (authStatus() === 'ready' && addr) {
+          navigate(`/user/${addr}`);
         } else {
           navigate('/wallet');
         }

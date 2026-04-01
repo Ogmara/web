@@ -12,6 +12,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with links to "My Profile" and "Wallet Settings" (where disconnect lives).
   Shows "Connect Wallet" button when not connected.
 
+## [0.7.6] - 2026-04-01
+
+### Fixed
+- **Wallet source not restored on reload** — `walletSource` was missing from
+  the Settings interface, causing `getSetting('walletSource')` to always return
+  undefined. Added to settings schema.
+- **CSS selector injection** — `scrollToMessage` now uses `CSS.escape()` to
+  sanitize msg_id before interpolating into querySelector
+- **Chat auto-scroll** — only scrolls to bottom when user is near the bottom
+  or on first load, no longer interrupts reading history
+- **WalletButton race** — null-safe address check prevents navigate to `/user/null`
+- **Performance** — `allMessages` and `msgById` wrapped in `createMemo` to avoid
+  redundant dedup/sort/map-building on every render access
+
 ## [0.7.5] - 2026-04-01
 
 ### Fixed

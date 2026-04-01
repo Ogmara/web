@@ -19,6 +19,7 @@ export interface Settings {
   pinnedChannels: number[];
   mutedChannels: number[];
   mutedUsers: string[];
+  walletSource: string;
   nodeUrl: string;
 }
 
@@ -37,6 +38,7 @@ const defaults: Settings = {
   pinnedChannels: [],
   mutedChannels: [],
   mutedUsers: [],
+  walletSource: '',
   nodeUrl: '',
 };
 
