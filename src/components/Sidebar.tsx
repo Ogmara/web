@@ -8,12 +8,7 @@ import { getClient } from '../lib/api';
 import { authStatus } from '../lib/auth';
 import { navigate, route } from '../lib/router';
 
-export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
-  /** Navigate and auto-close sidebar on mobile. */
-  const go = (path: string) => {
-    navigate(path);
-    props.onNavigate?.();
-  };
+export const Sidebar: Component = () => {
   const [channels] = createResource(async () => {
     try {
       const client = getClient();
@@ -40,14 +35,14 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
   return (
-    <aside class={`sidebar ${window.innerWidth <= 768 ? 'mobile-open' : ''}`}>
+    <aside class="sidebar">
       <div class="sidebar-section">
         <div class="sidebar-heading-row">
           <h3 class="sidebar-heading">{t('sidebar_channels')}</h3>
           <Show when={authStatus() === 'ready'}>
             <button
               class="sidebar-add-btn"
-              onClick={() => go('/wallet')}
+              onClick={() => navigate('/wallet')}
               title={t('channel_create')}
             >
               +
@@ -59,7 +54,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
             {(channel) => (
               <button
                 class={`sidebar-item ${currentChannelId() === channel.channel_id ? 'active' : ''}`}
-                onClick={() => go(`/chat/${channel.channel_id}`)}
+                onClick={() => navigate(`/chat/${channel.channel_id}`)}
               >
                 <span class="channel-hash">#</span>
                 <span class="channel-name">{channel.display_name || channel.slug}</span>
@@ -75,7 +70,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           <Show when={authStatus() === 'ready'}>
             <button
               class="sidebar-add-btn"
-              onClick={() => go('/dm')}
+              onClick={() => navigate('/dm')}
               title={t('dm_compose')}
             >
               +
@@ -86,7 +81,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           <Show
             when={dmConversations() && dmConversations()!.length > 0}
             fallback={
-              <button class="sidebar-item dm-item" onClick={() => go('/dm')}>
+              <button class="sidebar-item dm-item" onClick={() => navigate('/dm')}>
                 <span class="dm-icon">💬</span>
                 <span>{t('nav_dms')}</span>
               </button>
@@ -100,7 +95,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
                       ? 'active'
                       : ''
                   }`}
-                  onClick={() => go(`/dm/${conv.peer_address}`)}
+                  onClick={() => navigate(`/dm/${conv.peer_address}`)}
                 >
                   <span class="dm-icon">💬</span>
                   <span class="dm-peer-name">{truncateAddress(conv.peer_address)}</span>
@@ -114,7 +109,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         </Show>
         <Show when={authStatus() !== 'ready'}>
           <div class="sidebar-empty">
-            <button class="sidebar-connect-btn" onClick={() => go('/wallet')}>
+            <button class="sidebar-connect-btn" onClick={() => navigate('/wallet')}>
               {t('wallet_connect')}
             </button>
           </div>

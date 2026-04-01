@@ -358,9 +358,8 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
 
       <style>{`
         .profile-view { padding: var(--spacing-lg); overflow-y: auto; height: 100%; max-width: 700px; }
-        .profile-header { display: flex; gap: var(--spacing-lg); margin-bottom: var(--spacing-lg); min-width: 0; }
+        .profile-header { display: flex; gap: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
         .profile-avatar { flex-shrink: 0; }
-        .profile-info { flex: 1; min-width: 0; overflow: hidden; }
         .avatar-placeholder {
           width: 80px;
           height: 80px;
@@ -379,16 +378,8 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
           border-radius: var(--radius-full);
           object-fit: cover;
         }
-        .profile-name {
-          font-size: var(--font-size-xl);
-          margin-bottom: var(--spacing-xs);
-          display: flex;
-          align-items: center;
-          gap: var(--spacing-xs);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
+        .profile-info { flex: 1; min-width: 0; }
+        .profile-name { font-size: var(--font-size-xl); margin-bottom: var(--spacing-xs); display: flex; align-items: center; gap: var(--spacing-xs); }
         .verified-badge {
           display: inline-flex;
           align-items: center;
@@ -405,11 +396,9 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
         .profile-address-text {
           font-size: var(--font-size-xs);
           color: var(--color-text-secondary);
-          word-break: break-word;
-          overflow-wrap: anywhere;
+          word-break: break-all;
           display: block;
           margin-bottom: var(--spacing-xs);
-          max-width: 100%;
         }
         .profile-l2-hint {
           font-size: var(--font-size-xs);
