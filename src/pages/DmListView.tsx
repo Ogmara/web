@@ -7,6 +7,7 @@ import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus } from '../lib/auth';
 import { navigate } from '../lib/router';
+import type { DmConversation } from '@ogmara/sdk';
 
 export const DmListView: Component = () => {
   const [newDmAddress, setNewDmAddress] = createSignal('');
@@ -67,13 +68,13 @@ export const DmListView: Component = () => {
             fallback={<div class="dm-empty">{t('dm_empty')}</div>}
           >
             <For each={conversations()}>
-              {(conv: any) => (
+              {(conv: DmConversation) => (
                 <button
                   class="dm-item"
-                  onClick={() => navigate(`/dm/${conv.peer_address}`)}
+                  onClick={() => navigate(`/dm/${conv.peer}`)}
                 >
                   <div class="dm-item-main">
-                    <span class="dm-peer">{truncateAddress(conv.peer_address)}</span>
+                    <span class="dm-peer">{truncateAddress(conv.peer)}</span>
                     <Show when={conv.last_message_preview}>
                       <span class="dm-preview">{conv.last_message_preview}</span>
                     </Show>

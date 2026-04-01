@@ -2,14 +2,15 @@
  * DmConversationView — direct message conversation with a peer.
  */
 
-import { Component, createResource, createSignal, For, Show, onCleanup } from 'solid-js';
+import { Component, createResource, createSignal, For, Show, onCleanup, onMount } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, walletAddress } from '../lib/auth';
+import { authStatus, walletAddress, getSigner } from '../lib/auth';
 import { onWsEvent } from '../lib/ws';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent } from '../lib/payload';
+import { buildDirectMessage } from '@ogmara/sdk';
 
 interface DmConversationProps {
   peerAddress: string;
@@ -61,14 +62,33 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
     });
   };
 
+  // Mark conversation as read on mount
+  onMount(async () => {
+    if (authStatus() === 'ready' && props.peerAddress) {
+      try {
+        const client = getClient();
+        await client.markDmRead(props.peerAddress);
+      } catch {
+        // Non-critical — ignore
+      }
+    }
+  });
+
   const handleSend = async () => {
     const text = messageInput().trim();
     if (!text || sending()) return;
 
+    const signer = getSigner();
+    if (!signer) return;
+
     setSending(true);
     try {
       const client = getClient();
-      await client.sendDm(props.peerAddress, text);
+      const envelope = await buildDirectMessage(signer, {
+        recipient: props.peerAddress,
+        content: text,
+      });
+      await client.sendDm(props.peerAddress, envelope);
       setMessageInput('');
     } catch {
       // Send failed
