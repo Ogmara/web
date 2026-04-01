@@ -21,6 +21,8 @@ export interface Settings {
   mutedUsers: string[];
   walletSource: string;
   nodeUrl: string;
+  /** Cached device registration status: "wallet:device" key to avoid re-registration. */
+  deviceRegistered: string;
 }
 
 const defaults: Settings = {
@@ -40,6 +42,7 @@ const defaults: Settings = {
   mutedUsers: [],
   walletSource: '',
   nodeUrl: '',
+  deviceRegistered: '',
 };
 
 /** Load a setting from localStorage with fallback to default. */

@@ -7,6 +7,7 @@
 
 import { createSignal } from 'solid-js';
 import type { WalletSigner } from '@ogmara/sdk';
+import { buildDeviceClaim } from '@ogmara/sdk';
 import {
   vaultInit,
   vaultStore,
@@ -17,6 +18,7 @@ import {
 } from './vault';
 import { getClient } from './api';
 import { getSetting, setSetting } from './settings';
+import { signMessage } from './klever';
 
 export type AuthStatus = 'none' | 'loading' | 'locked' | 'ready';
 export type WalletSource = 'builtin' | 'klever-extension' | 'k5-delegation' | null;
@@ -27,8 +29,10 @@ const [walletSource, setWalletSource] = createSignal<WalletSource>(null);
 const [isRegistered, setIsRegistered] = createSignal(false);
 /** The L2 signing address (device key). Same as walletAddress for built-in wallets. */
 const [l2Address, setL2Address] = createSignal<string | null>(null);
+/** True if device registration on the L2 node failed (degraded to device-key identity). */
+const [deviceMappingFailed, setDeviceMappingFailed] = createSignal(false);
 
-export { authStatus, walletAddress, walletSource, isRegistered, l2Address };
+export { authStatus, walletAddress, walletSource, isRegistered, l2Address, deviceMappingFailed };
 
 /** Get the current signer (from vault or external). */
 export function getSigner(): WalletSigner | null {
@@ -62,9 +66,12 @@ export async function initAuth(): Promise<void> {
         if (savedSource === 'klever-extension' && savedAddress) {
           setWalletAddress(savedAddress);
           setWalletSource('klever-extension');
+          // Restore wallet address on the signer for identity resolution
+          signer.walletAddress = savedAddress;
         } else if (savedSource === 'k5-delegation' && savedAddress) {
           setWalletAddress(savedAddress);
           setWalletSource('k5-delegation');
+          signer.walletAddress = savedAddress;
         } else {
           setWalletAddress(address);
           setWalletSource('builtin');
@@ -109,8 +116,11 @@ export async function generateWallet(): Promise<string> {
 
 /**
  * Connect via Klever Extension.
+ *
  * The extension provides address + signing, but we also generate a
  * local device key for L2 operations (messages, reactions, etc.).
+ * After connecting, registers the device key on the L2 node so that
+ * all data produced by this device is indexed under the wallet address.
  */
 export async function connectKleverExtension(extensionAddress: string): Promise<void> {
   // Reuse existing device key if available, otherwise generate a new one
@@ -120,13 +130,54 @@ export async function connectKleverExtension(extensionAddress: string): Promise<
   }
   const signer = vaultGetSigner()!;
   getClient().withSigner(signer);
+
+  // Register device on L2 node (skip if already registered for this pair)
+  const cacheKey = `${extensionAddress}:${deviceAddress}`;
+  const cached = getSetting('deviceRegistered');
+  if (cached !== cacheKey) {
+    try {
+      await registerDeviceOnNode(signer, extensionAddress);
+      setSetting('deviceRegistered', cacheKey);
+      setDeviceMappingFailed(false);
+    } catch (e) {
+      // Registration failed — continue without it. The node falls back to
+      // using the device key as identity (built-in wallet mode).
+      console.warn('Device registration failed, continuing without mapping:', e);
+      setDeviceMappingFailed(true);
+    }
+  }
+
   // Extension address = on-chain identity, device key = L2 signing
+  signer.walletAddress = extensionAddress;
   setWalletAddress(extensionAddress);
   setL2Address(deviceAddress);
   setWalletSource('klever-extension');
   setSetting('walletSource', 'klever-extension');
   setSetting('walletAddress', extensionAddress);
   setAuthStatus('ready');
+}
+
+/**
+ * Register a device key on the L2 node under a wallet address.
+ *
+ * 1. Builds the claim string: "ogmara-device-claim:{pubkey}:{wallet}:{ts}"
+ * 2. Klever Extension signs it (Klever message format)
+ * 3. Submits to the node via POST /api/v1/devices/register
+ */
+async function registerDeviceOnNode(
+  signer: WalletSigner,
+  walletAddress: string,
+): Promise<void> {
+  const { claimString, timestamp } = buildDeviceClaim(
+    signer.publicKeyHex,
+    walletAddress,
+  );
+
+  // Extension signs the claim using Klever message signing format
+  const walletSigHex = await signMessage(claimString);
+
+  // Submit to the L2 node
+  await getClient().registerDevice(walletSigHex, walletAddress, timestamp);
 }
 
 /**
@@ -157,6 +208,7 @@ export async function disconnectWallet(): Promise<void> {
   }
   setSetting('walletSource', '');
   setSetting('walletAddress', '');
+  setSetting('deviceRegistered', '');
   setWalletAddress(null);
   setL2Address(null);
   setWalletSource(null);
