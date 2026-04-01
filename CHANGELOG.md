@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Chat Auto-Refresh** — 15-second polling fallback alongside WebSocket for
   reliable message delivery
 - **Testnet/Mainnet Indicator** — status bar shows network badge (yellow for
-  testnet, green for mainnet) based on node URL; also shown in node info dialog
+  testnet, green for mainnet) from node stats API; also shown in node info dialog
 - **Action Error Feedback** — bookmark, repost, and reaction failures now show
   inline error messages instead of failing silently
 

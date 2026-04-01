@@ -19,15 +19,6 @@ function formatAge(seconds: number): string {
   return t('anchor_ago_days', { count: days });
 }
 
-/** Detect whether the current node URL points to testnet or mainnet. */
-function getNetworkLabel(): { label: string; isTestnet: boolean } {
-  const url = getCurrentNodeUrl().toLowerCase();
-  if (url.includes('testnet') || url.includes('localhost') || url.includes('127.0.0.1')) {
-    return { label: 'Testnet', isTestnet: true };
-  }
-  return { label: 'Mainnet', isTestnet: false };
-}
-
 export const StatusBar: Component = () => {
   const [showInfo, setShowInfo] = createSignal(false);
 
@@ -39,6 +30,10 @@ export const StatusBar: Component = () => {
       return null;
     }
   });
+
+  /** Network name from node stats ("testnet", "mainnet", or "unknown"). */
+  const networkName = () => (stats()?.network as string) || 'unknown';
+  const isTestnet = () => networkName() === 'testnet';
 
   const anchorLevel = (): AnchorStatus['level'] => {
     const s = stats();
@@ -63,9 +58,11 @@ export const StatusBar: Component = () => {
           <AnchorBadge level={anchorLevel()} showLabel={false} />
         </Show>
       </button>
-      <span class={`network-badge ${getNetworkLabel().isTestnet ? 'testnet' : 'mainnet'}`}>
-        {getNetworkLabel().label}
-      </span>
+      <Show when={networkName() !== 'unknown'}>
+        <span class={`network-badge ${isTestnet() ? 'testnet' : 'mainnet'}`}>
+          {networkName().charAt(0).toUpperCase() + networkName().slice(1)}
+        </span>
+      </Show>
       <NodeSelector />
       <span class="status-version">v{__APP_VERSION__}</span>
 
@@ -82,8 +79,8 @@ export const StatusBar: Component = () => {
             </div>
             <div class="node-info-row">
               <span>Network</span>
-              <span class={`network-badge-inline ${getNetworkLabel().isTestnet ? 'testnet' : 'mainnet'}`}>
-                {getNetworkLabel().label}
+              <span class={`network-badge-inline ${isTestnet() ? 'testnet' : 'mainnet'}`}>
+                {networkName().charAt(0).toUpperCase() + networkName().slice(1)}
               </span>
             </div>
             <div class="node-info-row">
