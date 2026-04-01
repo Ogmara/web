@@ -5,6 +5,19 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.2] - 2026-04-01
+
+### Changed
+- Profile page simplified — all data fetched by wallet address (L2 node
+  resolves identity server-side). Removed dual device-key/wallet-address
+  profile fetching logic.
+
+## [0.10.1] - 2026-04-01
+
+### Fixed
+- Profile posts now match both wallet address and L2 device key, so posts
+  show up correctly for Klever Extension users.
+
 ## [0.10.0] - 2026-04-01
 
 ### Added

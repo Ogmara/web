@@ -6,7 +6,7 @@ import { Component, createResource, createSignal, For, Show } from 'solid-js';
 import { JSX } from 'solid-js/jsx-runtime';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, walletAddress, walletSource, l2Address, getSigner } from '../lib/auth';
+import { authStatus, walletAddress, l2Address, getSigner } from '../lib/auth';
 import { kleverAvailable, registerUser, addressToPubkeyHex } from '../lib/klever';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
@@ -55,37 +55,13 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
   const isOwnProfile = () =>
     walletAddress() === props.address || l2Address() === props.address;
 
-  /** The L2 address used for profile data (device key when using extension). */
-  const profileL2Address = () => {
-    if (isOwnProfile() && walletSource() === 'klever-extension' && l2Address()) {
-      return l2Address()!;
-    }
-    return props.address;
-  };
-
   const [regPending, setRegPending] = createSignal(false);
 
-  // Fetch L2 profile data (display name, bio, avatar) from the device key address
+  // Fetch profile data — always by wallet address (L2 node resolves identity)
   const [profile, { refetch: refetchProfile }] = createResource(
-    () => profileL2Address(),
-    async (address) => {
-      if (!address) return null;
-      try {
-        const client = getClient();
-        return await client.getUserProfile(address);
-      } catch {
-        return null;
-      }
-    },
-  );
-
-  // Fetch on-chain registration status from the wallet address (may differ from L2 address)
-  const [onChainProfile] = createResource(
     () => props.address,
     async (address) => {
       if (!address) return null;
-      // If same as L2 address, reuse profile data
-      if (address === profileL2Address()) return profile();
       try {
         const client = getClient();
         return await client.getUserProfile(address);
@@ -96,8 +72,7 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
   );
 
   const isVerified = () => {
-    // Check both the on-chain profile and L2 profile for public_key
-    const pk = onChainProfile()?.user?.public_key || profile()?.user?.public_key;
+    const pk = profile()?.user?.public_key;
     return pk && pk.length > 0;
   };
 
@@ -107,7 +82,7 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
       if (!address) return [];
       try {
         const client = getClient();
-        // Try user posts endpoint first, fall back to filtering news
+        // API returns posts with author = wallet address (resolved by L2 node)
         const resp = await client.listNews(1, 50);
         return resp.posts.filter((p: any) => p.author === address);
       } catch {
