@@ -178,28 +178,25 @@ async function invokeContract(params: ScInvokeParams): Promise<string> {
   window.kleverWeb.provider = kleverProvider;
   await window.kleverWeb.initialize();
 
-  // Encode function call: "functionName@hexArg1@hexArg2..."
-  const data = [params.functionName, ...params.args].join('@');
+  // Encode function call: "functionName@hexArg1@hexArg2..." then base64
+  const callData = [params.functionName, ...params.args].join('@');
 
   const payload: Record<string, unknown> = {
-    address: scAddress,
     scType: 0, // InvokeContract
-    data: [data],
+    address: scAddress,
+    callValue: params.value ? { KLV: params.value.toString() } : {},
   };
-  if (params.value) {
-    payload.callValue = { KLV: params.value.toString() };
-  }
 
   try {
     const unsignedTx = await window.kleverWeb.buildTransaction([{
       type: 63, // SmartContract
       payload,
-    }]);
+    }], [btoa(callData)]);
     const signedTx = await window.kleverWeb.signTransaction(unsignedTx);
     return await broadcast(signedTx);
   } catch (err: any) {
     const detail = err?.data?.error || err?.message || String(err);
-    console.error('[Klever SC]', { scAddress, data: [data], payload, error: detail });
+    console.error('[Klever SC]', { scAddress, callData, payload, error: detail });
     throw new Error(detail);
   }
 }
