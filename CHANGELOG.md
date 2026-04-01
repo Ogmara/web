@@ -5,6 +5,15 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-04-01
+
+### Added
+- **Mobile responsive design** — sidebar auto-collapses on screens ≤768px,
+  opens as overlay with shadow. Toolbar hides brand text and shrinks on
+  mobile. News action buttons wrap instead of overflowing. Profile address
+  wraps correctly instead of breaking character-by-character.
+- Sidebar auto-closes after navigation on mobile.
+
 ## [0.10.2] - 2026-04-01
 
 ### Changed

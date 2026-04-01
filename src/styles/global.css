@@ -141,7 +141,22 @@ html, body, #root {
 /* Responsive: collapse sidebar below 768px */
 @media (max-width: 768px) {
   .sidebar { display: none; }
-  .sidebar.mobile-open { display: flex; position: fixed; z-index: 100; left: 0; top: 0; bottom: 0; }
+  .sidebar.mobile-open {
+    display: flex;
+    position: fixed;
+    z-index: 100;
+    left: 0;
+    top: 48px;
+    bottom: 0;
+    width: 240px;
+    box-shadow: 4px 0 16px rgba(0,0,0,0.3);
+  }
+
+  /* Toolbar: hide brand text, shrink padding */
+  .toolbar-brand { display: none; }
+  .toolbar { padding: var(--spacing-xs) var(--spacing-sm); }
+  .toolbar-nav { padding: var(--spacing-xs) var(--spacing-sm); font-size: var(--font-size-xs); }
+  .toolbar-btn { padding: var(--spacing-xs); font-size: var(--font-size-sm); }
 }
 
 /* Button base */
