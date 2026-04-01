@@ -5,7 +5,7 @@
 import { Component, createResource, createSignal, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, walletAddress } from '../lib/auth';
+import { authStatus, walletAddress, getSigner } from '../lib/auth';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent } from '../lib/payload';
@@ -16,6 +16,13 @@ interface UserProfileProps {
 
 export const UserProfileView: Component<UserProfileProps> = (props) => {
   const [following, setFollowing] = createSignal(false);
+  const [editing, setEditing] = createSignal(false);
+  const [editName, setEditName] = createSignal('');
+  const [editBio, setEditBio] = createSignal('');
+  const [editSaving, setEditSaving] = createSignal(false);
+  const [editError, setEditError] = createSignal('');
+  const [editSuccess, setEditSuccess] = createSignal('');
+  const [avatarFile, setAvatarFile] = createSignal<File | null>(null);
 
   const isOwnProfile = () => walletAddress() === props.address;
 
@@ -76,6 +83,46 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
     }
   };
 
+  const startEditing = () => {
+    setEditName(profile()?.user?.display_name || '');
+    setEditBio(profile()?.user?.bio || '');
+    setAvatarFile(null);
+    setEditError('');
+    setEditSuccess('');
+    setEditing(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!getSigner()) return;
+    setEditSaving(true);
+    setEditError('');
+    setEditSuccess('');
+    try {
+      const client = getClient();
+      let avatarCid = profile()?.user?.avatar_cid;
+
+      // Upload new avatar if selected
+      if (avatarFile()) {
+        const result = await client.uploadMedia(avatarFile()!);
+        avatarCid = result.cid;
+      }
+
+      await client.updateProfile({
+        display_name: editName() || undefined,
+        avatar_cid: avatarCid || undefined,
+        bio: editBio() || undefined,
+      });
+      setEditSuccess('Profile updated!');
+      setEditing(false);
+      // Refetch profile to show updated data
+      window.location.reload();
+    } catch (e: any) {
+      setEditError(e?.message || 'Failed to save profile');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const truncateAddress = (addr: string) =>
     `${addr.slice(0, 12)}...${addr.slice(-6)}`;
 
@@ -113,6 +160,67 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
         </div>
       </div>
 
+      {/* Own profile: edit button */}
+      <Show when={isOwnProfile() && authStatus() === 'ready'}>
+        <Show when={!editing()}>
+          <div class="profile-actions">
+            <button class="profile-action-btn" onClick={startEditing}>
+              Edit Profile
+            </button>
+          </div>
+        </Show>
+        <Show when={editing()}>
+          <div class="profile-edit-form">
+            <label class="edit-label">Display Name</label>
+            <input
+              type="text"
+              class="edit-input"
+              maxLength={50}
+              placeholder="Your name"
+              value={editName()}
+              onInput={(e) => setEditName(e.currentTarget.value)}
+            />
+            <label class="edit-label">Bio</label>
+            <textarea
+              class="edit-input edit-textarea"
+              maxLength={200}
+              placeholder="About you..."
+              value={editBio()}
+              onInput={(e) => setEditBio(e.currentTarget.value)}
+            />
+            <label class="edit-label">Profile Image</label>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              class="edit-file"
+              onChange={(e) => setAvatarFile(e.currentTarget.files?.[0] ?? null)}
+            />
+            <Show when={editError()}>
+              <div class="edit-error">{editError()}</div>
+            </Show>
+            <Show when={editSuccess()}>
+              <div class="edit-success">{editSuccess()}</div>
+            </Show>
+            <div class="edit-buttons">
+              <button
+                class="profile-action-btn"
+                onClick={handleSaveProfile}
+                disabled={editSaving()}
+              >
+                {editSaving() ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                class="profile-action-btn following"
+                onClick={() => setEditing(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </Show>
+      </Show>
+
+      {/* Other user: follow/DM/tip */}
       <Show when={!isOwnProfile() && authStatus() === 'ready'}>
         <div class="profile-actions">
           <button
@@ -235,6 +343,44 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
         .profile-post-time { font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-bottom: var(--spacing-xs); }
         .profile-post-body { line-height: 1.6; }
         .profile-no-posts { text-align: center; color: var(--color-text-secondary); padding: var(--spacing-xl); }
+        .profile-edit-form {
+          display: flex;
+          flex-direction: column;
+          gap: var(--spacing-xs);
+          margin-bottom: var(--spacing-lg);
+          padding: var(--spacing-md);
+          background: var(--color-bg-secondary);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-lg);
+        }
+        .edit-label {
+          font-size: var(--font-size-xs);
+          color: var(--color-text-secondary);
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+        }
+        .edit-input {
+          padding: var(--spacing-sm) var(--spacing-md);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-md);
+          background: var(--color-bg-tertiary);
+          color: var(--color-text-primary);
+          font-family: inherit;
+          font-size: var(--font-size-sm);
+        }
+        .edit-input:focus { outline: none; border-color: var(--color-accent-primary); }
+        .edit-textarea { min-height: 60px; resize: vertical; }
+        .edit-file {
+          font-size: var(--font-size-sm);
+          color: var(--color-text-secondary);
+        }
+        .edit-buttons {
+          display: flex;
+          gap: var(--spacing-sm);
+          margin-top: var(--spacing-xs);
+        }
+        .edit-error { font-size: var(--font-size-xs); color: var(--color-error); }
+        .edit-success { font-size: var(--font-size-xs); color: var(--color-success); }
       `}</style>
     </div>
   );

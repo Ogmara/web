@@ -5,6 +5,26 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-04-01
+
+### Added
+- **PWA Support** — manifest.json, service worker (cache-first for app shell,
+  network-first for API), apple-mobile-web-app meta tags. App can now be
+  installed as a standalone web app on mobile and desktop.
+- **Concept-3 logo** — official Ogmara monogram used as favicon (SVG) and
+  PWA icon (512px PNG)
+- **Profile Editing** — connected users can edit their display name, bio, and
+  upload a profile image from their own profile page
+- **My Profile navigation** — clicking the wallet button in the toolbar now
+  navigates to your own profile page (instead of wallet settings)
+
+### Fixed
+- **Search auto-execute** — navigating to search with a query param (e.g. from
+  clicking a hashtag) now automatically runs the search
+- **Search filtering** — all searches now filter client-side on post content,
+  title, author, and tags. Hashtag searches match against decoded payload tags
+  and content. Previously the L2 node ignored the tag param and returned all posts.
+
 ## [0.6.3] - 2026-04-01
 
 ### Changed

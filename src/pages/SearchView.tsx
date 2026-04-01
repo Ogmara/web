@@ -2,18 +2,23 @@
  * SearchView — search posts by tag, channels by name, users by address.
  */
 
-import { Component, createSignal, For, Show } from 'solid-js';
+import { Component, createSignal, onMount, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { navigate, queryParam } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
-import { getPayloadContent, getPayloadTitle } from '../lib/payload';
+import { getPayloadContent, getPayloadTitle, decodePayload } from '../lib/payload';
 
 export const SearchView: Component = () => {
   const [query, setQuery] = createSignal(queryParam('q') || '');
   const [results, setResults] = createSignal<{ posts: any[]; channels: any[] }>({ posts: [], channels: [] });
   const [searching, setSearching] = createSignal(false);
   const [hasSearched, setHasSearched] = createSignal(false);
+
+  // Auto-execute search when arriving with a query param (e.g. from hashtag click)
+  onMount(() => {
+    if (query()) handleSearch();
+  });
 
   const handleSearch = async () => {
     const q = query().trim();
@@ -31,36 +36,42 @@ export const SearchView: Component = () => {
     try {
       const client = getClient();
 
-      // If query starts with #, strip it and use as tag filter on server side
       const isHashtag = q.startsWith('#');
-      const tagQuery = isHashtag ? q.slice(1) : undefined;
+      const searchTerm = isHashtag ? q.slice(1).toLowerCase() : q.toLowerCase();
 
-      // Fetch more posts for client-side filtering when doing text search
-      const fetchLimit = isHashtag ? 20 : 100;
+      // Fetch all posts — the L2 node doesn't support server-side filtering yet
       const [newsResp, channelsResp] = await Promise.all([
-        client.listNews(1, fetchLimit, tagQuery).catch(() => ({ posts: [] })),
+        client.listNews(1, 100).catch(() => ({ posts: [] })),
         client.listChannels(1, 50).catch(() => ({ channels: [] })),
       ]);
 
       let posts = newsResp.posts || [];
 
-      // Client-side text filtering when not a hashtag search
-      if (!isHashtag && posts.length > 0) {
-        const lq = q.toLowerCase();
-        posts = posts.filter((post: any) => {
-          const content = getPayloadContent(post.payload).toLowerCase();
-          const title = (getPayloadTitle(post.payload) || '').toLowerCase();
-          const author = (post.author || '').toLowerCase();
-          return content.includes(lq) || title.includes(lq) || author.includes(lq);
-        });
-      }
+      // Client-side filtering on content, title, author, and tags
+      posts = posts.filter((post: any) => {
+        const content = getPayloadContent(post.payload).toLowerCase();
+        const title = (getPayloadTitle(post.payload) || '').toLowerCase();
+        const author = (post.author || '').toLowerCase();
+
+        if (isHashtag) {
+          // For hashtag search, match against tags array and content
+          try {
+            const decoded = decodePayload(post.payload);
+            const tags = (decoded.tags ?? []).map((t: string) => t.toLowerCase());
+            if (tags.includes(searchTerm)) return true;
+          } catch { /* ignore */ }
+          return content.includes('#' + searchTerm) || content.includes(searchTerm);
+        }
+
+        // Free text search across content, title, and author
+        return content.includes(searchTerm) || title.includes(searchTerm) || author.includes(searchTerm);
+      });
 
       // Filter channels by slug/name match
-      const lq = q.replace(/^#/, '').toLowerCase();
       const matchedChannels = (channelsResp.channels || []).filter((ch: any) => {
         return (
-          ch.slug?.toLowerCase().includes(lq) ||
-          ch.display_name?.toLowerCase().includes(lq)
+          ch.slug?.toLowerCase().includes(searchTerm) ||
+          ch.display_name?.toLowerCase().includes(searchTerm)
         );
       });
 
