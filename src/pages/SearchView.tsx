@@ -7,7 +7,7 @@ import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { navigate, queryParam } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
-import { getPayloadContent } from '../lib/payload';
+import { getPayloadContent, getPayloadTitle } from '../lib/payload';
 
 export const SearchView: Component = () => {
   const [query, setQuery] = createSignal(queryParam('q') || '');
@@ -30,21 +30,41 @@ export const SearchView: Component = () => {
 
     try {
       const client = getClient();
+
+      // If query starts with #, strip it and use as tag filter on server side
+      const isHashtag = q.startsWith('#');
+      const tagQuery = isHashtag ? q.slice(1) : undefined;
+
+      // Fetch more posts for client-side filtering when doing text search
+      const fetchLimit = isHashtag ? 20 : 100;
       const [newsResp, channelsResp] = await Promise.all([
-        client.listNews(1, 20, q).catch(() => ({ posts: [] })),
+        client.listNews(1, fetchLimit, tagQuery).catch(() => ({ posts: [] })),
         client.listChannels(1, 50).catch(() => ({ channels: [] })),
       ]);
 
-      // Filter channels by slug/name match
-      const matchedChannels = (channelsResp.channels || []).filter((ch: any) => {
+      let posts = newsResp.posts || [];
+
+      // Client-side text filtering when not a hashtag search
+      if (!isHashtag && posts.length > 0) {
         const lq = q.toLowerCase();
+        posts = posts.filter((post: any) => {
+          const content = getPayloadContent(post.payload).toLowerCase();
+          const title = (getPayloadTitle(post.payload) || '').toLowerCase();
+          const author = (post.author || '').toLowerCase();
+          return content.includes(lq) || title.includes(lq) || author.includes(lq);
+        });
+      }
+
+      // Filter channels by slug/name match
+      const lq = q.replace(/^#/, '').toLowerCase();
+      const matchedChannels = (channelsResp.channels || []).filter((ch: any) => {
         return (
           ch.slug?.toLowerCase().includes(lq) ||
           ch.display_name?.toLowerCase().includes(lq)
         );
       });
 
-      setResults({ posts: newsResp.posts || [], channels: matchedChannels });
+      setResults({ posts, channels: matchedChannels });
     } catch {
       setResults({ posts: [], channels: [] });
     } finally {
@@ -107,7 +127,10 @@ export const SearchView: Component = () => {
                       {truncateAddress(post.author)}
                     </span>
                     <span class="search-post-time">
-                      {new Date(post.timestamp).toLocaleDateString()}
+                      {new Date(post.timestamp).toLocaleString(undefined, {
+                        month: 'short', day: 'numeric',
+                        hour: '2-digit', minute: '2-digit',
+                      })}
                     </span>
                   </div>
                   <div class="search-post-body">

@@ -11,6 +11,25 @@ import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent } from '../lib/payload';
 
+/** Format message time in user's local timezone. */
+function formatMessageTime(timestamp: string | number): string {
+  return new Date(timestamp).toLocaleTimeString(undefined, {
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+/** Get a date label for message grouping. Returns "Today", "Yesterday", or a localized date. */
+function getDateLabel(timestamp: string | number): string {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diff = today.getTime() - msgDay.getTime();
+  if (diff === 0) return 'Today';
+  if (diff === 86400000) return 'Yesterday';
+  return date.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+}
+
 interface ChatViewProps {
   channelId: number | null;
 }
@@ -79,16 +98,29 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     if (prevChannelId) wsUnsubscribeChannels([prevChannelId]);
   });
 
-  // Deduplicate messages by msg_id
+  // Deduplicate messages by msg_id and sort chronologically
   const allMessages = () => {
     const seen = new Set<string>();
     const combined = [...(messages() || []), ...localMessages()];
-    return combined.filter((msg) => {
+    const deduped = combined.filter((msg) => {
       if (!msg.msg_id || seen.has(msg.msg_id)) return false;
       seen.add(msg.msg_id);
       return true;
     });
+    // Sort oldest first
+    deduped.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    return deduped;
   };
+
+  // Auto-refresh: poll for new messages every 15 seconds as a fallback for WebSocket
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  createEffect(() => {
+    if (pollTimer) clearInterval(pollTimer);
+    if (props.channelId) {
+      pollTimer = setInterval(() => refetch(), 15000);
+    }
+  });
+  onCleanup(() => { if (pollTimer) clearInterval(pollTimer); });
 
   const handleSend = async () => {
     const text = messageInput().trim();
@@ -154,37 +186,49 @@ export const ChatView: Component<ChatViewProps> = (props) => {
             fallback={<div class="chat-empty"><p>{t('chat_no_messages')}</p></div>}
           >
             <For each={allMessages()}>
-              {(msg) => (
-                <div class="message">
-                  {/* Reply preview (if this message is a reply) */}
-                  <Show when={msg.reply_to_preview}>
-                    <div class="reply-preview">
-                      <span class="reply-author">
-                        {msg.reply_to_preview?.author?.slice(0, 8)}...
-                      </span>
-                      <span class="reply-text">{msg.reply_to_preview?.content_preview}</span>
+              {(msg, index) => {
+                const msgs = allMessages();
+                const prevMsg = index() > 0 ? msgs[index() - 1] : null;
+                const currentDate = getDateLabel(msg.timestamp);
+                const prevDate = prevMsg ? getDateLabel(prevMsg.timestamp) : null;
+                const showDateSep = currentDate !== prevDate;
+
+                return (
+                  <>
+                    <Show when={showDateSep}>
+                      <div class="date-separator">
+                        <span class="date-separator-label">{currentDate}</span>
+                      </div>
+                    </Show>
+                    <div class="message">
+                      {/* Reply preview (if this message is a reply) */}
+                      <Show when={msg.reply_to_preview}>
+                        <div class="reply-preview">
+                          <span class="reply-author">
+                            {msg.reply_to_preview?.author?.slice(0, 8)}...
+                          </span>
+                          <span class="reply-text">{msg.reply_to_preview?.content_preview}</span>
+                        </div>
+                      </Show>
+                      <div class="message-header">
+                        <span
+                          class="message-author"
+                          onClick={() => navigate(`/user/${msg.author}`)}
+                        >
+                          {truncateAddress(msg.author)}
+                        </span>
+                        <span class="message-time">
+                          {formatMessageTime(msg.timestamp)}
+                        </span>
+                        <button class="reply-btn" onClick={() => handleReply(msg)} title={t('chat_reply')}>
+                          ↩
+                        </button>
+                      </div>
+                      <div class="message-body"><FormattedText content={getPayloadContent(msg.payload)} /></div>
                     </div>
-                  </Show>
-                  <div class="message-header">
-                    <span
-                      class="message-author"
-                      onClick={() => navigate(`/user/${msg.author}`)}
-                    >
-                      {truncateAddress(msg.author)}
-                    </span>
-                    <span class="message-time">
-                      {new Date(msg.timestamp).toLocaleTimeString(undefined, {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                    <button class="reply-btn" onClick={() => handleReply(msg)} title={t('chat_reply')}>
-                      ↩
-                    </button>
-                  </div>
-                  <div class="message-body"><FormattedText content={getPayloadContent(msg.payload)} /></div>
-                </div>
-              )}
+                  </>
+                );
+              }}
             </For>
           </Show>
         </div>
@@ -225,6 +269,23 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         .chat-view { display: flex; flex-direction: column; height: 100%; }
         .chat-messages { flex: 1; overflow-y: auto; padding: var(--spacing-md); }
         .chat-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-secondary); }
+        .date-separator {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-sm);
+          padding: var(--spacing-sm) 0;
+        }
+        .date-separator::before, .date-separator::after {
+          content: '';
+          flex: 1;
+          border-top: 1px solid var(--color-border);
+        }
+        .date-separator-label {
+          font-size: var(--font-size-xs);
+          color: var(--color-text-secondary);
+          white-space: nowrap;
+          font-weight: 600;
+        }
         .message { padding: var(--spacing-sm) 0; }
         .message-header { display: flex; gap: var(--spacing-sm); align-items: baseline; }
         .message-author {

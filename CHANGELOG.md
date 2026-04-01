@@ -5,6 +5,48 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-04-01
+
+### Added
+
+- **User Profiles in News Feed** — news posts now show username + small avatar
+  instead of raw wallet address; fetched from L2 node with in-memory cache
+- **Clickable Hashtags** — hashtags in message content and news posts are now
+  clickable, navigating to search results filtered by that tag
+- **News Post Tags** — decoded tags from payload shown as clickable badges
+  below post content
+- **Date Separators in Chat** — messages grouped by day with "Today",
+  "Yesterday", or full date labels between message groups
+- **Chat Auto-Refresh** — 15-second polling fallback alongside WebSocket for
+  reliable message delivery
+- **Testnet/Mainnet Indicator** — status bar shows network badge (yellow for
+  testnet, green for mainnet) based on node URL; also shown in node info dialog
+- **Action Error Feedback** — bookmark, repost, and reaction failures now show
+  inline error messages instead of failing silently
+
+### Changed
+
+- **Default View** — app now opens to News feed instead of Chat on first load
+- **Responsive Layout** — on screens wider than 1440px, app caps at 80% width
+  and centers; minimum width of 360px prevents layout breakage on small screens
+- **Text Formatting** — newlines in news posts and chat messages now render as
+  line breaks (were previously collapsed to single line)
+- **Timestamps** — all timestamps (news, chat, search) now use the user's local
+  timezone; chat shows time only, news shows date + time for older posts
+- **Search** — now does client-side text filtering on post content, title, and
+  author; hashtag queries (#tag) use server-side tag filtering for efficiency
+- **Chat Message Ordering** — messages sorted chronologically (oldest first)
+  with deduplication
+- **Reactions** — now initialize from server-provided reaction_counts and show
+  active state when count > 0
+
+### Fixed
+
+- Search returning all posts regardless of query (was passing free text to
+  tag-only API parameter)
+- News post content displayed as single line (newlines not rendered)
+- Chat messages not in chronological order
+
 ## [0.5.0] - 2026-03-31
 
 ### Added

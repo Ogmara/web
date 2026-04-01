@@ -74,6 +74,24 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+/* On large screens, cap at 80% width and center */
+@media (min-width: 1440px) {
+  .app-layout {
+    max-width: 80%;
+    border-left: 1px solid var(--color-border);
+    border-right: 1px solid var(--color-border);
+  }
+}
+
+/* Minimum app width to prevent breaking layout */
+@media (max-width: 480px) {
+  html, body, #root {
+    min-width: 360px;
+  }
 }
 
 .app-body {

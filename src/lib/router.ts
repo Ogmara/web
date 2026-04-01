@@ -57,7 +57,7 @@ function parseHash(hash: string): Route {
     }
   }
 
-  const first = segments[0] || 'chat';
+  const first = segments[0] || 'news';
   const second = segments[1] || '';
 
   switch (first) {

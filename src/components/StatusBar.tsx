@@ -19,6 +19,15 @@ function formatAge(seconds: number): string {
   return t('anchor_ago_days', { count: days });
 }
 
+/** Detect whether the current node URL points to testnet or mainnet. */
+function getNetworkLabel(): { label: string; isTestnet: boolean } {
+  const url = getCurrentNodeUrl().toLowerCase();
+  if (url.includes('testnet') || url.includes('localhost') || url.includes('127.0.0.1')) {
+    return { label: 'Testnet', isTestnet: true };
+  }
+  return { label: 'Mainnet', isTestnet: false };
+}
+
 export const StatusBar: Component = () => {
   const [showInfo, setShowInfo] = createSignal(false);
 
@@ -54,6 +63,9 @@ export const StatusBar: Component = () => {
           <AnchorBadge level={anchorLevel()} showLabel={false} />
         </Show>
       </button>
+      <span class={`network-badge ${getNetworkLabel().isTestnet ? 'testnet' : 'mainnet'}`}>
+        {getNetworkLabel().label}
+      </span>
       <NodeSelector />
       <span class="status-version">v{__APP_VERSION__}</span>
 
@@ -67,6 +79,12 @@ export const StatusBar: Component = () => {
             <div class="node-info-row">
               <span>{t('node_info_status')}</span>
               <span class="node-info-online">Online</span>
+            </div>
+            <div class="node-info-row">
+              <span>Network</span>
+              <span class={`network-badge-inline ${getNetworkLabel().isTestnet ? 'testnet' : 'mainnet'}`}>
+                {getNetworkLabel().label}
+              </span>
             </div>
             <div class="node-info-row">
               <span>{t('node_info_verified')}</span>
@@ -131,6 +149,36 @@ export const StatusBar: Component = () => {
         }
         .status-indicator.connected { background: var(--color-success); }
         .status-indicator.disconnected { background: var(--color-error); }
+        .network-badge {
+          padding: 1px 6px;
+          border-radius: var(--radius-sm);
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+        }
+        .network-badge.testnet {
+          background: var(--color-warning);
+          color: #1a1a1a;
+        }
+        .network-badge.mainnet {
+          background: var(--color-success);
+          color: #1a1a1a;
+        }
+        .network-badge-inline {
+          padding: 2px 8px;
+          border-radius: var(--radius-sm);
+          font-size: var(--font-size-xs);
+          font-weight: 700;
+        }
+        .network-badge-inline.testnet {
+          background: var(--color-warning);
+          color: #1a1a1a;
+        }
+        .network-badge-inline.mainnet {
+          background: var(--color-success);
+          color: #1a1a1a;
+        }
         .status-version { margin-left: auto; opacity: 0.5; }
 
         .node-info-overlay {
