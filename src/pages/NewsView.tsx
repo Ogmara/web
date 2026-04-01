@@ -172,6 +172,7 @@ export const NewsView: Component = () => {
         }
         .action-btn:hover { color: var(--color-accent-primary); }
         .action-btn.bookmarked { color: var(--color-accent-primary); }
+        .action-btn.has-comments { color: var(--color-accent-primary); }
         .tip-btn {
           display: inline-flex;
           align-items: center;
@@ -427,7 +428,7 @@ const NewsCard: Component<{ post: any }> = (props) => {
           {bookmarked() ? '★' : '☆'} {bookmarked() ? t('news_bookmarked') : t('news_bookmark')}
         </button>
         <button
-          class="action-btn"
+          class={`action-btn ${(props.post.comment_count ?? 0) > 0 ? 'has-comments' : ''}`}
           onClick={() => navigate(`/news/${ensureHexMsgId(props.post.msg_id)}`)}
           title={t('news_comments')}
         >
