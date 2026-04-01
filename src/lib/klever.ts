@@ -221,9 +221,12 @@ function numberToHex(n: number): string {
  * @param publicKeyHex - 64-char hex Ed25519 public key
  */
 export async function registerUser(publicKeyHex: string): Promise<string> {
+  // The SC expects a ManagedBuffer containing the 64-char hex string.
+  // The VM's @ encoding decodes hex to raw bytes, so we hex-encode the
+  // ASCII string so it arrives as 64 bytes (the hex chars themselves).
   return invokeContract({
     functionName: 'register',
-    args: [publicKeyHex],
+    args: [stringToHex(publicKeyHex)],
   });
 }
 
