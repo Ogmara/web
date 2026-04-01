@@ -128,7 +128,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       wsSubscribeChannels([id]);
       // Mark channel as read when entering
       if (authStatus() === 'ready') {
-        getClient().markChannelRead(parseInt(id, 10)).catch(() => {});
+        try { getClient().markChannelRead(parseInt(id, 10)).catch(() => {}); }
+        catch { /* SDK method may not exist on older builds */ }
       }
       setTimeout(() => inputRef?.focus(), 50);
     }
