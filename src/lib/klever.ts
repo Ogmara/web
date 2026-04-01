@@ -221,36 +221,49 @@ export async function createChannelOnChain(slug: string, channelType: number): P
 }
 
 /**
- * Send a KLV tip to a message author.
- * Cost: ~3.5 KLV + tip amount.
+ * Send a KLV tip as a direct transfer to the recipient.
+ * Uses type 0 (Transfer) — no smart contract needed.
+ * When the SC is deployed, this can be upgraded to an SC call for on-chain attribution.
  * @param recipient - klv1... address of the recipient
- * @param msgIdHex - 64-char hex message ID
- * @param channelId - Channel ID (0 for news posts)
- * @param note - Optional note (max 128 bytes)
- * @param amountKlv - Tip amount in KLV (will be converted to atomic units)
+ * @param _msgIdHex - unused for now (will be used for SC-based tip attribution)
+ * @param _channelId - unused for now
+ * @param note - Optional note (encoded as memo)
+ * @param amountKlv - Tip amount in KLV
  */
 export async function sendTip(
   recipient: string,
-  msgIdHex: string,
-  channelId: number,
+  _msgIdHex: string,
+  _channelId: number,
   note: string,
   amountKlv: number,
 ): Promise<string> {
+  if (!window.kleverWeb) {
+    throw new Error('Klever Extension not available');
+  }
+  window.kleverWeb.provider = kleverProvider;
+  await window.kleverWeb.initialize();
+
   const amountAtomic = Math.floor(amountKlv * 1_000_000); // KLV has 6 decimal places
-  return invokeContract({
-    functionName: 'tip',
-    args: [
-      // Recipient is a klv1... bech32 address — hex-encode the string for SC input
-      stringToHex(recipient),
-      msgIdHex, // Already hex
-      numberToHex(channelId),
-      stringToHex(note.slice(0, 128)),
-    ],
-    value: amountAtomic,
-  });
-  // Note: The SC decodes the recipient from the hex-encoded bech32 string.
-  // If the SC expects raw public key bytes instead, this needs to be changed
-  // to bech32-decode the address and pass the raw 32-byte pubkey hex.
+
+  // Build a direct KLV transfer (type 0)
+  const txData = note ? [btoa(note.slice(0, 128))] : undefined;
+  try {
+    const unsignedTx = await window.kleverWeb.buildTransaction([{
+      type: 0, // Transfer
+      payload: {
+        receiver: recipient,
+        amount: amountAtomic,
+        kda: 'KLV',
+      },
+    }], txData);
+    const signedTx = await window.kleverWeb.signTransaction(unsignedTx);
+    const result = await window.kleverWeb.broadcastTransaction(signedTx);
+    return result.txHash;
+  } catch (err: any) {
+    const detail = err?.data?.error || err?.message || String(err);
+    console.error('[Klever Tip]', { recipient, amountAtomic, error: detail });
+    throw new Error(detail);
+  }
 }
 
 /**
