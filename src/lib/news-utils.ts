@@ -36,5 +36,4 @@ export const NEWS_REACTIONS = [
   { emoji: '👎', label: 'Dislike' },
   { emoji: '❤️', label: 'Love' },
   { emoji: '🔥', label: 'Fire' },
-  { emoji: '😂', label: 'Funny' },
 ];
