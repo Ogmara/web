@@ -5,7 +5,7 @@
 import { Component, createResource, createSignal, createEffect, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, getSigner } from '../lib/auth';
+import { authStatus, getSigner, l2Address, walletAddress } from '../lib/auth';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent, getPayloadTitle, decodePayload } from '../lib/payload';
@@ -129,9 +129,12 @@ export const NewsView: Component = () => {
         }
         .news-tag:hover { background: var(--color-accent-primary); color: var(--color-text-inverse); }
         .news-action-error {
-          font-size: var(--font-size-xs);
+          font-size: var(--font-size-sm);
           color: var(--color-error);
-          padding: var(--spacing-xs) 0;
+          background: var(--color-bg-tertiary);
+          padding: var(--spacing-sm) var(--spacing-md);
+          border-radius: var(--radius-sm);
+          border-left: 3px solid var(--color-error);
         }
         .news-title { cursor: pointer; }
         .news-title:hover { color: var(--color-accent-primary); }
@@ -305,10 +308,16 @@ const NewsCard: Component<{ post: any }> = (props) => {
   const handleRepost = async () => {
     if (!requireAuthOrRedirect()) return;
     if (reposted()) return;
+    // Prevent self-repost (the L2 node also rejects it, but give clear feedback)
+    const author = props.post.author;
+    if (author === l2Address() || author === walletAddress()) {
+      setActionError(t('news_repost_own'));
+      return;
+    }
     setActionError('');
     try {
       const client = getClient();
-      await client.repostNews(ensureHexMsgId(props.post.msg_id), props.post.author);
+      await client.repostNews(ensureHexMsgId(props.post.msg_id), author);
       setReposted(true);
     } catch (e: any) {
       setActionError(e?.message || 'Repost failed');

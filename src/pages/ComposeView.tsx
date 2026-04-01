@@ -7,11 +7,13 @@ import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, getSigner } from '../lib/auth';
 import { navigate } from '../lib/router';
+import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
 
 export const ComposeView: Component = () => {
   const [title, setTitle] = createSignal('');
   const [content, setContent] = createSignal('');
   const [tags, setTags] = createSignal('');
+  const [attachments, setAttachments] = createSignal<MediaAttachment[]>([]);
   const [submitting, setSubmitting] = createSignal(false);
   const [error, setError] = createSignal('');
 
@@ -33,6 +35,7 @@ export const ComposeView: Component = () => {
       const client = getClient();
       await client.postNews(title().trim(), content().trim(), {
         tags: tagList.length > 0 ? tagList : undefined,
+        attachments: attachments().length > 0 ? attachments() : undefined,
       });
       navigate('/news');
     } catch (e: any) {
@@ -82,6 +85,12 @@ export const ComposeView: Component = () => {
           placeholder={t('compose_tags')}
           value={tags()}
           onInput={(e) => setTags(e.currentTarget.value)}
+        />
+        <MediaUpload
+          attachments={attachments()}
+          onAttach={(att) => setAttachments((prev) => [...prev, att])}
+          onRemove={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+          disabled={submitting()}
         />
         <button
           class="compose-submit"

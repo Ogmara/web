@@ -5,6 +5,20 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-04-01
+
+### Added
+- **Media attachments** — new `MediaUpload` component enables file uploads
+  (images, video, audio, documents up to 10 MB) for both news posts and
+  thread comments. Files are uploaded to IPFS via the L2 node and attached
+  as `Attachment` objects in the envelope payload.
+- Client-side self-repost prevention with clear error message ("You cannot
+  repost your own post") instead of relying on the server-side rejection.
+
+### Changed
+- Action error messages (reactions, reposts, bookmarks) are now displayed
+  as a visible banner with a left border accent instead of tiny text.
+
 ## [0.9.1] - 2026-04-01
 
 ### Changed
