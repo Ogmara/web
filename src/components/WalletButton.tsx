@@ -21,14 +21,14 @@ export const WalletButton: Component = () => {
           navigate('/wallet');
         }
       }}
-      title={authStatus() === 'ready' ? walletAddress()! : t('wallet_connect')}
+      title={authStatus() === 'ready' ? (walletAddress() ?? '') : t('wallet_connect')}
     >
       <Show
         when={authStatus() === 'ready'}
         fallback={<span class="wallet-connect-label">{t('wallet_connect')}</span>}
       >
         <span class="wallet-indicator connected" />
-        <span class="wallet-addr">{truncateAddress(walletAddress()!)}</span>
+        <span class="wallet-addr">{walletAddress() ? truncateAddress(walletAddress()!) : ''}</span>
         <Show when={walletSource() === 'klever-extension'}>
           <span class="wallet-badge">K</span>
         </Show>
