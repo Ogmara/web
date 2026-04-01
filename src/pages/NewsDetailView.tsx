@@ -9,10 +9,11 @@
 import { Component, createResource, createSignal, createEffect, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, getSigner } from '../lib/auth';
+import { authStatus, getSigner, l2Address, walletAddress } from '../lib/auth';
 import { navigate, goBack, routeParam } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent, getPayloadTitle, decodePayload } from '../lib/payload';
+import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
 import { sendTip, kleverAvailable, getExplorerUrl } from '../lib/klever';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
 import { ensureHexMsgId, formatLocalTime, NEWS_REACTIONS, truncateAddress } from '../lib/news-utils';
@@ -116,6 +117,7 @@ export const NewsDetailView: Component = () => {
   const [replyTo, setReplyTo] = createSignal<{ msgId: string; authorName: string } | null>(null);
   const [commentPending, setCommentPending] = createSignal(false);
   const [commentError, setCommentError] = createSignal('');
+  const [commentAttachments, setCommentAttachments] = createSignal<MediaAttachment[]>([]);
   let commentInputRef: HTMLTextAreaElement | undefined;
 
   const requireAuthOrRedirect = (): boolean => {
@@ -177,11 +179,15 @@ export const NewsDetailView: Component = () => {
   const handleRepost = async () => {
     if (!requireAuthOrRedirect()) return;
     if (reposted()) return;
+    const post = postData()?.post;
+    if (!post) return;
+    if (post.author === l2Address() || post.author === walletAddress()) {
+      setActionError(t('news_repost_own'));
+      return;
+    }
     setActionError('');
     try {
       const client = getClient();
-      const post = postData()?.post;
-      if (!post) return;
       await client.repostNews(msgId(), post.author);
       setReposted(true);
     } catch (e: any) {
@@ -227,9 +233,11 @@ export const NewsDetailView: Component = () => {
       const client = getClient();
       await client.postComment(msgId(), text, {
         replyTo: replyTo()?.msgId,
+        attachments: commentAttachments().length > 0 ? commentAttachments() : undefined,
       });
       setCommentText('');
       setReplyTo(null);
+      setCommentAttachments([]);
       refetch();
     } catch (e: any) {
       setCommentError(e?.message || 'Failed to post comment');
@@ -433,6 +441,12 @@ export const NewsDetailView: Component = () => {
                   }
                 }}
               />
+              <MediaUpload
+                attachments={commentAttachments()}
+                onAttach={(att) => setCommentAttachments((prev) => [...prev, att])}
+                onRemove={(i) => setCommentAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+                disabled={commentPending()}
+              />
               <Show when={commentError()}>
                 <div class="comment-error">{commentError()}</div>
               </Show>
@@ -566,9 +580,12 @@ export const NewsDetailView: Component = () => {
         }
         .detail-tag:hover { background: var(--color-accent-primary); color: var(--color-text-inverse); }
         .detail-action-error {
-          font-size: var(--font-size-xs);
+          font-size: var(--font-size-sm);
           color: var(--color-error);
-          padding: var(--spacing-xs) 0;
+          background: var(--color-bg-tertiary);
+          padding: var(--spacing-sm) var(--spacing-md);
+          border-radius: var(--radius-sm);
+          border-left: 3px solid var(--color-error);
         }
 
         /* Actions (shared styles with NewsView) */
