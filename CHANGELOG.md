@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from channel detail response instead.
 - **Missing `nav_back` i18n key** — added "Back" translation across all 7 locales.
 
+## [0.19.11] - 2026-04-02
+
+### Fixed
+- **K5 mobile wallet device registration failing** — `signMessage` was called
+  on `window.kleverWeb` but the Klever wallet provider API exposes it on
+  `window.klever` instead. K5's browser injects `window.klever` for wallet
+  operations. Now tries `window.klever.signMessage()` first, falls back to
+  `window.kleverWeb.signMessage()`. This fixes device→wallet registration,
+  which fixes private channel sync, DM sync, and bookmark sync on K5 mobile.
+- Extension detection now checks both `window.kleverWeb` and `window.klever`.
+- Added device mapping status and L2 address display in Settings for debugging.
+
 ## [0.19.8] - 2026-04-02
 
 ### Fixed
