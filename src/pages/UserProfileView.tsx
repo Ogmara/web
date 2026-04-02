@@ -76,15 +76,28 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
     return pk && pk.length > 0;
   };
 
+  // Moderation trust score
+  const [trustInfo] = createResource(
+    () => props.address,
+    async (address) => {
+      if (!address) return null;
+      try {
+        const client = getClient();
+        return await client.getModerationUser(address);
+      } catch {
+        return null;
+      }
+    },
+  );
+
   const [posts] = createResource(
     () => props.address,
     async (address) => {
       if (!address) return [];
       try {
         const client = getClient();
-        // API returns posts with author = wallet address (resolved by L2 node)
-        const resp = await client.listNews(1, 50);
-        return resp.posts.filter((p: any) => p.author === address);
+        const resp = await client.getUserPosts(address, { page: 1, limit: 50 });
+        return resp.posts;
       } catch {
         return [];
       }
@@ -227,6 +240,20 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
           <span class="stat-label">{t('profile_following')}</span>
         </div>
       </div>
+
+      {/* Trust score */}
+      <Show when={trustInfo()}>
+        <div class="trust-section">
+          <div class="trust-row">
+            <span class="trust-label">{t('moderation_trust_score')}</span>
+            <span class="trust-value">{trustInfo()!.overall_trust_score}</span>
+          </div>
+          <div class="trust-row">
+            <span class="trust-label">{t('moderation_reports_received')}</span>
+            <span class="trust-value">{trustInfo()!.reports_against}</span>
+          </div>
+        </div>
+      </Show>
 
       {/* Own profile: edit / setup */}
       <Show when={isOwnProfile() && authStatus() === 'ready'}>
@@ -515,6 +542,16 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
           gap: var(--spacing-sm);
           margin-top: var(--spacing-xs);
         }
+        .trust-section {
+          display: flex;
+          gap: var(--spacing-lg);
+          padding: var(--spacing-sm) 0;
+          margin-bottom: var(--spacing-md);
+          font-size: var(--font-size-sm);
+        }
+        .trust-row { display: flex; flex-direction: column; align-items: center; }
+        .trust-label { font-size: var(--font-size-xs); color: var(--color-text-secondary); text-transform: uppercase; }
+        .trust-value { font-weight: 700; font-size: var(--font-size-md); }
         .edit-error { font-size: var(--font-size-xs); color: var(--color-error); }
         .edit-success { font-size: var(--font-size-xs); color: var(--color-success); }
       `}</style>

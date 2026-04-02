@@ -19,6 +19,7 @@ import { NewsDetailView } from './pages/NewsDetailView';
 import { ChannelCreateView } from './pages/ChannelCreateView';
 import { ChannelSettingsView } from './pages/ChannelSettingsView';
 import { ChannelJoinView } from './pages/ChannelJoinView';
+import { NotificationsView } from './pages/NotificationsView';
 import { StatusBar } from './components/StatusBar';
 import { route } from './lib/router';
 
@@ -87,6 +88,9 @@ export const App: Component = () => {
             </Match>
             <Match when={route().view === 'channel-join'}>
               <ChannelJoinView channelId={route().params.channelId} />
+            </Match>
+            <Match when={route().view === 'notifications'}>
+              <NotificationsView />
             </Match>
           </Switch>
         </main>

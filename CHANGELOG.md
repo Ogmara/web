@@ -5,6 +5,28 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0] - 2026-04-02
+
+### Added
+
+- **Message rendering**: deleted (placeholder), edited (indicator with tooltip), muted (dimmed, click-to-expand) message states in chat, DMs, and news
+- **Chat actions**: edit (pencil, 30 min window), delete (trash, confirm), reactions (inline emoji picker with 7 emojis) on channel messages
+- **DM actions**: edit, delete, reactions on direct messages with same patterns as chat
+- **News edit/delete**: edit button (own posts, 30 min, registered users), delete with confirmation, ComposeView edit mode via `?edit=<msgId>` route parameter
+- **Notifications page**: new `/notifications` route with type icons (mention, reply, follow, DM), 30s polling, click-to-navigate
+- **Moderation**: report button in chat context menu and news detail, trust score display on user profiles
+- **Settings sync**: encrypted upload/download of user preferences (theme, lang, sounds, compact, fontSize) using HKDF + AES-256-GCM
+- **Data export**: download account data as JSON file from settings
+- **i18n**: 38 new translation keys across all 7 locales (EN, DE, ES, PT, JA, ZH, RU)
+- WebSocket handling for ChatEdit and ChatDelete events with optimistic local updates
+- Reaction badges display below messages showing emoji + count
+
+### Changed
+
+- Chat messages now show hover action buttons (reply, react, edit, delete) instead of just reply
+- Sidebar now includes Notifications nav item for authenticated users
+- ComposeView supports edit mode with pre-filled fields from existing post
+
 ## [0.19.13] - 2026-04-02
 
 ### Removed
