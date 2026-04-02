@@ -400,8 +400,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
               <div class="emoji-container">
                 <button
                   class="emoji-toggle"
-                  onClick={() => setShowEmoji(!showEmoji())}
+                  onClick={() => walletAddress() && setShowEmoji(!showEmoji())}
                   title="Emoji"
+                  disabled={!walletAddress()}
                 >
                   😊
                 </button>

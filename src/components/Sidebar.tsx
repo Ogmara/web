@@ -14,6 +14,33 @@ import { getSetting, setSetting } from '../lib/settings';
 
 export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
   const [channelsOpen, setChannelsOpen] = createSignal(getSetting('channelsExpanded'));
+  const [contextMenu, setContextMenu] = createSignal<{ x: number; y: number; channelId: number } | null>(null);
+
+  const handleContextMenu = (e: MouseEvent, channelId: number) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, channelId });
+  };
+
+  const handleMarkRead = async () => {
+    const ctx = contextMenu();
+    if (!ctx) return;
+    setContextMenu(null);
+    try {
+      await getClient().markChannelRead(ctx.channelId);
+      setUnreadCounts((prev) => {
+        const next = { ...prev };
+        delete next[String(ctx.channelId)];
+        return next;
+      });
+    } catch { /* ignore */ }
+  };
+
+  // Close context menu on any click
+  const closeContextMenu = () => setContextMenu(null);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('click', closeContextMenu);
+    onCleanup(() => document.removeEventListener('click', closeContextMenu));
+  }
   const [unreadCounts, setUnreadCounts] = createSignal<Record<string, number>>({});
 
   /** Navigate and auto-close sidebar on mobile. */
@@ -113,6 +140,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
                 <button
                   class={`sidebar-item ${currentChannelId() === channel.channel_id ? 'active' : ''}`}
                   onClick={() => go(`/chat/${channel.channel_id}`)}
+                  onContextMenu={(e) => handleContextMenu(e, channel.channel_id)}
                 >
                   <span class="channel-hash">#</span>
                   <span class="channel-name">{channel.display_name || channel.slug}</span>
@@ -174,6 +202,18 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         <div class="sidebar-section">
           <button class="sidebar-connect-btn" onClick={() => go('/wallet')}>
             {t('wallet_connect')}
+          </button>
+        </div>
+      </Show>
+
+      {/* Channel context menu */}
+      <Show when={contextMenu()}>
+        <div
+          class="channel-context-menu"
+          style={{ left: `${contextMenu()!.x}px`, top: `${contextMenu()!.y}px` }}
+        >
+          <button class="context-menu-item" onClick={handleMarkRead}>
+            ✓ {t('channel_mark_read')}
           </button>
         </div>
       </Show>
@@ -290,6 +330,27 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           text-align: left;
         }
         .sidebar-connect-btn:hover { background: var(--color-bg-tertiary); }
+        .channel-context-menu {
+          position: fixed;
+          background: var(--color-bg-secondary);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-md);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          z-index: 100;
+          padding: 4px;
+          min-width: 160px;
+        }
+        .context-menu-item {
+          display: block;
+          width: 100%;
+          text-align: left;
+          padding: var(--spacing-sm) var(--spacing-md);
+          font-size: var(--font-size-sm);
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+          color: var(--color-text-primary);
+        }
+        .context-menu-item:hover { background: var(--color-bg-tertiary); }
       `}</style>
     </aside>
   );
