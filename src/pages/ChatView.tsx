@@ -6,7 +6,7 @@
 import { Component, createResource, createSignal, createEffect, createMemo, For, Show, onCleanup } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, getSigner, walletAddress, l2Address } from '../lib/auth';
+import { authStatus, getSigner, walletAddress } from '../lib/auth';
 import { onWsEvent, wsSubscribeChannels, wsUnsubscribeChannels } from '../lib/ws';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
@@ -329,7 +329,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                         <span class="date-separator-label">{currentDate}</span>
                       </div>
                     </Show>
-                    <div class={`message ${msg.author === walletAddress() || msg.author === l2Address() ? 'own' : ''}`} data-msg-id={msgIdToHex(msg.msg_id)}>
+                    <div class={`message ${msg.author === walletAddress() ? 'own' : ''}`} data-msg-id={msgIdToHex(msg.msg_id)}>
                       <Show when={reply}>
                         <div class="reply-preview" onClick={() => scrollToMessage(reply!.msgId)}>
                           <span class="reply-preview-author">{displayName(reply!.author)}</span>
