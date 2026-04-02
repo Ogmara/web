@@ -11,7 +11,8 @@ import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent, getPayloadTitle, getPayloadAttachments, decodePayload } from '../lib/payload';
 import { sendTip, kleverAvailable, getExplorerUrl } from '../lib/klever';
 import { resolveProfile } from '../lib/profile';
-import { ensureHexMsgId, formatLocalTime, NEWS_REACTIONS, truncateAddress } from '../lib/news-utils';
+import { ensureHexMsgId, formatLocalTime, truncateAddress } from '../lib/news-utils';
+import { ReactionPicker } from '../components/ReactionPicker';
 
 export const NewsView: Component = () => {
   const [news] = createResource(async () => {
@@ -175,20 +176,6 @@ export const NewsView: Component = () => {
           padding-top: var(--spacing-sm);
           flex-wrap: wrap;
         }
-        .reaction-btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          padding: 4px 8px;
-          border-radius: var(--radius-sm);
-          font-size: var(--font-size-sm);
-          background: var(--color-bg-tertiary);
-          cursor: pointer;
-          transition: background 0.15s;
-        }
-        .reaction-btn:hover { background: var(--color-accent-primary); color: var(--color-text-inverse); }
-        .reaction-btn.active { background: var(--color-accent-primary); color: var(--color-text-inverse); }
-        .reaction-count { font-size: var(--font-size-xs); font-weight: 600; }
         .action-btn {
           display: inline-flex;
           align-items: center;
@@ -460,20 +447,7 @@ const NewsCard: Component<{ post: any }> = (props) => {
         <div class="news-action-error">{actionError()}</div>
       </Show>
       <div class="news-actions">
-        <For each={NEWS_REACTIONS}>
-          {(r) => (
-            <button
-              class={`reaction-btn ${(reactionCounts()[r.emoji] ?? 0) > 0 ? 'active' : ''}`}
-              onClick={() => handleReaction(r.emoji)}
-              title={r.label}
-            >
-              {r.emoji}
-              <Show when={(reactionCounts()[r.emoji] ?? 0) > 0}>
-                <span class="reaction-count">{reactionCounts()[r.emoji]}</span>
-              </Show>
-            </button>
-          )}
-        </For>
+        <ReactionPicker counts={reactionCounts()} onReact={handleReaction} />
         <button
           class={`action-btn ${reposted() ? 'bookmarked' : ''}`}
           onClick={handleRepost}
