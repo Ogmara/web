@@ -62,6 +62,15 @@ export const NewsView: Component = () => {
           font-weight: 600;
         }
         .news-feed { display: flex; flex-direction: column; gap: var(--spacing-md); }
+        .news-comment-context {
+          padding: var(--spacing-xs) var(--spacing-md);
+          font-size: var(--font-size-xs);
+          color: var(--color-text-secondary);
+          border-bottom: 1px solid var(--color-border);
+          cursor: pointer;
+        }
+        .news-comment-context:hover { color: var(--color-accent-primary); }
+        .news-comment-parent { font-weight: 600; color: var(--color-text-primary); }
         .news-card {
           background: var(--color-bg-secondary);
           border: 1px solid var(--color-border);
@@ -376,9 +385,24 @@ const NewsCard: Component<{ post: any }> = (props) => {
   };
 
   const postTags = () => decoded().tags ?? [];
+  const isComment = () => props.post.msg_type === 'NewsComment';
 
   return (
     <article class="news-card">
+      {/* Comment context banner — links to parent post */}
+      <Show when={isComment() && props.post.parent_post_id}>
+        <div
+          class="news-comment-context"
+          onClick={() => navigate(`/news/${props.post.parent_post_id}`)}
+        >
+          ↩ {t('news_commented_on')}{' '}
+          <Show when={props.post.parent_title} fallback={
+            <span class="news-comment-parent">{truncateAddress(props.post.parent_author ?? '')}</span>
+          }>
+            <span class="news-comment-parent">{props.post.parent_title}</span>
+          </Show>
+        </div>
+      </Show>
       <div class="news-card-header">
         <div class="news-author-row" onClick={() => navigate(`/user/${props.post.author}`)}>
           <Show when={profile().avatar_cid}>
@@ -432,7 +456,7 @@ const NewsCard: Component<{ post: any }> = (props) => {
           </For>
         </div>
       </Show>
-      <Show when={postTags().length > 0}>
+      <Show when={!isComment() && postTags().length > 0}>
         <div class="news-tags">
           <For each={postTags()}>
             {(tag) => (
@@ -446,45 +470,56 @@ const NewsCard: Component<{ post: any }> = (props) => {
       <Show when={actionError()}>
         <div class="news-action-error">{actionError()}</div>
       </Show>
-      <div class="news-actions">
-        <ReactionPicker counts={reactionCounts()} onReact={handleReaction} />
-        <button
-          class={`action-btn ${reposted() ? 'bookmarked' : ''}`}
-          onClick={handleRepost}
-          title={t('news_repost')}
-        >
-          ↗ {t('news_repost')}
-        </button>
-        <button
-          class={`action-btn ${bookmarked() ? 'bookmarked' : ''}`}
-          onClick={handleBookmark}
-          title={bookmarked() ? t('news_bookmarked') : t('news_bookmark')}
-        >
-          {bookmarked() ? '★' : '☆'} {bookmarked() ? t('news_bookmarked') : t('news_bookmark')}
-        </button>
-        <button
-          class={`action-btn ${(props.post.comment_count ?? 0) > 0 ? 'has-comments' : ''}`}
-          onClick={() => navigate(`/news/${ensureHexMsgId(props.post.msg_id)}`)}
-          title={t('news_comments')}
-        >
-          💬 {t('news_comments')}
-          <Show when={(props.post.comment_count ?? 0) > 0}>
-            <span class="reaction-count">{props.post.comment_count}</span>
-          </Show>
-        </button>
-        <button
-          class="tip-btn"
-          onClick={() => {
-            if (!requireAuthOrRedirect()) return;
-            setShowTip(!showTip());
-          }}
-          title={t('chat_tip')}
-        >
-          💰 {t('chat_tip')}
-        </button>
-      </div>
-      <Show when={showTip()}>
-        <div class="tip-dialog">
+      <Show when={isComment()}>
+        <div class="news-actions">
+          <button
+            class="action-btn"
+            onClick={() => navigate(`/news/${props.post.parent_post_id}`)}
+          >
+            💬 {t('news_view_thread')}
+          </button>
+        </div>
+      </Show>
+      <Show when={!isComment()}>
+        <div class="news-actions">
+          <ReactionPicker counts={reactionCounts()} onReact={handleReaction} />
+          <button
+            class={`action-btn ${reposted() ? 'bookmarked' : ''}`}
+            onClick={handleRepost}
+            title={t('news_repost')}
+          >
+            ↗ {t('news_repost')}
+          </button>
+          <button
+            class={`action-btn ${bookmarked() ? 'bookmarked' : ''}`}
+            onClick={handleBookmark}
+            title={bookmarked() ? t('news_bookmarked') : t('news_bookmark')}
+          >
+            {bookmarked() ? '★' : '☆'} {bookmarked() ? t('news_bookmarked') : t('news_bookmark')}
+          </button>
+          <button
+            class={`action-btn ${(props.post.comment_count ?? 0) > 0 ? 'has-comments' : ''}`}
+            onClick={() => navigate(`/news/${ensureHexMsgId(props.post.msg_id)}`)}
+            title={t('news_comments')}
+          >
+            💬 {t('news_comments')}
+            <Show when={(props.post.comment_count ?? 0) > 0}>
+              <span class="reaction-count">{props.post.comment_count}</span>
+            </Show>
+          </button>
+          <button
+            class="tip-btn"
+            onClick={() => {
+              if (!requireAuthOrRedirect()) return;
+              setShowTip(!showTip());
+            }}
+            title={t('chat_tip')}
+          >
+            💰 {t('chat_tip')}
+          </button>
+        </div>
+        <Show when={showTip()}>
+          <div class="tip-dialog">
           <div class="tip-dialog-header">
             <strong>Tip {displayName()}</strong>
             <button class="tip-dialog-close" onClick={() => setShowTip(false)}>✕</button>
@@ -531,7 +566,8 @@ const NewsCard: Component<{ post: any }> = (props) => {
               </div>
             </Show>
           </div>
-        </div>
+          </div>
+        </Show>
       </Show>
     </article>
   );
