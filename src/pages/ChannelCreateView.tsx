@@ -58,7 +58,7 @@ export const ChannelCreateView: Component = () => {
         const txHash = await createChannelOnChain(s, channelType());
 
         setStatus('Waiting for confirmation...');
-        channelId = await getChannelIdFromTx(txHash);
+        channelId = await getChannelIdFromTx(txHash, s);
       }
 
       // Publish L2 ChannelCreate envelope with the assigned channel_id
