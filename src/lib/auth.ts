@@ -185,13 +185,19 @@ async function registerDeviceOnNode(
     walletAddress,
   );
 
-  let sigHex: string;
+  // Try wallet signature first (desktop Klever Extension), then device-signed fallback
+  let sigHex: string | null = null;
   try {
-    // Try wallet signature first (desktop Klever Extension)
-    sigHex = await signMessage(claimString);
+    const result = await signMessage(claimString);
+    if (typeof result === 'string' && /^[0-9a-fA-F]{128}$/.test(result)) {
+      sigHex = result;
+    }
   } catch {
-    // Fallback: device signs the claim itself (K5 mobile browser).
-    // The L2 node accepts device-signed claims if the wallet is a registered user.
+    // signMessage not available or failed — will use device fallback below
+  }
+
+  if (!sigHex) {
+    // Device signs the claim itself (K5 mobile browser fallback)
     const sigBytes = await signer.signKleverMessage(new TextEncoder().encode(claimString));
     sigHex = Array.from(sigBytes, b => b.toString(16).padStart(2, '0')).join('');
   }
