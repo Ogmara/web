@@ -5,6 +5,12 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.2] - 2026-04-02
+
+### Fixed
+
+- Existing users lost all sidebar channels after v0.20.1 upgrade because `ogmara_joined_channels` key didn't exist yet — now auto-seeds from current channel list on first authenticated load
+
 ## [0.20.1] - 2026-04-02
 
 ### Fixed

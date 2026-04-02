@@ -19,6 +19,11 @@ const DEFAULT_CHANNEL_SLUG = 'ogmara';
  * Persist joined channel IDs in localStorage.
  * Channels are added on join/create, removed on leave/delete.
  */
+/** Returns true if the joined channels key has ever been initialized. */
+function hasJoinedChannelsKey(): boolean {
+  return localStorage.getItem('ogmara_joined_channels') !== null;
+}
+
 function getJoinedChannelIds(): Set<number> {
   try {
     const raw = localStorage.getItem('ogmara_joined_channels');
@@ -27,6 +32,12 @@ function getJoinedChannelIds(): Set<number> {
     if (Array.isArray(arr)) return new Set(arr);
   } catch { /* ignore */ }
   return new Set();
+}
+
+/** Seed the joined channels list from an array of channel objects (migration). */
+function seedJoinedChannels(channels: { channel_id: number }[]): void {
+  const ids = channels.map((ch) => ch.channel_id);
+  saveJoinedChannelIds(new Set(ids));
 }
 
 function saveJoinedChannelIds(ids: Set<number>): void {
@@ -101,11 +112,15 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
 
   // Filter: show only joined channels + default "ogmara" channel.
   // Unauthenticated users see only the default channel.
+  // Migration: if the joined-channels key doesn't exist yet (pre-v0.20.1 user),
+  // seed it with all currently visible channels so existing users don't lose their list.
   const channels = createMemo(() => {
     const all = allChannels() || [];
     if (authStatus() !== 'ready') {
-      // Not logged in: only show the default channel
       return all.filter((ch) => ch.slug === DEFAULT_CHANNEL_SLUG);
+    }
+    if (!hasJoinedChannelsKey() && all.length > 0) {
+      seedJoinedChannels(all);
     }
     const joined = getJoinedChannelIds();
     return all.filter((ch) =>
