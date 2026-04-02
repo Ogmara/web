@@ -68,14 +68,16 @@ export async function initAuth(): Promise<void> {
         if (savedSource === 'klever-extension' && savedAddress) {
           setWalletAddress(savedAddress);
           setWalletSource('klever-extension');
-          // Restore wallet address on the signer for identity resolution
           signer.walletAddress = savedAddress;
           setAuthStatus('ready');
+          // Re-register device if cache key was lost (e.g. localStorage cleared)
+          ensureDeviceRegistered(signer, savedAddress, address);
         } else if (savedSource === 'k5-delegation' && savedAddress) {
           setWalletAddress(savedAddress);
           setWalletSource('k5-delegation');
           signer.walletAddress = savedAddress;
           setAuthStatus('ready');
+          ensureDeviceRegistered(signer, savedAddress, address);
         } else if (savedSource === 'builtin' && savedAddress) {
           setWalletAddress(address);
           setWalletSource('builtin');
@@ -122,6 +124,32 @@ export async function generateWallet(): Promise<string> {
   setSetting('walletAddress', address);
   setAuthStatus('ready');
   return address;
+}
+
+/**
+ * Ensure the device key is registered on the L2 node.
+ * Called on session restore — re-registers if the cache key is missing.
+ */
+async function ensureDeviceRegistered(
+  signer: WalletSigner,
+  walletAddr: string,
+  deviceAddr: string,
+): Promise<void> {
+  const cacheKey = `${walletAddr}:${deviceAddr}`;
+  const cached = getSetting('deviceRegistered');
+  if (cached === cacheKey) return; // already registered
+
+  try {
+    await registerDeviceOnNode(signer, walletAddr);
+    setSetting('deviceRegistered', cacheKey);
+    setDeviceMappingFailed(false);
+    setDeviceMappingError(null);
+  } catch (e: any) {
+    const errMsg = e?.message || String(e);
+    console.warn('Device re-registration failed:', errMsg);
+    setDeviceMappingFailed(true);
+    setDeviceMappingError(errMsg);
+  }
 }
 
 /**

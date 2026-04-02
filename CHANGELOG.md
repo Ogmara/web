@@ -5,6 +5,13 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.4] - 2026-04-02
+
+### Fixed
+
+- Device registration now auto-re-registers on session restore when the `deviceRegistered` cache key is missing (fixes "wallet identity required" errors after clearing localStorage)
+- Leave channel error no longer silently swallowed — shows alert with error message
+
 ## [0.20.3] - 2026-04-02
 
 ### Fixed
