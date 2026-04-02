@@ -67,8 +67,9 @@ export const SearchView: Component = () => {
         return content.includes(searchTerm) || title.includes(searchTerm) || author.includes(searchTerm);
       });
 
-      // Filter channels by slug/name match
+      // Filter channels by slug/name match — exclude private channels (type 2)
       const matchedChannels = (channelsResp.channels || []).filter((ch: any) => {
+        if (ch.channel_type === 2 || ch.channel_type === 'Private') return false;
         return (
           ch.slug?.toLowerCase().includes(searchTerm) ||
           ch.display_name?.toLowerCase().includes(searchTerm)
