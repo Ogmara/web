@@ -456,17 +456,13 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         }
         .message.own {
           align-self: flex-end;
-          background: var(--color-accent-primary);
-          color: var(--color-text-inverse);
-          border-color: transparent;
+          background: color-mix(in srgb, var(--color-accent-primary) 35%, var(--color-bg-secondary));
+          color: var(--color-text-primary);
+          border-color: var(--color-accent-primary);
         }
-        .message.own .message-author { color: var(--color-text-inverse); opacity: 0.85; }
-        .message.own .message-time { color: var(--color-text-inverse); opacity: 0.7; }
-        .message.own .msg-verified { background: var(--color-text-inverse); color: var(--color-accent-primary); }
-        .message.own .reply-btn { color: var(--color-text-inverse); }
-        .message.own .reply-preview { background: rgba(255,255,255,0.15); border-left-color: rgba(255,255,255,0.5); }
-        .message.own .reply-preview-author { color: var(--color-text-inverse); }
-        .message.own .reply-preview-text { color: var(--color-text-inverse); opacity: 0.8; }
+        .message.own .message-author { color: var(--color-accent-primary); }
+        .message.own .message-time { color: var(--color-text-secondary); }
+        .message.own .reply-preview { background: rgba(0,0,0,0.15); border-left-color: var(--color-accent-primary); }
         .message-header { display: flex; gap: var(--spacing-sm); align-items: center; }
         .msg-avatar {
           width: 22px;
