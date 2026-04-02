@@ -30,10 +30,14 @@ export const ChannelCreateView: Component = () => {
     try {
       const client = getClient();
 
-      // For MVP: use a simple hash as channel_id since on-chain SC call
-      // requires Klever Extension. The L2 node assigns the ID.
-      // TODO: Integrate with Klever SC for on-chain channel registration.
-      const channelId = Date.now() % 1_000_000_000;
+      // Derive a deterministic channel_id from creator + slug + timestamp.
+      // For public channels, this should come from the on-chain SC.
+      // TODO: Integrate Klever SC call for public channels.
+      const ts = Date.now();
+      const raw = new TextEncoder().encode(walletAddress()! + s + ts);
+      const hashBytes = await crypto.subtle.digest('SHA-256', raw);
+      const view = new DataView(hashBytes);
+      const channelId = Number(view.getBigUint64(0) % BigInt(Number.MAX_SAFE_INTEGER));
 
       await client.createChannel({
         channelId,
