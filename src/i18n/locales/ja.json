@@ -182,6 +182,7 @@
   "channel_type_private": "プライベート",
   "channel_leave": "チャンネルを退出",
   "channel_leave_confirm": "このチャンネルを退出しますか？",
+  "channel_delete_confirm": "このチャンネルを完全に削除しますか？元に戻すことはできません。",
   "channel_settings": "チャンネル設定",
   "channel_save": "保存",
   "channel_created": "チャンネルが作成されました！",

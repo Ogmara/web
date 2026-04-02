@@ -50,6 +50,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
   };
 
   const [channelVersion, setChannelVersion] = createSignal(0);
+  const [hasLoadedOnce, setHasLoadedOnce] = createSignal(false);
   const [channels, { refetch: refetchChannels }] = createResource(
     () => channelVersion(),
     async () => {
@@ -59,6 +60,8 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         return resp.channels;
       } catch {
         return [];
+      } finally {
+        setHasLoadedOnce(true);
       }
     },
   );
@@ -147,7 +150,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           </Show>
         </div>
         <Show when={channelsOpen()}>
-          <Show when={!channels.loading} fallback={<div class="sidebar-loading">{t('loading')}</div>}>
+          <Show when={hasLoadedOnce() || !channels.loading} fallback={<div class="sidebar-loading">{t('loading')}</div>}>
             <For each={channels()}>
               {(channel) => (
                 <button
@@ -253,7 +256,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
               const ctx = contextMenu();
               setContextMenu(null);
               if (!ctx) return;
-              if (!window.confirm('Delete this channel permanently?')) return;
+              if (!window.confirm(t('channel_delete_confirm'))) return;
               try {
                 await getClient().deleteChannel(ctx.channelId);
                 window.dispatchEvent(new Event('ogmara:channels-changed'));

@@ -182,6 +182,7 @@
   "channel_type_private": "Privado",
   "channel_leave": "Sair do canal",
   "channel_leave_confirm": "Tem certeza de que deseja sair deste canal?",
+  "channel_delete_confirm": "Excluir este canal permanentemente? Isso não pode ser desfeito.",
   "channel_settings": "Configurações do canal",
   "channel_save": "Salvar",
   "channel_created": "Canal criado!",
