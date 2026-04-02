@@ -329,7 +329,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                         <span class="date-separator-label">{currentDate}</span>
                       </div>
                     </Show>
-                    <div class="message" data-msg-id={msgIdToHex(msg.msg_id)}>
+                    <div class={`message ${msg.author === walletAddress() || msg.author === l2Address() ? 'own' : ''}`} data-msg-id={msgIdToHex(msg.msg_id)}>
                       <Show when={reply}>
                         <div class="reply-preview" onClick={() => scrollToMessage(reply!.msgId)}>
                           <span class="reply-preview-author">{displayName(reply!.author)}</span>
@@ -427,7 +427,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
       <style>{`
         .chat-view { display: flex; flex-direction: column; height: 100%; }
-        .chat-messages { flex: 1; overflow-y: auto; padding: var(--spacing-md); }
+        .chat-messages { flex: 1; overflow-y: auto; padding: var(--spacing-md); display: flex; flex-direction: column; gap: var(--spacing-sm); }
         .chat-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-secondary); }
         .date-separator {
           display: flex;
@@ -446,7 +446,27 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           white-space: nowrap;
           font-weight: 600;
         }
-        .message { padding: var(--spacing-sm) 0; }
+        .message {
+          padding: var(--spacing-sm) var(--spacing-md);
+          border-radius: var(--radius-lg);
+          max-width: 85%;
+          align-self: flex-start;
+          background: var(--color-bg-secondary);
+          border: 1px solid var(--color-border);
+        }
+        .message.own {
+          align-self: flex-end;
+          background: var(--color-accent-primary);
+          color: var(--color-text-inverse);
+          border-color: transparent;
+        }
+        .message.own .message-author { color: var(--color-text-inverse); opacity: 0.85; }
+        .message.own .message-time { color: var(--color-text-inverse); opacity: 0.7; }
+        .message.own .msg-verified { background: var(--color-text-inverse); color: var(--color-accent-primary); }
+        .message.own .reply-btn { color: var(--color-text-inverse); }
+        .message.own .reply-preview { background: rgba(255,255,255,0.15); border-left-color: rgba(255,255,255,0.5); }
+        .message.own .reply-preview-author { color: var(--color-text-inverse); }
+        .message.own .reply-preview-text { color: var(--color-text-inverse); opacity: 0.8; }
         .message-header { display: flex; gap: var(--spacing-sm); align-items: center; }
         .msg-avatar {
           width: 22px;
