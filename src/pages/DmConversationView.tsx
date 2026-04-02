@@ -10,6 +10,7 @@ import { onWsEvent } from '../lib/ws';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent } from '../lib/payload';
+import { EmojiPicker } from '../components/EmojiPicker';
 import { buildDirectMessage } from '@ogmara/sdk';
 
 interface DmConversationProps {
@@ -20,6 +21,8 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
   const [messageInput, setMessageInput] = createSignal('');
   const [localMessages, setLocalMessages] = createSignal<any[]>([]);
   const [sending, setSending] = createSignal(false);
+  const [showEmoji, setShowEmoji] = createSignal(false);
+  let inputRef: HTMLTextAreaElement | undefined;
 
   const [messages] = createResource(
     () => props.peerAddress,
@@ -90,11 +93,34 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
       });
       await client.sendDm(props.peerAddress, envelope);
       setMessageInput('');
+
+      // Optimistic: show sent message immediately
+      setLocalMessages((prev) => [...prev, {
+        msg_id: `local-${Date.now()}`,
+        author: walletAddress(),
+        timestamp: Date.now(),
+        payload: text,
+      }]);
+
+      setTimeout(() => inputRef?.focus(), 50);
     } catch {
       // Send failed
     } finally {
       setSending(false);
     }
+  };
+
+  const insertEmoji = (emoji: string) => {
+    if (!inputRef) return;
+    const start = inputRef.selectionStart ?? messageInput().length;
+    const end = inputRef.selectionEnd ?? start;
+    const current = messageInput();
+    setMessageInput(current.slice(0, start) + emoji + current.slice(end));
+    setTimeout(() => {
+      inputRef?.focus();
+      const pos = start + emoji.length;
+      inputRef?.setSelectionRange(pos, pos);
+    }, 0);
   };
 
   const truncateAddress = (addr: string) =>
@@ -140,18 +166,49 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
       </div>
 
       <Show when={authStatus() === 'ready'}>
-        <div class="dm-conv-input">
-          <input
-            type="text"
-            placeholder={t('chat_placeholder')}
-            value={messageInput()}
-            onInput={(e) => setMessageInput(e.currentTarget.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-            disabled={sending()}
-          />
-          <button class="dm-send-btn" onClick={handleSend} disabled={sending()}>
-            {t('chat_send')}
-          </button>
+        <div class="dm-conv-input-area">
+          <div class="dm-conv-input">
+            <textarea
+              ref={inputRef}
+              class="dm-textarea"
+              rows={3}
+              placeholder={t('chat_placeholder')}
+              value={messageInput()}
+              onInput={(e) => setMessageInput(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && messageInput().trim()) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              disabled={sending() || !walletAddress()}
+            />
+            <div class="dm-input-actions">
+              <div class="dm-emoji-container">
+                <button
+                  class="dm-emoji-toggle"
+                  onClick={() => walletAddress() && setShowEmoji(!showEmoji())}
+                  title="Emoji"
+                  disabled={!walletAddress()}
+                >
+                  😊
+                </button>
+                <Show when={showEmoji()}>
+                  <EmojiPicker
+                    onSelect={insertEmoji}
+                    onClose={() => setShowEmoji(false)}
+                  />
+                </Show>
+              </div>
+              <button
+                class="dm-send-btn"
+                onClick={handleSend}
+                disabled={sending() || !messageInput().trim() || !walletAddress()}
+              >
+                {t('chat_send')}
+              </button>
+            </div>
+          </div>
         </div>
       </Show>
 
@@ -201,8 +258,8 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
         }
         .dm-msg.own {
           align-self: flex-end;
-          background: var(--color-accent-primary);
-          color: var(--color-text-inverse);
+          background: color-mix(in srgb, var(--color-accent-primary) 35%, var(--color-bg-secondary));
+          border: 1px solid var(--color-accent-primary);
         }
         .dm-msg.peer {
           align-self: flex-start;
@@ -213,18 +270,21 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
         .dm-msg-time {
           display: block;
           font-size: var(--font-size-xs);
-          opacity: 0.7;
+          color: var(--color-text-secondary);
           text-align: right;
           margin-top: var(--spacing-xs);
         }
+        .dm-conv-input-area {
+          border-top: 1px solid var(--color-border);
+          padding: var(--spacing-md);
+        }
         .dm-conv-input {
           display: flex;
+          flex-direction: column;
           gap: var(--spacing-sm);
-          padding: var(--spacing-md);
-          border-top: 1px solid var(--color-border);
         }
-        .dm-conv-input input {
-          flex: 1;
+        .dm-textarea {
+          width: 100%;
           padding: var(--spacing-sm) var(--spacing-md);
           border: 1px solid var(--color-border);
           border-radius: var(--radius-md);
@@ -232,8 +292,24 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
           color: var(--color-text-primary);
           font-family: inherit;
           font-size: var(--font-size-md);
+          resize: none;
+          line-height: 1.4;
         }
-        .dm-conv-input input:focus { outline: none; border-color: var(--color-accent-primary); }
+        .dm-textarea:focus { outline: none; border-color: var(--color-accent-primary); }
+        .dm-input-actions {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .dm-emoji-container { position: relative; }
+        .dm-emoji-toggle {
+          font-size: var(--font-size-lg);
+          padding: var(--spacing-xs);
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+        }
+        .dm-emoji-toggle:hover { background: var(--color-bg-tertiary); }
+        .dm-emoji-toggle:disabled { opacity: 0.4; cursor: default; }
         .dm-send-btn {
           padding: var(--spacing-sm) var(--spacing-lg);
           background: var(--color-accent-primary);
@@ -242,6 +318,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
           font-weight: 600;
           font-size: var(--font-size-sm);
         }
+        .dm-send-btn:disabled { opacity: 0.5; cursor: default; }
       `}</style>
     </div>
   );
