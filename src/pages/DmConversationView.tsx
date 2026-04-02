@@ -166,8 +166,8 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
       </div>
 
       <Show when={authStatus() === 'ready'}>
-        <div class="dm-conv-input-area">
-          <div class="dm-conv-input">
+        <div class="dm-input-area">
+          <div class="dm-input-row">
             <textarea
               ref={inputRef}
               class="dm-textarea"
@@ -274,17 +274,17 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
           text-align: right;
           margin-top: var(--spacing-xs);
         }
-        .dm-conv-input-area {
+        .dm-input-area {
           border-top: 1px solid var(--color-border);
-          padding: var(--spacing-md);
+          padding: var(--spacing-sm) var(--spacing-md);
         }
-        .dm-conv-input {
+        .dm-input-row {
           display: flex;
-          flex-direction: column;
           gap: var(--spacing-sm);
+          align-items: flex-end;
         }
         .dm-textarea {
-          width: 100%;
+          flex: 1;
           padding: var(--spacing-sm) var(--spacing-md);
           border: 1px solid var(--color-border);
           border-radius: var(--radius-md);
@@ -296,9 +296,11 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
           line-height: 1.4;
         }
         .dm-textarea:focus { outline: none; border-color: var(--color-accent-primary); }
+        .dm-textarea:disabled { opacity: 0.6; }
         .dm-input-actions {
           display: flex;
-          justify-content: space-between;
+          flex-direction: column;
+          gap: var(--spacing-xs);
           align-items: center;
         }
         .dm-emoji-container { position: relative; }
