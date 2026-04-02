@@ -156,14 +156,32 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
 
   const truncAddr = (addr: string) => `${addr.slice(0, 8)}...${addr.slice(-4)}`;
 
+  const pageTitle = () => isMod() ? t('channel_settings') : t('channel_details');
+
   return (
     <div class="ch-settings">
       <div class="ch-settings-header">
         <button class="ch-back" onClick={() => navigate(`/chat/${props.channelId}`)}>
           ← {t('nav_back')}
         </button>
-        <h2>{t('channel_settings')}</h2>
+        <h2>{pageTitle()}</h2>
       </div>
+
+      {/* Channel info (visible to everyone) */}
+      <Show when={detail()?.channel}>
+        <div class="ch-section">
+          <div class="ch-detail-name">
+            # {detail()!.channel.display_name || detail()!.channel.slug}
+          </div>
+          <Show when={detail()!.channel.description}>
+            <div class="ch-detail-desc">{detail()!.channel.description}</div>
+          </Show>
+          <div class="ch-detail-meta">
+            <span>{t('channel_owner')}: <span class="ch-addr" onClick={() => navigate(`/user/${detail()!.channel.creator}`)}>{detail()!.channel.creator.slice(0, 12)}...</span></span>
+            <span>{t('channel_members')}: {detail()!.member_count ?? 0}</span>
+          </div>
+        </div>
+      </Show>
 
       {/* Invite link */}
       <div class="ch-section">
@@ -172,7 +190,7 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
         </button>
       </div>
 
-      {/* Edit info */}
+      {/* Edit info (only for moderators/owner) */}
       <Show when={isMod()}>
         <div class="ch-section">
           <h3>{t('channel_name_label')}</h3>
@@ -301,6 +319,14 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
           margin-bottom: var(--spacing-md);
         }
         .ch-section h3 { font-size: var(--font-size-md); margin-bottom: var(--spacing-sm); }
+        .ch-detail-name { font-size: var(--font-size-xl); font-weight: 700; margin-bottom: var(--spacing-sm); }
+        .ch-detail-desc { font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.5; margin-bottom: var(--spacing-md); }
+        .ch-detail-meta {
+          display: flex;
+          gap: var(--spacing-lg);
+          font-size: var(--font-size-xs);
+          color: var(--color-text-secondary);
+        }
         .ch-input, .ch-textarea {
           width: 100%;
           padding: var(--spacing-sm) var(--spacing-md);

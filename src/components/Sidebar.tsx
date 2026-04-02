@@ -5,12 +5,45 @@
  * Messages, Bookmarks, Search, Settings.
  */
 
-import { Component, createResource, createSignal, createEffect, For, Show, onCleanup } from 'solid-js';
+import { Component, createResource, createSignal, createEffect, createMemo, For, Show, onCleanup } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, walletAddress } from '../lib/auth';
 import { navigate, route } from '../lib/router';
 import { getSetting, setSetting } from '../lib/settings';
+
+/** Default channel slug shown to all users (even unauthenticated). */
+const DEFAULT_CHANNEL_SLUG = 'ogmara';
+
+/**
+ * Persist joined channel IDs in localStorage.
+ * Channels are added on join/create, removed on leave/delete.
+ */
+function getJoinedChannelIds(): Set<number> {
+  try {
+    const raw = localStorage.getItem('ogmara_joined_channels');
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) return new Set(arr);
+  } catch { /* ignore */ }
+  return new Set();
+}
+
+function saveJoinedChannelIds(ids: Set<number>): void {
+  localStorage.setItem('ogmara_joined_channels', JSON.stringify([...ids]));
+}
+
+export function addJoinedChannel(channelId: number): void {
+  const ids = getJoinedChannelIds();
+  ids.add(channelId);
+  saveJoinedChannelIds(ids);
+}
+
+export function removeJoinedChannel(channelId: number): void {
+  const ids = getJoinedChannelIds();
+  ids.delete(channelId);
+  saveJoinedChannelIds(ids);
+}
 
 export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
   const [channelsOpen, setChannelsOpen] = createSignal(getSetting('channelsExpanded'));
@@ -51,7 +84,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
 
   const [channelVersion, setChannelVersion] = createSignal(0);
   const [hasLoadedOnce, setHasLoadedOnce] = createSignal(false);
-  const [channels, { refetch: refetchChannels }] = createResource(
+  const [allChannels, { refetch: refetchChannels }] = createResource(
     () => channelVersion(),
     async () => {
       try {
@@ -65,6 +98,20 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
       }
     },
   );
+
+  // Filter: show only joined channels + default "ogmara" channel.
+  // Unauthenticated users see only the default channel.
+  const channels = createMemo(() => {
+    const all = allChannels() || [];
+    if (authStatus() !== 'ready') {
+      // Not logged in: only show the default channel
+      return all.filter((ch) => ch.slug === DEFAULT_CHANNEL_SLUG);
+    }
+    const joined = getJoinedChannelIds();
+    return all.filter((ch) =>
+      ch.slug === DEFAULT_CHANNEL_SLUG || joined.has(ch.channel_id),
+    );
+  });
 
   // Listen for channel list changes (create/leave/delete)
   if (typeof window !== 'undefined') {
@@ -150,7 +197,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           </Show>
         </div>
         <Show when={channelsOpen()}>
-          <Show when={hasLoadedOnce() || !channels.loading} fallback={<div class="sidebar-loading">{t('loading')}</div>}>
+          <Show when={hasLoadedOnce() || !allChannels.loading} fallback={<div class="sidebar-loading">{t('loading')}</div>}>
             <For each={channels()}>
               {(channel) => (
                 <button
@@ -257,6 +304,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
             if (!window.confirm(t('channel_leave_confirm'))) return;
             try {
               await getClient().leaveChannel(ctx.channelId);
+              removeJoinedChannel(ctx.channelId);
               window.dispatchEvent(new Event('ogmara:channels-changed'));
               navigate('/news');
             } catch { /* ignore */ }
@@ -271,13 +319,14 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
               if (!window.confirm(t('channel_delete_confirm'))) return;
               try {
                 await getClient().deleteChannel(ctx.channelId);
+                removeJoinedChannel(ctx.channelId);
                 window.dispatchEvent(new Event('ogmara:channels-changed'));
                 navigate('/news');
               } catch (e: any) {
                 alert(e?.message || 'Failed to delete channel');
               }
             }}>
-              🗑 Delete channel
+              🗑 {t('channel_delete')}
             </button>
           </Show>
         </div>

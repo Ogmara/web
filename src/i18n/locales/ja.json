@@ -252,5 +252,7 @@
   "settings_export_downloading": "エクスポートを準備中...",
   "moderation_trust_score": "信頼スコア",
   "moderation_reports_received": "報告数",
-  "moderation_account_age": "アカウント年齢"
+  "moderation_account_age": "アカウント年齢",
+  "channel_details": "チャンネル詳細",
+  "channel_delete": "チャンネルを削除"
 }

@@ -252,5 +252,7 @@
   "settings_export_downloading": "Подготовка экспорта...",
   "moderation_trust_score": "Рейтинг доверия",
   "moderation_reports_received": "Жалобы",
-  "moderation_account_age": "Возраст аккаунта"
+  "moderation_account_age": "Возраст аккаунта",
+  "channel_details": "О канале",
+  "channel_delete": "Удалить канал"
 }

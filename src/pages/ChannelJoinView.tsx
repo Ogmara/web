@@ -11,6 +11,7 @@ import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, walletAddress } from '../lib/auth';
 import { navigate } from '../lib/router';
+import { addJoinedChannel } from '../components/Sidebar';
 
 interface ChannelJoinProps {
   channelId: string;
@@ -46,6 +47,8 @@ export const ChannelJoinView: Component<ChannelJoinProps> = (props) => {
     try {
       const client = getClient();
       await client.joinChannel(channelIdNum());
+      addJoinedChannel(channelIdNum());
+      window.dispatchEvent(new Event('ogmara:channels-changed'));
       navigate(`/chat/${channelIdNum()}`);
     } catch (e: any) {
       setError(e?.message || 'Failed to join');
