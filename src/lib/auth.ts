@@ -181,11 +181,19 @@ async function registerDeviceOnNode(
     walletAddress,
   );
 
-  // Extension signs the claim using Klever message signing format
-  const walletSigHex = await signMessage(claimString);
+  let sigHex: string;
+  try {
+    // Try wallet signature first (desktop Klever Extension)
+    sigHex = await signMessage(claimString);
+  } catch {
+    // Fallback: device signs the claim itself (K5 mobile browser).
+    // The L2 node accepts device-signed claims if the wallet is a registered user.
+    const sigBytes = await signer.signKleverMessage(new TextEncoder().encode(claimString));
+    sigHex = Array.from(sigBytes, b => b.toString(16).padStart(2, '0')).join('');
+  }
 
   // Submit to the L2 node
-  await getClient().registerDevice(walletSigHex, walletAddress, timestamp);
+  await getClient().registerDevice(sigHex, walletAddress, timestamp);
 }
 
 /**
