@@ -5,6 +5,13 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.13] - 2026-04-02
+
+### Removed
+- **Debug diagnostics from Settings** — removed L2 device address display,
+  device mapping failure warning, and error detail text that were added during
+  K5 device mapping debugging. Cleaned up unused imports and CSS classes.
+
 ## [0.19.9] - 2026-04-02
 
 ### Fixed
