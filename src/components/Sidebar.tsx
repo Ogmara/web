@@ -49,15 +49,24 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     props.onNavigate?.();
   };
 
-  const [channels] = createResource(async () => {
-    try {
-      const client = getClient();
-      const resp = await client.listChannels(1, 50);
-      return resp.channels;
-    } catch {
-      return [];
-    }
-  });
+  const [channelVersion, setChannelVersion] = createSignal(0);
+  const [channels, { refetch: refetchChannels }] = createResource(
+    () => channelVersion(),
+    async () => {
+      try {
+        const client = getClient();
+        const resp = await client.listChannels(1, 50);
+        return resp.channels;
+      } catch {
+        return [];
+      }
+    },
+  );
+
+  // Listen for channel list changes (create/leave/delete)
+  if (typeof window !== 'undefined') {
+    window.addEventListener('ogmara:channels-changed', () => setChannelVersion(v => v + 1));
+  }
 
   // Poll unread counts every 30 seconds when authenticated
   let unreadTimer: ReturnType<typeof setInterval> | null = null;
@@ -229,11 +238,27 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
             if (!window.confirm(t('channel_leave_confirm'))) return;
             try {
               await getClient().leaveChannel(ctx.channelId);
-              // Refetch channels by navigating away
+              window.dispatchEvent(new Event('ogmara:channels-changed'));
               navigate('/news');
             } catch { /* ignore */ }
           }}>
             ✕ {t('channel_leave')}
+          </button>
+          <button class="context-menu-item context-menu-danger" onClick={async () => {
+            const ctx = contextMenu();
+            setContextMenu(null);
+            if (!ctx) return;
+            if (!window.confirm('Delete this channel permanently?')) return;
+            try {
+              await getClient().deleteChannel(ctx.channelId);
+              window.dispatchEvent(new Event('ogmara:channels-changed'));
+              navigate('/news');
+            } catch (e: any) {
+              // Will fail with 403 if not the creator — that's expected
+              alert(e?.message || 'Only the channel creator can delete');
+            }
+          }}>
+            🗑 Delete channel
           </button>
         </div>
       </Show>
