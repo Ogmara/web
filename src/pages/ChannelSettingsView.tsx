@@ -65,7 +65,7 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
     return m?.role ?? 'member';
   };
 
-  const isOwner = () => myRole() === 'creator';
+  const isOwner = () => detail()?.channel?.creator === walletAddress();
   const isMod = () => myRole() === 'moderator' || isOwner();
 
   // --- Edit info ---
