@@ -5,6 +5,14 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.3] - 2026-04-02
+
+### Fixed
+
+- Private channels now auto-added to sidebar when L2 API returns them (the API only returns private channels the user is a member of)
+- Joined channel tracking is now a reactive SolidJS signal — leave/join immediately updates the sidebar without needing a full refetch
+- Search results no longer show private channels (filtered by channel_type)
+
 ## [0.20.2] - 2026-04-02
 
 ### Fixed

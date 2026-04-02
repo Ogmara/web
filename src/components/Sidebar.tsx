@@ -15,16 +15,10 @@ import { getSetting, setSetting } from '../lib/settings';
 /** Default channel slug shown to all users (even unauthenticated). */
 const DEFAULT_CHANNEL_SLUG = 'ogmara';
 
-/**
- * Persist joined channel IDs in localStorage.
- * Channels are added on join/create, removed on leave/delete.
- */
-/** Returns true if the joined channels key has ever been initialized. */
-function hasJoinedChannelsKey(): boolean {
-  return localStorage.getItem('ogmara_joined_channels') !== null;
-}
+// --- Reactive joined-channel tracking ---
+// SolidJS signal backed by localStorage so the sidebar memo reacts to changes.
 
-function getJoinedChannelIds(): Set<number> {
+function loadJoinedFromStorage(): Set<number> {
   try {
     const raw = localStorage.getItem('ogmara_joined_channels');
     if (!raw) return new Set();
@@ -34,26 +28,55 @@ function getJoinedChannelIds(): Set<number> {
   return new Set();
 }
 
-/** Seed the joined channels list from an array of channel objects (migration). */
-function seedJoinedChannels(channels: { channel_id: number }[]): void {
-  const ids = channels.map((ch) => ch.channel_id);
-  saveJoinedChannelIds(new Set(ids));
+function storageInitialized(): boolean {
+  return localStorage.getItem('ogmara_joined_channels') !== null;
 }
 
-function saveJoinedChannelIds(ids: Set<number>): void {
+const [joinedSignal, setJoinedSignal] = createSignal<Set<number>>(loadJoinedFromStorage());
+
+function persistJoined(ids: Set<number>): void {
   localStorage.setItem('ogmara_joined_channels', JSON.stringify([...ids]));
+  setJoinedSignal(new Set(ids));
 }
 
 export function addJoinedChannel(channelId: number): void {
-  const ids = getJoinedChannelIds();
+  const ids = new Set(joinedSignal());
   ids.add(channelId);
-  saveJoinedChannelIds(ids);
+  persistJoined(ids);
 }
 
 export function removeJoinedChannel(channelId: number): void {
-  const ids = getJoinedChannelIds();
+  const ids = new Set(joinedSignal());
   ids.delete(channelId);
-  saveJoinedChannelIds(ids);
+  persistJoined(ids);
+}
+
+/**
+ * Sync the joined set with the API channel list.
+ * - Private channels in the list → user IS a member (L2 node pre-filters) → auto-add
+ * - First-time migration: seed with all visible channels
+ */
+function syncJoinedWithApi(apiChannels: { channel_id: number; channel_type: number; slug: string }[]): void {
+  const current = new Set(joinedSignal());
+  let changed = false;
+
+  if (!storageInitialized() && apiChannels.length > 0) {
+    // First-time migration: seed with all visible channels
+    for (const ch of apiChannels) {
+      current.add(ch.channel_id);
+    }
+    changed = true;
+  } else {
+    // Auto-add private channels the API returns (user must be a member)
+    for (const ch of apiChannels) {
+      if (ch.channel_type === 2 && !current.has(ch.channel_id)) {
+        current.add(ch.channel_id);
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) persistJoined(current);
 }
 
 export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
@@ -110,19 +133,23 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     },
   );
 
+  // Sync joined set with API data whenever the channel list refreshes.
+  // Handles first-time migration and auto-adds private channels.
+  createEffect(() => {
+    const all = allChannels();
+    if (authStatus() === 'ready' && all && all.length > 0) {
+      syncJoinedWithApi(all);
+    }
+  });
+
   // Filter: show only joined channels + default "ogmara" channel.
   // Unauthenticated users see only the default channel.
-  // Migration: if the joined-channels key doesn't exist yet (pre-v0.20.1 user),
-  // seed it with all currently visible channels so existing users don't lose their list.
   const channels = createMemo(() => {
     const all = allChannels() || [];
     if (authStatus() !== 'ready') {
       return all.filter((ch) => ch.slug === DEFAULT_CHANNEL_SLUG);
     }
-    if (!hasJoinedChannelsKey() && all.length > 0) {
-      seedJoinedChannels(all);
-    }
-    const joined = getJoinedChannelIds();
+    const joined = joinedSignal(); // reactive — memo re-runs when join/leave changes it
     return all.filter((ch) =>
       ch.slug === DEFAULT_CHANNEL_SLUG || joined.has(ch.channel_id),
     );
