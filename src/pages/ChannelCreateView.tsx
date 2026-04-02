@@ -1,7 +1,8 @@
 /**
  * ChannelCreateView — create a new channel (public or private).
  *
- * Flow: fill form → on-chain SC call (gets channel_id) → L2 envelope → navigate to channel.
+ * Public/ReadOnly: on-chain SC call → get channel_id from event → L2 envelope.
+ * Private: L2-only, channel_id = Keccak-256(creator + slug + timestamp) truncated to u64.
  */
 
 import { Component, createSignal, Show } from 'solid-js';
@@ -9,6 +10,8 @@ import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, walletAddress, getSigner } from '../lib/auth';
 import { navigate, goBack } from '../lib/router';
+import { kleverAvailable, createChannelOnChain, getChannelIdFromTx } from '../lib/klever';
+import { keccak_256 } from '@noble/hashes/sha3';
 
 export const ChannelCreateView: Component = () => {
   const [slug, setSlug] = createSignal('');
@@ -19,26 +22,47 @@ export const ChannelCreateView: Component = () => {
   const [submitting, setSubmitting] = createSignal(false);
   const [error, setError] = createSignal('');
 
+  const [status, setStatus] = createSignal('');
+
   const handleCreate = async () => {
     const s = slug().trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
     if (!s) { setError('Slug is required'); return; }
     if (!getSigner() || !walletAddress()) { setError(t('auth_required')); return; }
+
+    const isPrivate = channelType() === 2;
+
+    // Public/ReadOnly channels require Klever Extension for SC call
+    if (!isPrivate && !kleverAvailable()) {
+      setError('Klever Extension required for public channel creation');
+      return;
+    }
 
     setSubmitting(true);
     setError('');
 
     try {
       const client = getClient();
+      let channelId: number;
 
-      // Derive a deterministic channel_id from creator + slug + timestamp.
-      // For public channels, this should come from the on-chain SC.
-      // TODO: Integrate Klever SC call for public channels.
-      const ts = Date.now();
-      const raw = new TextEncoder().encode(walletAddress()! + s + ts);
-      const hashBytes = await crypto.subtle.digest('SHA-256', raw);
-      const view = new DataView(hashBytes);
-      const channelId = Number(view.getBigUint64(0) % BigInt(Number.MAX_SAFE_INTEGER));
+      if (isPrivate) {
+        // Private channels: L2-only, no SC call.
+        // channel_id = Keccak-256(creator + slug + timestamp) truncated to u64 (per protocol spec)
+        setStatus('Creating private channel...');
+        const ts = Date.now();
+        const hash = keccak_256(new TextEncoder().encode(walletAddress()! + s + ts));
+        const view = new DataView(hash.buffer);
+        channelId = Number(view.getBigUint64(0) % BigInt(Number.MAX_SAFE_INTEGER));
+      } else {
+        // Public/ReadOnly channels: on-chain SC call → extract channel_id from event
+        setStatus('Submitting on-chain transaction...');
+        const txHash = await createChannelOnChain(s, channelType());
 
+        setStatus('Waiting for confirmation...');
+        channelId = await getChannelIdFromTx(txHash);
+      }
+
+      // Publish L2 ChannelCreate envelope with the assigned channel_id
+      setStatus('Publishing channel to L2 network...');
       await client.createChannel({
         channelId,
         slug: s,
@@ -53,6 +77,7 @@ export const ChannelCreateView: Component = () => {
       setError(e?.message || 'Failed to create channel');
     } finally {
       setSubmitting(false);
+      setStatus('');
     }
   };
 
@@ -113,16 +138,27 @@ export const ChannelCreateView: Component = () => {
             <option value={2}>{t('channel_type_private')}</option>
           </select>
 
+          <Show when={channelType() !== 2 && !kleverAvailable()}>
+            <div class="create-warning">
+              Klever Extension required for public/read-only channels.
+              Private channels can be created without it.
+            </div>
+          </Show>
+
           <Show when={error()}>
             <div class="create-error">{error()}</div>
+          </Show>
+
+          <Show when={status()}>
+            <div class="create-status">{status()}</div>
           </Show>
 
           <button
             class="create-submit"
             onClick={handleCreate}
-            disabled={submitting() || !slug().trim()}
+            disabled={submitting() || !slug().trim() || (channelType() !== 2 && !kleverAvailable())}
           >
-            {submitting() ? t('loading') : t('channel_create')}
+            {submitting() ? status() || t('loading') : t('channel_create')}
           </button>
         </div>
       </Show>
@@ -177,6 +213,18 @@ export const ChannelCreateView: Component = () => {
           font-size: var(--font-size-md);
         }
         .create-submit:disabled { opacity: 0.5; cursor: default; }
+        .create-warning {
+          padding: var(--spacing-sm);
+          background: rgba(255,165,0,0.1);
+          border: 1px solid rgba(255,165,0,0.3);
+          border-radius: var(--radius-sm);
+          color: #fa0;
+          font-size: var(--font-size-sm);
+        }
+        .create-status {
+          font-size: var(--font-size-sm);
+          color: var(--color-accent-primary);
+        }
       `}</style>
     </div>
   );

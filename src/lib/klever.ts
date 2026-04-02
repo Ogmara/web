@@ -272,6 +272,76 @@ export async function createChannelOnChain(slug: string, channelType: number): P
 }
 
 /**
+ * Poll Klever API for a transaction result and extract the channel_id
+ * from the channelCreated event.
+ *
+ * Klever API returns events in `receipts` array. The channelCreated event
+ * has the channel_id as the first indexed topic (u64).
+ */
+export async function getChannelIdFromTx(txHash: string): Promise<number> {
+  const apiBase = kleverProvider.api;
+  const maxAttempts = 15;
+  const delay = 2000;
+
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const resp = await fetch(`${apiBase}/v1.0/transaction/${txHash}`);
+      if (!resp.ok) { await sleep(delay); continue; }
+      const data = await resp.json();
+      const tx = data?.data?.transaction;
+
+      // Check if TX is processed
+      if (!tx || tx.status !== 'success') {
+        if (tx?.status === 'fail') {
+          throw new Error(tx.resultMessage || 'Transaction failed');
+        }
+        await sleep(delay);
+        continue;
+      }
+
+      // Find channelCreated event in receipts
+      const receipts = tx.receipts || [];
+      for (const receipt of receipts) {
+        if (receipt.type === 'channelCreated' || receipt.typeStr === 'channelCreated') {
+          // channel_id is in the first indexed topic
+          const channelId = receipt.topics?.[0];
+          if (channelId !== undefined) {
+            return typeof channelId === 'number' ? channelId : parseInt(channelId, 10);
+          }
+        }
+      }
+
+      // Fallback: check contract output for SC events
+      const events = tx.contract?.[0]?.parameter?.events || tx.events || [];
+      for (const event of events) {
+        if (event.identifier === 'channelCreated') {
+          const topics = event.topics || [];
+          if (topics.length > 0) {
+            // Topics are base64-encoded, first is channel_id (u64 big-endian)
+            const bytes = Uint8Array.from(atob(topics[0]), c => c.charCodeAt(0));
+            const view = new DataView(bytes.buffer);
+            return bytes.length === 8
+              ? Number(view.getBigUint64(0))
+              : parseInt(topics[0], 10);
+          }
+        }
+      }
+
+      // TX succeeded but no event found — the SC may encode differently
+      throw new Error('channelCreated event not found in transaction');
+    } catch (e: any) {
+      if (e.message?.includes('event not found') || e.message?.includes('failed')) throw e;
+      await sleep(delay);
+    }
+  }
+  throw new Error('Timeout waiting for transaction confirmation');
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+/**
  * Send a KLV tip as a direct transfer to the recipient.
  * Uses type 0 (Transfer) — no smart contract needed.
  * When the SC is deployed, this can be upgraded to an SC call for on-chain attribution.
