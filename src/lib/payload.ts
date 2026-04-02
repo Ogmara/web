@@ -38,8 +38,17 @@ export function decodePayload(payload: number[] | Uint8Array): DecodedPayload {
   try {
     const bytes = payload instanceof Uint8Array ? payload : new Uint8Array(payload);
     const decoded = decode(bytes) as Record<string, unknown>;
+    // DM payloads store content as Vec<u8> (bytes), not String.
+    // After MessagePack decode, this arrives as Uint8Array.
+    let content: string;
+    if (decoded.content instanceof Uint8Array) {
+      content = new TextDecoder().decode(decoded.content);
+    } else {
+      content = (decoded.content as string) ?? '';
+    }
+
     return {
-      content: (decoded.content as string) ?? '',
+      content,
       title: decoded.title as string | undefined,
       channel_id: decoded.channel_id as number | undefined,
       reply_to: decoded.reply_to instanceof Uint8Array
