@@ -6,7 +6,7 @@
 import { Component, createResource, createSignal, createEffect, createMemo, For, Show, onCleanup } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, getSigner, walletAddress } from '../lib/auth';
+import { authStatus, getSigner, walletAddress, l2Address } from '../lib/auth';
 import { onWsEvent, wsSubscribeChannels, wsUnsubscribeChannels } from '../lib/ws';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
