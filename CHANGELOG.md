@@ -5,6 +5,14 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.1] - 2026-04-02
+
+### Changed
+- **Compact reaction picker** — reactions no longer show all 4 buttons by default.
+  Shows a single greyed-out thumbs-up; clicking opens a popup to select a reaction.
+  Only reactions with counts > 0 are displayed. Saves row space on news posts.
+  Extracted shared `ReactionPicker` component used in both feed and detail views.
+
 ## [0.18.0] - 2026-04-01
 
 ### Fixed
