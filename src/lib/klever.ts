@@ -272,17 +272,19 @@ export async function createChannelOnChain(slug: string, channelType: number): P
 }
 
 /**
- * Poll Klever API for a transaction result and extract the channel_id
- * from the channelCreated event.
+ * Wait for a createChannel TX to confirm, then query the SC view function
+ * `getChannelBySlug` to retrieve the assigned channel_id.
  *
- * Klever API returns events in `receipts` array. The channelCreated event
- * has the channel_id as the first indexed topic (u64).
+ * Klever SC events are not easily accessible from the API, so we poll
+ * the TX status and then query the SC storage directly.
  */
-export async function getChannelIdFromTx(txHash: string): Promise<number> {
+export async function getChannelIdFromTx(txHash: string, slug: string): Promise<number> {
   const apiBase = kleverProvider.api;
-  const maxAttempts = 15;
+  const nodeBase = kleverProvider.node;
+  const maxAttempts = 20;
   const delay = 2000;
 
+  // Step 1: Wait for TX to succeed
   for (let i = 0; i < maxAttempts; i++) {
     try {
       const resp = await fetch(`${apiBase}/v1.0/transaction/${txHash}`);
@@ -290,51 +292,45 @@ export async function getChannelIdFromTx(txHash: string): Promise<number> {
       const data = await resp.json();
       const tx = data?.data?.transaction;
 
-      // Check if TX is processed
-      if (!tx || tx.status !== 'success') {
-        if (tx?.status === 'fail') {
-          throw new Error(tx.resultMessage || 'Transaction failed');
-        }
-        await sleep(delay);
-        continue;
+      if (!tx || !tx.status) { await sleep(delay); continue; }
+      if (tx.status === 'fail') {
+        throw new Error(tx.resultCode || 'Transaction failed');
       }
-
-      // Find channelCreated event in receipts
-      const receipts = tx.receipts || [];
-      for (const receipt of receipts) {
-        if (receipt.type === 'channelCreated' || receipt.typeStr === 'channelCreated') {
-          // channel_id is in the first indexed topic
-          const channelId = receipt.topics?.[0];
-          if (channelId !== undefined) {
-            return typeof channelId === 'number' ? channelId : parseInt(channelId, 10);
-          }
-        }
-      }
-
-      // Fallback: check contract output for SC events
-      const events = tx.contract?.[0]?.parameter?.events || tx.events || [];
-      for (const event of events) {
-        if (event.identifier === 'channelCreated') {
-          const topics = event.topics || [];
-          if (topics.length > 0) {
-            // Topics are base64-encoded, first is channel_id (u64 big-endian)
-            const bytes = Uint8Array.from(atob(topics[0]), c => c.charCodeAt(0));
-            const view = new DataView(bytes.buffer);
-            return bytes.length === 8
-              ? Number(view.getBigUint64(0))
-              : parseInt(topics[0], 10);
-          }
-        }
-      }
-
-      // TX succeeded but no event found — the SC may encode differently
-      throw new Error('channelCreated event not found in transaction');
+      if (tx.status === 'success') break;
+      await sleep(delay);
     } catch (e: any) {
-      if (e.message?.includes('event not found') || e.message?.includes('failed')) throw e;
+      if (e.message?.includes('failed')) throw e;
       await sleep(delay);
     }
   }
-  throw new Error('Timeout waiting for transaction confirmation');
+
+  // Step 2: Query SC view function to get channel_id by slug
+  const slugHex = Array.from(new TextEncoder().encode(slug))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+
+  const vmResp = await fetch(`${nodeBase}/vm/hex`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      scAddress: scAddress,
+      funcName: 'getChannelBySlug',
+      args: [slugHex],
+    }),
+  });
+
+  if (!vmResp.ok) {
+    throw new Error('Failed to query SC for channel ID');
+  }
+
+  const vmData = await vmResp.json();
+  const hexResult = vmData?.data?.data;
+
+  if (!hexResult) {
+    throw new Error('Channel not found in SC after creation');
+  }
+
+  // Result is a hex-encoded integer (e.g., "03" = 3)
+  return parseInt(hexResult, 16);
 }
 
 function sleep(ms: number): Promise<void> {
