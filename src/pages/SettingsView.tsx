@@ -2,7 +2,7 @@ import { Component, createSignal, Show } from 'solid-js';
 import { t, setLanguage, currentLanguage, SUPPORTED_LANGUAGES } from '../i18n/init';
 import { getTheme, setTheme, type Theme } from '../lib/theme';
 import { getSetting, setSetting } from '../lib/settings';
-import { authStatus, walletAddress, walletSource, l2Address, deviceMappingFailed } from '../lib/auth';
+import { authStatus, walletAddress, walletSource, l2Address, deviceMappingFailed, deviceMappingError } from '../lib/auth';
 import { navigate } from '../lib/router';
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -113,6 +113,9 @@ export const SettingsView: Component = () => {
             </Show>
             <Show when={deviceMappingFailed()}>
               <span class="settings-wallet-warning">Device mapping failed — sync disabled</span>
+              <Show when={deviceMappingError()}>
+                <span class="settings-wallet-error">{deviceMappingError()}</span>
+              </Show>
             </Show>
           </div>
           <div class="settings-wallet-actions">
@@ -187,6 +190,12 @@ export const SettingsView: Component = () => {
           font-size: var(--font-size-xs);
           color: #f44;
           font-weight: 600;
+        }
+        .settings-wallet-error {
+          font-size: 10px;
+          color: var(--color-text-secondary);
+          word-break: break-all;
+          font-family: monospace;
         }
         .settings-wallet-actions { display: flex; gap: var(--spacing-sm); }
         .settings-wallet-btn {
