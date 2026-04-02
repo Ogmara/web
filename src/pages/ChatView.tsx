@@ -67,6 +67,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [showEmoji, setShowEmoji] = createSignal(false);
   const [profiles, setProfiles] = createSignal<Map<string, CachedProfile>>(new Map());
   const [userMenu, setUserMenu] = createSignal<{ x: number; y: number; address: string; msgId: string } | null>(null);
+  const [myRole, setMyRole] = createSignal<'creator' | 'moderator' | 'member'>('member');
   let inputRef: HTMLTextAreaElement | undefined;
   let messagesRef: HTMLDivElement | undefined;
 
@@ -141,6 +142,19 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       }
     },
   );
+
+  // Fetch current user's channel role for permission gating
+  createEffect(() => {
+    const id = props.channelId;
+    const me = walletAddress();
+    if (!id || !me) { setMyRole('member'); return; }
+    getClient().getChannelMembers(id, { limit: 200 }).then((resp) => {
+      const member = resp.members.find((m) => m.address === me);
+      setMyRole(member?.role as any ?? 'member');
+    }).catch(() => setMyRole('member'));
+  });
+
+  const isMod = () => myRole() === 'moderator' || myRole() === 'creator';
 
   const MAX_LOCAL_MESSAGES = 200;
 
@@ -492,7 +506,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           <button class="ctx-item" onClick={() => handleUserAction('pin')}>
             📌 {t('channel_pin_message')}
           </button>
-          <Show when={walletAddress() && userMenu()!.address !== walletAddress()}>
+          <Show when={isMod() && userMenu()!.address !== walletAddress()}>
             <div class="ctx-divider" />
             <button class="ctx-item ctx-warn" onClick={() => handleUserAction('mute')}>
               🔇 {t('channel_mute')}

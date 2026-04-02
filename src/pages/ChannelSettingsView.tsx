@@ -6,7 +6,7 @@
  * Visible to channel owner and moderators with relevant permissions.
  */
 
-import { Component, createResource, createSignal, For, Show } from 'solid-js';
+import { Component, createResource, createSignal, createEffect, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { walletAddress } from '../lib/auth';
@@ -75,13 +75,13 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
   const [infoMsg, setInfoMsg] = createSignal('');
 
   // Load current values when detail loads
-  const loadDefaults = () => {
+  createEffect(() => {
     const ch = detail()?.channel;
     if (ch) {
       setEditName(ch.display_name || '');
       setEditDesc((ch as any).description || '');
     }
-  };
+  });
 
   const handleSaveInfo = async () => {
     setSaving(true);
@@ -157,7 +157,7 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
   const truncAddr = (addr: string) => `${addr.slice(0, 8)}...${addr.slice(-4)}`;
 
   return (
-    <div class="ch-settings" onMouseEnter={loadDefaults}>
+    <div class="ch-settings">
       <div class="ch-settings-header">
         <button class="ch-back" onClick={() => navigate(`/chat/${props.channelId}`)}>
           ← {t('nav_back')}
