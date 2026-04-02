@@ -213,7 +213,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
       </Show>
 
       <style>{`
-        .dm-conv-view { display: flex; flex-direction: column; height: 100%; }
+        .dm-conv-view { display: flex; flex-direction: column; height: 100%; height: 100dvh; max-height: -webkit-fill-available; }
         .dm-conv-header {
           display: flex;
           align-items: center;
