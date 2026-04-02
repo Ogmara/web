@@ -31,8 +31,10 @@ const [isRegistered, setIsRegistered] = createSignal(false);
 const [l2Address, setL2Address] = createSignal<string | null>(null);
 /** True if device registration on the L2 node failed (degraded to device-key identity). */
 const [deviceMappingFailed, setDeviceMappingFailed] = createSignal(false);
+/** Error message from the last failed device registration attempt. */
+const [deviceMappingError, setDeviceMappingError] = createSignal<string | null>(null);
 
-export { authStatus, walletAddress, walletSource, isRegistered, l2Address, deviceMappingFailed };
+export { authStatus, walletAddress, walletSource, isRegistered, l2Address, deviceMappingFailed, deviceMappingError };
 
 /** Get the current signer (from vault or external). */
 export function getSigner(): WalletSigner | null {
@@ -147,11 +149,13 @@ export async function connectKleverExtension(extensionAddress: string): Promise<
       await registerDeviceOnNode(signer, extensionAddress);
       setSetting('deviceRegistered', cacheKey);
       setDeviceMappingFailed(false);
-    } catch (e) {
+    } catch (e: any) {
       // Registration failed — continue without it. The node falls back to
       // using the device key as identity (built-in wallet mode).
-      console.warn('Device registration failed, continuing without mapping:', e);
+      const errMsg = e?.message || String(e);
+      console.warn('Device registration failed, continuing without mapping:', errMsg);
       setDeviceMappingFailed(true);
+      setDeviceMappingError(errMsg);
     }
   }
 
