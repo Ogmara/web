@@ -66,8 +66,47 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [sending, setSending] = createSignal(false);
   const [showEmoji, setShowEmoji] = createSignal(false);
   const [profiles, setProfiles] = createSignal<Map<string, CachedProfile>>(new Map());
+  const [userMenu, setUserMenu] = createSignal<{ x: number; y: number; address: string; msgId: string } | null>(null);
   let inputRef: HTMLTextAreaElement | undefined;
   let messagesRef: HTMLDivElement | undefined;
+
+  // Close user context menu on any click
+  if (typeof document !== 'undefined') {
+    const closeUserMenu = () => setUserMenu(null);
+    document.addEventListener('click', closeUserMenu);
+    onCleanup(() => document.removeEventListener('click', closeUserMenu));
+  }
+
+  const handleUserAction = async (action: string) => {
+    const ctx = userMenu();
+    if (!ctx || !props.channelId) return;
+    setUserMenu(null);
+
+    const client = getClient();
+    try {
+      switch (action) {
+        case 'profile':
+          navigate(`/user/${ctx.address}`);
+          break;
+        case 'kick':
+          if (window.confirm(`Kick ${ctx.address.slice(0, 12)}...?`))
+            await client.kickUser(props.channelId, ctx.address);
+          break;
+        case 'ban': {
+          const reason = window.prompt(t('channel_ban_reason'));
+          if (reason !== null)
+            await client.banUser(props.channelId, ctx.address, reason || undefined);
+          break;
+        }
+        case 'mute':
+          await client.muteUser({ channelId: props.channelId, targetUser: ctx.address, durationSecs: 3600 });
+          break;
+        case 'pin':
+          await client.pinMessage(props.channelId, ctx.msgId);
+          break;
+      }
+    } catch { /* ignore */ }
+  };
 
   /** Scroll chat to the bottom. */
   const scrollToBottom = () => {
@@ -299,13 +338,22 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         when={props.channelId}
         fallback={<div class="chat-empty"><p>{t('chat_no_channel')}</p></div>}
       >
-        {/* Pinned messages bar */}
-        <Show when={pinnedMessages() && pinnedMessages()!.length > 0}>
-          <div class="pinned-bar">
-            <span class="pinned-icon">📌</span>
-            <span class="pinned-count">{pinnedMessages()!.length} {t('channel_pins')}</span>
-          </div>
-        </Show>
+        {/* Channel header bar */}
+        <div class="channel-bar">
+          <Show when={pinnedMessages() && pinnedMessages()!.length > 0}>
+            <span class="pinned-info">
+              <span class="pinned-icon">📌</span>
+              <span class="pinned-count">{pinnedMessages()!.length} {t('channel_pins')}</span>
+            </span>
+          </Show>
+          <button
+            class="channel-settings-btn"
+            onClick={() => navigate(`/chat/${props.channelId}/settings`)}
+            title={t('channel_settings')}
+          >
+            ⚙
+          </button>
+        </div>
 
         <div class="chat-messages" ref={messagesRef}>
           <Show
@@ -349,7 +397,14 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                             {(prof()?.display_name || msg.author).slice(0, 2).toUpperCase()}
                           </span>
                         </Show>
-                        <span class="message-author" onClick={() => navigate(`/user/${msg.author}`)}>
+                        <span
+                          class="message-author"
+                          onClick={() => navigate(`/user/${msg.author}`)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setUserMenu({ x: e.clientX, y: e.clientY, address: msg.author, msgId: msgIdToHex(msg.msg_id) });
+                          }}
+                        >
                           {displayName(msg.author)}
                         </span>
                         <Show when={prof()?.verified}>
@@ -422,6 +477,33 @@ export const ChatView: Component<ChatViewProps> = (props) => {
               </button>
             </div>
           </div>
+        </div>
+      </Show>
+
+      {/* User context menu for moderation */}
+      <Show when={userMenu()}>
+        <div
+          class="user-context-menu"
+          style={{ left: `${userMenu()!.x}px`, top: `${userMenu()!.y}px` }}
+        >
+          <button class="ctx-item" onClick={() => handleUserAction('profile')}>
+            👤 {t('channel_view_profile')}
+          </button>
+          <button class="ctx-item" onClick={() => handleUserAction('pin')}>
+            📌 {t('channel_pin_message')}
+          </button>
+          <Show when={walletAddress() && userMenu()!.address !== walletAddress()}>
+            <div class="ctx-divider" />
+            <button class="ctx-item ctx-warn" onClick={() => handleUserAction('mute')}>
+              🔇 {t('channel_mute')}
+            </button>
+            <button class="ctx-item ctx-warn" onClick={() => handleUserAction('kick')}>
+              ⚡ {t('channel_kick')}
+            </button>
+            <button class="ctx-item ctx-danger" onClick={() => handleUserAction('ban')}>
+              ⛔ {t('channel_ban')}
+            </button>
+          </Show>
         </div>
       </Show>
 
@@ -584,19 +666,51 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         }
         .reply-cancel:hover { color: var(--color-text-primary); }
 
-        .pinned-bar {
+        .channel-bar {
           display: flex;
           align-items: center;
-          gap: var(--spacing-xs);
+          justify-content: space-between;
           padding: var(--spacing-xs) var(--spacing-md);
-          background: var(--color-bg-tertiary);
           border-bottom: 1px solid var(--color-border);
           font-size: var(--font-size-sm);
-          cursor: pointer;
+          color: var(--color-text-secondary);
         }
-        .pinned-bar:hover { background: var(--color-bg-secondary); }
+        .pinned-info { display: flex; align-items: center; gap: var(--spacing-xs); }
         .pinned-icon { font-size: var(--font-size-md); }
         .pinned-count { color: var(--color-accent-primary); font-weight: 600; }
+        .channel-settings-btn {
+          font-size: var(--font-size-md);
+          color: var(--color-text-secondary);
+          cursor: pointer;
+          padding: var(--spacing-xs);
+          border-radius: var(--radius-sm);
+        }
+        .channel-settings-btn:hover { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+        .user-context-menu {
+          position: fixed;
+          background: var(--color-bg-secondary);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-md);
+          box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+          z-index: 100;
+          padding: 4px;
+          min-width: 170px;
+        }
+        .ctx-item {
+          display: block;
+          width: 100%;
+          text-align: left;
+          padding: var(--spacing-sm) var(--spacing-md);
+          font-size: var(--font-size-sm);
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+          color: var(--color-text-primary);
+        }
+        .ctx-item:hover { background: var(--color-bg-tertiary); }
+        .ctx-warn { color: var(--color-text-secondary); }
+        .ctx-danger { color: #f44; }
+        .ctx-danger:hover { background: rgba(255,68,68,0.1); }
+        .ctx-divider { height: 1px; background: var(--color-border); margin: 4px 0; }
 
         .chat-input-area {
           border-top: 1px solid var(--color-border);

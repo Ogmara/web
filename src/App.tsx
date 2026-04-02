@@ -16,6 +16,9 @@ import { DmConversationView } from './pages/DmConversationView';
 import { UserProfileView } from './pages/UserProfileView';
 import { SearchView } from './pages/SearchView';
 import { NewsDetailView } from './pages/NewsDetailView';
+import { ChannelCreateView } from './pages/ChannelCreateView';
+import { ChannelSettingsView } from './pages/ChannelSettingsView';
+import { ChannelJoinView } from './pages/ChannelJoinView';
 import { StatusBar } from './components/StatusBar';
 import { route } from './lib/router';
 
@@ -75,6 +78,15 @@ export const App: Component = () => {
             </Match>
             <Match when={route().view === 'search'}>
               <SearchView />
+            </Match>
+            <Match when={route().view === 'channel-create'}>
+              <ChannelCreateView />
+            </Match>
+            <Match when={route().view === 'channel-settings'}>
+              <ChannelSettingsView channelId={route().params.channelId} />
+            </Match>
+            <Match when={route().view === 'channel-join'}>
+              <ChannelJoinView channelId={route().params.channelId} />
             </Match>
           </Switch>
         </main>

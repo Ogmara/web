@@ -126,7 +126,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           <Show when={authStatus() === 'ready'}>
             <button
               class="sidebar-add-btn"
-              onClick={() => go('/wallet')}
+              onClick={() => go('/channel/create')}
               title={t('channel_create')}
             >
               +
@@ -214,6 +214,26 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         >
           <button class="context-menu-item" onClick={handleMarkRead}>
             ✓ {t('channel_mark_read')}
+          </button>
+          <button class="context-menu-item" onClick={() => {
+            const ctx = contextMenu();
+            setContextMenu(null);
+            if (ctx) navigate(`/chat/${ctx.channelId}/settings`);
+          }}>
+            ⚙ {t('channel_settings')}
+          </button>
+          <button class="context-menu-item context-menu-danger" onClick={async () => {
+            const ctx = contextMenu();
+            setContextMenu(null);
+            if (!ctx) return;
+            if (!window.confirm(t('channel_leave_confirm'))) return;
+            try {
+              await getClient().leaveChannel(ctx.channelId);
+              // Refetch channels by navigating away
+              navigate('/news');
+            } catch { /* ignore */ }
+          }}>
+            ✕ {t('channel_leave')}
           </button>
         </div>
       </Show>
@@ -351,6 +371,8 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           color: var(--color-text-primary);
         }
         .context-menu-item:hover { background: var(--color-bg-tertiary); }
+        .context-menu-danger { color: #f44; }
+        .context-menu-danger:hover { background: rgba(255,68,68,0.1); }
       `}</style>
     </aside>
   );

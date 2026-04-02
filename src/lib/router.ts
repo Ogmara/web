@@ -33,7 +33,10 @@ export type ViewName =
   | 'bookmarks'
   | 'settings'
   | 'wallet'
-  | 'compose';
+  | 'compose'
+  | 'channel-create'
+  | 'channel-settings'
+  | 'channel-join';
 
 export interface Route {
   view: ViewName;
@@ -59,9 +62,13 @@ function parseHash(hash: string): Route {
 
   const first = segments[0] || 'news';
   const second = segments[1] || '';
+  const third = segments[2] || '';
 
   switch (first) {
     case 'chat':
+      if (second && third === 'settings') {
+        return { view: 'channel-settings', params: { channelId: second }, query };
+      }
       if (second) {
         return { view: 'chat', params: { channelId: second }, query };
       }
@@ -96,6 +103,15 @@ function parseHash(hash: string): Route {
 
     case 'compose':
       return { view: 'compose', params: {}, query };
+
+    case 'channel':
+      if (second === 'create') {
+        return { view: 'channel-create', params: {}, query };
+      }
+      return { view: 'chat', params: {}, query };
+
+    case 'join':
+      return { view: 'channel-join', params: { channelId: second }, query };
 
     default:
       return { view: 'chat', params: {}, query };
