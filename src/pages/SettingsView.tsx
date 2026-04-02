@@ -2,7 +2,7 @@ import { Component, createSignal, Show } from 'solid-js';
 import { t, setLanguage, currentLanguage, SUPPORTED_LANGUAGES } from '../i18n/init';
 import { getTheme, setTheme, type Theme } from '../lib/theme';
 import { getSetting, setSetting } from '../lib/settings';
-import { authStatus, walletAddress, walletSource } from '../lib/auth';
+import { authStatus, walletAddress, walletSource, l2Address, deviceMappingFailed } from '../lib/auth';
 import { navigate } from '../lib/router';
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -108,6 +108,12 @@ export const SettingsView: Component = () => {
               {walletSource() === 'klever-extension' ? 'Klever Extension' :
                walletSource() === 'k5-delegation' ? 'K5 Delegation' : 'Built-in'}
             </span>
+            <Show when={l2Address() && l2Address() !== walletAddress()}>
+              <span class="settings-wallet-device">L2 device: {l2Address()?.slice(0, 12)}...{l2Address()?.slice(-6)}</span>
+            </Show>
+            <Show when={deviceMappingFailed()}>
+              <span class="settings-wallet-warning">Device mapping failed — sync disabled</span>
+            </Show>
           </div>
           <div class="settings-wallet-actions">
             <button class="settings-wallet-btn" onClick={() => navigate(`/user/${walletAddress()!}`)}>
@@ -171,6 +177,16 @@ export const SettingsView: Component = () => {
           background: var(--color-bg-tertiary);
           padding: 2px 6px;
           border-radius: var(--radius-sm);
+        }
+        .settings-wallet-device {
+          font-size: var(--font-size-xs);
+          color: var(--color-text-secondary);
+          font-family: monospace;
+        }
+        .settings-wallet-warning {
+          font-size: var(--font-size-xs);
+          color: #f44;
+          font-weight: 600;
         }
         .settings-wallet-actions { display: flex; gap: var(--spacing-sm); }
         .settings-wallet-btn {
