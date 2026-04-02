@@ -37,9 +37,18 @@ interface KleverWeb {
   provider?: KleverProvider;
 }
 
+/** Klever wallet provider (injected by extension and K5 browser). */
+interface KleverWallet {
+  /** Sign an arbitrary message. Returns hex-encoded signature. */
+  signMessage(message: string): Promise<string>;
+  /** Validate a signed message. */
+  validateSignature?(message: string, signature: string, address: string): Promise<boolean>;
+}
+
 declare global {
   interface Window {
     kleverWeb?: KleverWeb;
+    klever?: KleverWallet;
   }
 }
 
@@ -86,16 +95,16 @@ export { kleverAvailable, kleverAddress, kleverConnecting };
 
 // --- Detection ---
 
-/** Detect the Klever Extension. Polls for up to 3 seconds after page load. */
+/** Detect the Klever Extension or K5 wallet browser. Polls for up to 3 seconds. */
 export function detectKleverExtension(): void {
-  if (window.kleverWeb) {
+  if (window.kleverWeb || window.klever) {
     setKleverAvailable(true);
     return;
   }
   // Extension may inject after DOMContentLoaded — poll briefly
   let attempts = 0;
   const interval = setInterval(() => {
-    if (window.kleverWeb) {
+    if (window.kleverWeb || window.klever) {
       setKleverAvailable(true);
       clearInterval(interval);
     } else if (++attempts >= 6) {
@@ -439,8 +448,13 @@ export async function updatePublicKey(newPublicKeyHex: string): Promise<string> 
  * Used for verifying ownership of the extension wallet.
  */
 export async function signMessage(message: string): Promise<string> {
-  if (!window.kleverWeb) {
-    throw new Error('Klever Extension not available');
+  // Try window.klever first (wallet provider API — works in K5 mobile browser)
+  if (window.klever?.signMessage) {
+    return window.klever.signMessage(message);
   }
-  return window.kleverWeb.signMessage(message);
+  // Fall back to window.kleverWeb (desktop extension may expose it here)
+  if (window.kleverWeb?.signMessage) {
+    return window.kleverWeb.signMessage(message);
+  }
+  throw new Error('Klever signMessage not available');
 }
