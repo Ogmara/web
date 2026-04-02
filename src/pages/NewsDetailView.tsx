@@ -9,7 +9,7 @@
 import { Component, createResource, createSignal, createEffect, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, getSigner, l2Address, walletAddress } from '../lib/auth';
+import { authStatus, getSigner, l2Address, walletAddress, isRegistered } from '../lib/auth';
 import { navigate, goBack, routeParam } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent, getPayloadTitle, getPayloadAttachments, decodePayload } from '../lib/payload';
@@ -54,9 +54,14 @@ const CommentCard: Component<{ comment: any; onReply: (msgId: string, author: st
         </div>
         <span class="comment-time">{formatLocalTime(props.comment.timestamp)}</span>
       </div>
-      <div class="comment-body">
-        <FormattedText content={getPayloadContent(props.comment.payload)} />
-      </div>
+      <Show
+        when={!props.comment.deleted}
+        fallback={<div class="comment-body comment-deleted-text">{t('message_deleted')}</div>}
+      >
+        <div class="comment-body">
+          <FormattedText content={getPayloadContent(props.comment.payload)} />
+        </div>
+      </Show>
       <Show when={getPayloadAttachments(props.comment.payload).length > 0}>
         <div class="comment-attachments">
           <For each={getPayloadAttachments(props.comment.payload)}>
@@ -141,6 +146,20 @@ export const NewsDetailView: Component = () => {
   const [commentAttachments, setCommentAttachments] = createSignal<MediaAttachment[]>([]);
   let commentInputRef: HTMLTextAreaElement | undefined;
 
+  const EDIT_WINDOW_MS = 30 * 60 * 1000;
+
+  const isOwnPost = () => {
+    const post = postData()?.post;
+    return post && (post.author === walletAddress() || post.author === l2Address());
+  };
+
+  const canEditPost = () =>
+    isOwnPost() && isRegistered() &&
+    postData()?.post && !postData()!.post.deleted &&
+    (Date.now() - new Date(postData()!.post.timestamp).getTime()) < EDIT_WINDOW_MS;
+
+  const canDeletePost = () => isOwnPost() && postData()?.post && !postData()!.post.deleted;
+
   const requireAuthOrRedirect = (): boolean => {
     if (!getSigner() || !walletAddress()) {
       navigate('/wallet');
@@ -213,6 +232,23 @@ export const NewsDetailView: Component = () => {
       setReposted(true);
     } catch (e: any) {
       setActionError(e?.message || 'Repost failed');
+    }
+  };
+
+  const handleEditPost = () => {
+    navigate(`/compose?edit=${msgId()}`);
+  };
+
+  const handleDeletePost = async () => {
+    if (!requireAuthOrRedirect()) return;
+    if (!window.confirm(t('news_delete_confirm'))) return;
+    setActionError('');
+    try {
+      const client = getClient();
+      await client.deleteNews(msgId());
+      navigate('/news');
+    } catch (e: any) {
+      setActionError(e?.message || 'Delete failed');
     }
   };
 
@@ -310,7 +346,12 @@ export const NewsDetailView: Component = () => {
                 <span class="detail-verified" title="On-chain verified">✓</span>
               </Show>
             </div>
-            <span class="detail-time">{formatLocalTime(postData()!.post.timestamp)}</span>
+            <span class="detail-time">
+              {formatLocalTime(postData()!.post.timestamp)}
+              <Show when={postData()!.post.edited}>
+                <span class="detail-edited"> ({t('message_edited')})</span>
+              </Show>
+            </span>
           </div>
 
           <Show when={getPayloadTitle(postData()!.post.payload)}>
@@ -358,6 +399,16 @@ export const NewsDetailView: Component = () => {
 
           {/* Actions bar */}
           <div class="detail-actions">
+            <Show when={canEditPost()}>
+              <button class="action-btn" onClick={handleEditPost} title={t('news_edit')}>
+                ✏ {t('news_edit')}
+              </button>
+            </Show>
+            <Show when={canDeletePost()}>
+              <button class="action-btn" onClick={handleDeletePost} title={t('news_delete')} style="color: var(--color-error)">
+                🗑 {t('news_delete')}
+              </button>
+            </Show>
             <ReactionPicker counts={reactionCounts()} onReact={handleReaction} />
             <button
               class={`action-btn ${reposted() ? 'active' : ''}`}
@@ -383,6 +434,27 @@ export const NewsDetailView: Component = () => {
             >
               💰 {t('chat_tip')}
             </button>
+            <Show when={!isOwnPost() && walletAddress()}>
+              <button
+                class="action-btn"
+                onClick={async () => {
+                  if (!requireAuthOrRedirect()) return;
+                  const reason = window.prompt(t('report_reason'));
+                  if (reason !== null) {
+                    try {
+                      const client = getClient();
+                      await client.reportMessage(msgId(), (reason || 'No reason').slice(0, 500), 'other');
+                      setActionError('');
+                    } catch (e: any) {
+                      setActionError(e?.message || 'Report failed');
+                    }
+                  }
+                }}
+                title={t('report_title')}
+              >
+                🚩 {t('report_title')}
+              </button>
+            </Show>
           </div>
 
           {/* Tip dialog */}
@@ -590,6 +662,8 @@ export const NewsDetailView: Component = () => {
           flex-shrink: 0;
         }
         .detail-time { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+        .detail-edited { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+        .comment-deleted-text { font-style: italic; color: var(--color-text-secondary); opacity: 0.6; }
         .detail-title { font-size: var(--font-size-xl); margin-bottom: var(--spacing-sm); }
         .detail-body { line-height: 1.7; margin-bottom: var(--spacing-md); font-size: var(--font-size-md); }
         .detail-attachments, .comment-attachments {

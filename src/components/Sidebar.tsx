@@ -180,6 +180,18 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         </button>
       </div>
 
+      {/* Notifications */}
+      <Show when={authStatus() === 'ready'}>
+        <div class="sidebar-section">
+          <button
+            class={`sidebar-nav-item ${route().view === 'notifications' ? 'active' : ''}`}
+            onClick={() => go('/notifications')}
+          >
+            🔔 {t('nav_notifications')}
+          </button>
+        </div>
+      </Show>
+
       {/* Divider */}
       <div class="sidebar-divider" />
 

@@ -1,21 +1,48 @@
 /**
- * ComposeView — create a new news post.
+ * ComposeView — create or edit a news post.
+ *
+ * Edit mode: navigate to /compose?edit=<msgId>
  */
 
-import { Component, createSignal, Show } from 'solid-js';
+import { Component, createSignal, createResource, Show, onMount } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, getSigner, walletAddress } from '../lib/auth';
-import { navigate } from '../lib/router';
+import { navigate, queryParam } from '../lib/router';
 import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
+import { getPayloadContent, getPayloadTitle, decodePayload } from '../lib/payload';
 
 export const ComposeView: Component = () => {
+  const editMsgId = () => queryParam('edit');
+  const isEditMode = () => !!editMsgId();
+
   const [title, setTitle] = createSignal('');
   const [content, setContent] = createSignal('');
   const [tags, setTags] = createSignal('');
   const [attachments, setAttachments] = createSignal<MediaAttachment[]>([]);
   const [submitting, setSubmitting] = createSignal(false);
   const [error, setError] = createSignal('');
+  const [loaded, setLoaded] = createSignal(false);
+
+  // In edit mode, fetch the existing post and pre-fill fields
+  onMount(async () => {
+    const eid = editMsgId();
+    if (!eid) { setLoaded(true); return; }
+    try {
+      const client = getClient();
+      const resp = await client.getNewsPost(eid);
+      if (resp?.post) {
+        const post = resp.post;
+        setTitle(getPayloadTitle(post.payload) || '');
+        setContent(getPayloadContent(post.payload));
+        try {
+          const decoded = decodePayload(post.payload);
+          if (decoded.tags) setTags(decoded.tags.join(', '));
+        } catch { /* ignore */ }
+      }
+    } catch { /* failed to fetch */ }
+    setLoaded(true);
+  });
 
   const handleSubmit = async () => {
     if (!content().trim()) return;
@@ -33,11 +60,22 @@ export const ComposeView: Component = () => {
         .filter(Boolean);
 
       const client = getClient();
-      await client.postNews(title().trim(), content().trim(), {
-        tags: tagList.length > 0 ? tagList : undefined,
-        attachments: attachments().length > 0 ? attachments() : undefined,
-      });
-      navigate('/news');
+
+      if (isEditMode()) {
+        // Edit existing post
+        await client.editNews(editMsgId()!, content().trim(), {
+          title: title().trim() || undefined,
+          tags: tagList.length > 0 ? tagList : undefined,
+        });
+        navigate(`/news/${editMsgId()}`);
+      } else {
+        // Create new post
+        await client.postNews(title().trim(), content().trim(), {
+          tags: tagList.length > 0 ? tagList : undefined,
+          attachments: attachments().length > 0 ? attachments() : undefined,
+        });
+        navigate('/news');
+      }
     } catch (e: any) {
       setError(e.message || t('error_generic'));
     } finally {
@@ -48,8 +86,8 @@ export const ComposeView: Component = () => {
   return (
     <div class="compose-view">
       <div class="compose-header">
-        <h2>{t('news_new_post')}</h2>
-        <button class="compose-cancel" onClick={() => navigate('/news')}>
+        <h2>{isEditMode() ? t('news_edit') : t('news_new_post')}</h2>
+        <button class="compose-cancel" onClick={() => isEditMode() ? navigate(`/news/${editMsgId()}`) : navigate('/news')}>
           {t('compose_cancel')}
         </button>
       </div>
@@ -86,18 +124,20 @@ export const ComposeView: Component = () => {
           value={tags()}
           onInput={(e) => setTags(e.currentTarget.value)}
         />
-        <MediaUpload
-          attachments={attachments()}
-          onAttach={(att) => setAttachments((prev) => [...prev, att])}
-          onRemove={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
-          disabled={submitting()}
-        />
+        <Show when={!isEditMode()}>
+          <MediaUpload
+            attachments={attachments()}
+            onAttach={(att) => setAttachments((prev) => [...prev, att])}
+            onRemove={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+            disabled={submitting()}
+          />
+        </Show>
         <button
           class="compose-submit"
           onClick={handleSubmit}
           disabled={submitting() || !content().trim() || authStatus() !== 'ready'}
         >
-          {submitting() ? t('loading') : t('compose_submit')}
+          {submitting() ? t('loading') : isEditMode() ? t('news_save_edit') : t('compose_submit')}
         </button>
       </div>
 

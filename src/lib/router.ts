@@ -36,7 +36,8 @@ export type ViewName =
   | 'compose'
   | 'channel-create'
   | 'channel-settings'
-  | 'channel-join';
+  | 'channel-join'
+  | 'notifications';
 
 export interface Route {
   view: ViewName;
@@ -94,6 +95,9 @@ function parseHash(hash: string): Route {
 
     case 'bookmarks':
       return { view: 'bookmarks', params: {}, query };
+
+    case 'notifications':
+      return { view: 'notifications', params: {}, query };
 
     case 'settings':
       return { view: 'settings', params: {}, query };

@@ -2,7 +2,7 @@
  * NewsView — news feed with reactions, bookmarks, reposts (auth-gated).
  */
 
-import { Component, createResource, createSignal, createEffect, For, Show } from 'solid-js';
+import { Component, createResource, createSignal, createEffect, createMemo, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, getSigner, l2Address, walletAddress } from '../lib/auth';
@@ -175,6 +175,8 @@ export const NewsView: Component = () => {
           color: var(--color-accent-primary);
         }
         .news-file-link:hover { text-decoration: none; background: var(--color-border); }
+        .news-deleted-text { font-style: italic; color: var(--color-text-secondary); opacity: 0.6; }
+        .news-edited { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
         .news-empty { text-align: center; color: var(--color-text-secondary); padding: var(--spacing-xl); }
 
         .news-actions {
@@ -376,13 +378,12 @@ const NewsCard: Component<{ post: any }> = (props) => {
 
   const displayName = () => profile().display_name || truncateAddress(props.post.author);
 
-  // Extract tags from decoded payload
-  // Decode payload once, reuse for title/content/tags/attachments
-  const decoded = () => {
+  // Decode payload once, memoize for title/content/tags/attachments
+  const decoded = createMemo(() => {
     if (typeof props.post.payload === 'string') return { content: props.post.payload as string };
     try { return decodePayload(props.post.payload); }
     catch { return { content: '' }; }
-  };
+  });
 
   const postTags = () => decoded().tags ?? [];
   const isComment = () => props.post.msg_type === 'NewsComment';
@@ -423,14 +424,24 @@ const NewsCard: Component<{ post: any }> = (props) => {
             <span class="news-verified" title="On-chain verified">✓</span>
           </Show>
         </div>
-        <span class="news-time">{formatLocalTime(props.post.timestamp)}</span>
+        <span class="news-time">
+          {formatLocalTime(props.post.timestamp)}
+          <Show when={props.post.edited}>
+            <span class="news-edited"> ({t('message_edited')})</span>
+          </Show>
+        </span>
       </div>
-      <Show when={decoded().title}>
-        <h3 class="news-title" onClick={() => navigate(`/news/${ensureHexMsgId(props.post.msg_id)}`)}>
-          {decoded().title}
-        </h3>
+      <Show when={props.post.deleted}>
+        <div class="news-card-body news-deleted-text">{t('message_deleted')}</div>
       </Show>
-      <div class="news-card-body"><FormattedText content={decoded().content} /></div>
+      <Show when={!props.post.deleted}>
+        <Show when={decoded().title}>
+          <h3 class="news-title" onClick={() => navigate(`/news/${ensureHexMsgId(props.post.msg_id)}`)}>
+            {decoded().title}
+          </h3>
+        </Show>
+        <div class="news-card-body"><FormattedText content={decoded().content} /></div>
+      </Show>
       <Show when={(decoded().attachments ?? []).length > 0}>
         <div class="news-attachments">
           <For each={decoded().attachments!}>

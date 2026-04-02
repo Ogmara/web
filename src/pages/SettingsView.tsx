@@ -4,6 +4,9 @@ import { getTheme, setTheme, type Theme } from '../lib/theme';
 import { getSetting, setSetting } from '../lib/settings';
 import { authStatus, walletAddress, walletSource } from '../lib/auth';
 import { navigate } from '../lib/router';
+import { getClient } from '../lib/api';
+import { uploadSettings, downloadSettings } from '../lib/settings-sync';
+import { vaultExportKey } from '../lib/vault';
 
 const LANGUAGE_NAMES: Record<string, string> = {
   en: 'English',
@@ -21,6 +24,8 @@ export const SettingsView: Component = () => {
   const [nodeUrl, setNodeUrl] = createSignal(getSetting('nodeUrl'));
   const [compact, setCompact] = createSignal(getSetting('compactLayout'));
   const [sounds, setSounds] = createSignal(getSetting('notificationSound'));
+  const [syncStatus, setSyncStatus] = createSignal('');
+  const [exportStatus, setExportStatus] = createSignal('');
 
   const handleThemeChange = (value: Theme) => {
     setThemeState(value);
@@ -120,6 +125,89 @@ export const SettingsView: Component = () => {
         </Show>
       </section>
 
+      <Show when={authStatus() === 'ready'}>
+        <section class="settings-section">
+          <h3>{t('settings_sync_title')}</h3>
+          <div class="settings-sync-row">
+            <button
+              class="settings-wallet-btn"
+              onClick={async () => {
+                setSyncStatus('');
+                try {
+                  const key = await vaultExportKey();
+                  if (!key) { setSyncStatus('No key available'); return; }
+                  await uploadSettings(key);
+                  setSyncStatus(t('settings_sync_success'));
+                } catch (e: any) {
+                  setSyncStatus(e?.message || 'Sync failed');
+                }
+              }}
+            >
+              {t('settings_sync_upload')}
+            </button>
+            <button
+              class="settings-wallet-btn"
+              onClick={async () => {
+                setSyncStatus('');
+                try {
+                  const key = await vaultExportKey();
+                  if (!key) { setSyncStatus('No key available'); return; }
+                  const ok = await downloadSettings(key);
+                  if (ok) {
+                    setSyncStatus(t('settings_sync_success'));
+                    // Refresh UI with downloaded settings
+                    setThemeState(getTheme());
+                    setLang(currentLanguage());
+                    setCompact(getSetting('compactLayout'));
+                    setSounds(getSetting('notificationSound'));
+                  } else {
+                    setSyncStatus('No synced settings found');
+                  }
+                } catch (e: any) {
+                  setSyncStatus(e?.message || 'Sync failed');
+                }
+              }}
+            >
+              {t('settings_sync_download')}
+            </button>
+          </div>
+          <Show when={syncStatus()}>
+            <div class="settings-status">{syncStatus()}</div>
+          </Show>
+        </section>
+      </Show>
+
+      <Show when={authStatus() === 'ready'}>
+        <section class="settings-section">
+          <h3>{t('settings_export_title')}</h3>
+          <button
+            class="settings-wallet-btn"
+            onClick={async () => {
+              setExportStatus(t('settings_export_downloading'));
+              try {
+                const client = getClient();
+                const data = await client.exportAccount();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `ogmara-export-${walletAddress()?.slice(0, 8)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                setExportStatus('');
+              } catch (e: any) {
+                setExportStatus(e?.message || 'Export failed');
+              }
+            }}
+          >
+            {t('settings_export_button')}
+          </button>
+          <Show when={exportStatus()}>
+            <div class="settings-status">{exportStatus()}</div>
+          </Show>
+        </section>
+      </Show>
+
       <section class="settings-section">
         <h3>{t('settings_node_url')}</h3>
         <input
@@ -182,6 +270,8 @@ export const SettingsView: Component = () => {
           color: var(--color-text-primary);
         }
         .settings-wallet-btn:hover { background: var(--color-accent-primary); color: var(--color-text-inverse); }
+        .settings-sync-row { display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-sm); }
+        .settings-status { font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-top: var(--spacing-xs); }
       `}</style>
     </div>
   );

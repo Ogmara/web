@@ -68,6 +68,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [profiles, setProfiles] = createSignal<Map<string, CachedProfile>>(new Map());
   const [userMenu, setUserMenu] = createSignal<{ x: number; y: number; address: string; msgId: string } | null>(null);
   const [myRole, setMyRole] = createSignal<'creator' | 'moderator' | 'member'>('member');
+  const [expandedMuted, setExpandedMuted] = createSignal<Set<string>>(new Set());
+  const [editingMsg, setEditingMsg] = createSignal<{ msgId: string; content: string } | null>(null);
+  const [showReactPicker, setShowReactPicker] = createSignal<string | null>(null); // msg_id being reacted to
+  const EDIT_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
   let inputRef: HTMLTextAreaElement | undefined;
   let messagesRef: HTMLDivElement | undefined;
 
@@ -105,6 +109,13 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         case 'pin':
           await client.pinMessage(props.channelId, ctx.msgId);
           break;
+        case 'report': {
+          const reason = window.prompt(t('report_reason'));
+          if (reason !== null) {
+            await client.reportMessage(ctx.msgId, (reason || 'No reason provided').slice(0, 500), 'other');
+          }
+          break;
+        }
       }
     } catch { /* ignore */ }
   };
@@ -163,6 +174,20 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     if (event.type === 'message' && props.channelId) {
       const msg = event.envelope;
       if (msg.channel_id === props.channelId || msg.channel_id === String(props.channelId)) {
+        // Handle edit/delete events by updating existing messages
+        if (msg.msg_type === 'ChatEdit' || msg.msg_type === 'ChatDelete') {
+          const targetId = msg.target_msg_id || msg.msg_id;
+          if (targetId) {
+            setLocalMessages((prev) => prev.map((m) => {
+              if (msgIdToHex(m.msg_id) === msgIdToHex(targetId)) {
+                if (msg.msg_type === 'ChatDelete') return { ...m, deleted: true };
+                if (msg.msg_type === 'ChatEdit') return { ...m, payload: msg.payload, edited: true, last_edited_at: msg.timestamp };
+              }
+              return m;
+            }));
+            return;
+          }
+        }
         setLocalMessages((prev) => {
           const next = [...prev, msg];
           return next.length > MAX_LOCAL_MESSAGES ? next.slice(-MAX_LOCAL_MESSAGES) : next;
@@ -282,6 +307,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   });
 
   const handleSend = async () => {
+    // Route to edit handler when in edit mode
+    if (editingMsg()) { await handleEdit(); return; }
+
     const text = messageInput().trim();
     if (!text || !props.channelId) return;
     if (!getSigner() || !walletAddress()) { navigate('/wallet'); return; }
@@ -346,6 +374,65 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
   const cancelReply = () => setReplyTo(null);
 
+  const canEdit = (msg: any) =>
+    msg.author === walletAddress() &&
+    !msg.deleted &&
+    (Date.now() - new Date(msg.timestamp).getTime()) < EDIT_WINDOW_MS;
+
+  const canDelete = (msg: any) =>
+    msg.author === walletAddress() && !msg.deleted;
+
+  const startEdit = (msg: any) => {
+    setEditingMsg({ msgId: msgIdToHex(msg.msg_id), content: getPayloadContent(msg.payload) });
+    setMessageInput(getPayloadContent(msg.payload));
+    inputRef?.focus();
+  };
+
+  const cancelEdit = () => {
+    setEditingMsg(null);
+    setMessageInput('');
+  };
+
+  const handleEdit = async () => {
+    const edit = editingMsg();
+    if (!edit || !messageInput().trim() || !props.channelId) return;
+    setSending(true);
+    try {
+      const client = getClient();
+      await client.editMessage(props.channelId, edit.msgId, messageInput().trim());
+      // Optimistic update
+      setLocalMessages((prev) => prev.map((m) =>
+        msgIdToHex(m.msg_id) === edit.msgId
+          ? { ...m, payload: messageInput().trim(), edited: true, last_edited_at: Date.now() }
+          : m,
+      ));
+      setEditingMsg(null);
+      setMessageInput('');
+    } catch { /* failed */ }
+    finally { setSending(false); }
+  };
+
+  const handleDelete = async (msg: any) => {
+    if (!props.channelId) return;
+    if (!window.confirm(t('chat_delete_confirm'))) return;
+    try {
+      const client = getClient();
+      await client.deleteMessage(props.channelId, msgIdToHex(msg.msg_id));
+      setLocalMessages((prev) => prev.map((m) =>
+        msgIdToHex(m.msg_id) === msgIdToHex(msg.msg_id) ? { ...m, deleted: true } : m,
+      ));
+    } catch { /* failed */ }
+  };
+
+  const handleReact = async (msg: any, emoji: string) => {
+    if (!props.channelId || !walletAddress()) return;
+    setShowReactPicker(null);
+    try {
+      const client = getClient();
+      await client.reactToMessage(props.channelId, msgIdToHex(msg.msg_id), emoji);
+    } catch { /* failed */ }
+  };
+
   return (
     <div class="chat-view">
       <Show
@@ -391,8 +478,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                         <span class="date-separator-label">{currentDate}</span>
                       </div>
                     </Show>
-                    <div class={`message ${msg.author === walletAddress() ? 'own' : ''}`} data-msg-id={msgIdToHex(msg.msg_id)}>
-                      <Show when={reply}>
+                    <div
+                      class={`message ${msg.author === walletAddress() ? 'own' : ''} ${msg.deleted ? 'deleted' : ''} ${msg.muted ? 'muted' : ''}`}
+                      data-msg-id={msgIdToHex(msg.msg_id)}
+                    >
+                      <Show when={reply && !msg.deleted}>
                         <div class="reply-preview" onClick={() => scrollToMessage(reply!.msgId)}>
                           <span class="reply-preview-author">{displayName(reply!.author)}</span>
                           <span class="reply-preview-text">{reply!.content}</span>
@@ -424,10 +514,56 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                         <Show when={prof()?.verified}>
                           <span class="msg-verified">✓</span>
                         </Show>
-                        <span class="message-time">{formatMessageTime(msg.timestamp)}</span>
-                        <button class="reply-btn" onClick={() => handleReply(msg)} title={t('chat_reply')}>↩</button>
+                        <span class="message-time">
+                          {formatMessageTime(msg.timestamp)}
+                          <Show when={msg.edited}>
+                            <span class="edited-indicator" title={msg.last_edited_at ? new Date(msg.last_edited_at).toLocaleString() : ''}> ({t('message_edited')})</span>
+                          </Show>
+                        </span>
+                        <Show when={!msg.deleted}>
+                          <div class="msg-actions">
+                            <button class="reply-btn" onClick={() => handleReply(msg)} title={t('chat_reply')}>↩</button>
+                            <Show when={walletAddress()}>
+                              <button class="reply-btn" onClick={() => { setShowReactPicker(showReactPicker() === msgIdToHex(msg.msg_id) ? null : msgIdToHex(msg.msg_id)); }} title={t('chat_react')}>😊</button>
+                            </Show>
+                            <Show when={canEdit(msg)}>
+                              <button class="reply-btn" onClick={() => startEdit(msg)} title={t('chat_edit')}>✏</button>
+                            </Show>
+                            <Show when={canDelete(msg)}>
+                              <button class="reply-btn" onClick={() => handleDelete(msg)} title={t('chat_delete')}>🗑</button>
+                            </Show>
+                          </div>
+                        </Show>
                       </div>
-                      <div class="message-body"><FormattedText content={getPayloadContent(msg.payload)} /></div>
+                      <Show
+                        when={!msg.deleted}
+                        fallback={<div class="message-body message-deleted-text">{t('message_deleted')}</div>}
+                      >
+                        <Show
+                          when={!msg.muted || expandedMuted().has(msgIdToHex(msg.msg_id))}
+                          fallback={
+                            <div class="message-body message-muted-text" onClick={() => setExpandedMuted(prev => { const next = new Set(prev); next.add(msgIdToHex(msg.msg_id)); return next; })}>
+                              {t('message_muted_show')}
+                            </div>
+                          }
+                        >
+                          <div class="message-body"><FormattedText content={getPayloadContent(msg.payload)} /></div>
+                        </Show>
+                      </Show>
+                      <Show when={showReactPicker() === msgIdToHex(msg.msg_id)}>
+                        <div class="inline-react-picker">
+                          {['👍', '👎', '❤️', '🔥', '😂', '😮', '😢'].map((emoji) => (
+                            <button class="inline-react-btn" onClick={() => handleReact(msg, emoji)}>{emoji}</button>
+                          ))}
+                        </div>
+                      </Show>
+                      <Show when={msg.reactions && Object.keys(msg.reactions).length > 0}>
+                        <div class="message-reactions">
+                          {Object.entries(msg.reactions as Record<string, number>).map(([emoji, count]) => (
+                            <span class="reaction-badge">{emoji} {count}</span>
+                          ))}
+                        </div>
+                      </Show>
                     </div>
                   </>
                 );
@@ -436,8 +572,16 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           </Show>
         </div>
 
+        {/* Edit mode indicator */}
+        <Show when={editingMsg()}>
+          <div class="edit-indicator">
+            <span class="edit-indicator-label">✏ {t('chat_edit_mode')}</span>
+            <button class="edit-cancel" onClick={cancelEdit}>{t('chat_edit_cancel')}</button>
+          </div>
+        </Show>
+
         {/* Reply indicator */}
-        <Show when={replyTo()}>
+        <Show when={replyTo() && !editingMsg()}>
           <div class="reply-indicator">
             <div class="reply-indicator-content">
               <span class="reply-indicator-author">{displayName(replyTo()!.author)}</span>
@@ -506,6 +650,12 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           <button class="ctx-item" onClick={() => handleUserAction('pin')}>
             📌 {t('channel_pin_message')}
           </button>
+          <Show when={walletAddress() && userMenu()!.address !== walletAddress()}>
+            <div class="ctx-divider" />
+            <button class="ctx-item" onClick={() => handleUserAction('report')}>
+              🚩 {t('report_title')}
+            </button>
+          </Show>
           <Show when={isMod() && userMenu()!.address !== walletAddress()}>
             <div class="ctx-divider" />
             <button class="ctx-item ctx-warn" onClick={() => handleUserAction('mute')}>
@@ -602,16 +752,69 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         }
         .message-time { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
         .message-body { margin-top: var(--spacing-xs); font-size: var(--font-size-md); line-height: 1.5; }
+        .message.deleted .message-header { opacity: 0.5; }
+        .message-deleted-text { font-style: italic; color: var(--color-text-secondary); opacity: 0.6; }
+        .message.muted { opacity: 0.4; }
+        .message-muted-text { font-style: italic; color: var(--color-text-secondary); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .message-muted-text:hover { opacity: 0.8; }
+        .edited-indicator { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+        .message-reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: var(--spacing-xs); }
+        .reaction-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 2px;
+          padding: 2px 6px;
+          font-size: var(--font-size-xs);
+          background: var(--color-bg-tertiary);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-full);
+        }
+        .msg-actions {
+          display: flex;
+          gap: 2px;
+          margin-left: auto;
+          opacity: 0;
+          transition: opacity 0.15s;
+        }
+        .message:hover .msg-actions { opacity: 1; }
         .reply-btn {
           font-size: var(--font-size-xs);
           color: var(--color-text-secondary);
           cursor: pointer;
-          opacity: 0;
-          transition: opacity 0.15s;
-          margin-left: auto;
+          padding: 2px 4px;
+          border-radius: var(--radius-sm);
         }
-        .message:hover .reply-btn { opacity: 1; }
-        .reply-btn:hover { color: var(--color-accent-primary); }
+        .reply-btn:hover { color: var(--color-accent-primary); background: var(--color-bg-tertiary); }
+        .inline-react-picker {
+          display: flex;
+          gap: 4px;
+          padding: var(--spacing-xs) 0;
+        }
+        .inline-react-btn {
+          font-size: var(--font-size-md);
+          padding: 2px 4px;
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+        }
+        .inline-react-btn:hover { background: var(--color-bg-tertiary); }
+        .edit-indicator {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: var(--spacing-xs) var(--spacing-md);
+          background: var(--color-bg-tertiary);
+          border-top: 1px solid var(--color-accent-primary);
+          font-size: var(--font-size-sm);
+        }
+        .edit-indicator-label { color: var(--color-accent-primary); font-weight: 600; }
+        .edit-cancel {
+          font-size: var(--font-size-xs);
+          color: var(--color-text-secondary);
+          cursor: pointer;
+          padding: var(--spacing-xs) var(--spacing-sm);
+          border-radius: var(--radius-sm);
+        }
+        .edit-cancel:hover { background: var(--color-bg-secondary); color: var(--color-text-primary); }
 
         .reply-preview {
           display: flex;

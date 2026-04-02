@@ -2,7 +2,7 @@
  * DmConversationView — direct message conversation with a peer.
  */
 
-import { Component, createResource, createSignal, For, Show, onCleanup, onMount } from 'solid-js';
+import { Component, createResource, createSignal, createMemo, For, Show, onCleanup, onMount } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, walletAddress, getSigner } from '../lib/auth';
@@ -22,6 +22,9 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
   const [localMessages, setLocalMessages] = createSignal<any[]>([]);
   const [sending, setSending] = createSignal(false);
   const [showEmoji, setShowEmoji] = createSignal(false);
+  const [editingMsg, setEditingMsg] = createSignal<{ msgId: string; content: string } | null>(null);
+  const [showReactPicker, setShowReactPicker] = createSignal<string | null>(null);
+  const EDIT_WINDOW_MS = 30 * 60 * 1000;
   let inputRef: HTMLTextAreaElement | undefined;
 
   const [messages] = createResource(
@@ -78,6 +81,8 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
   });
 
   const handleSend = async () => {
+    if (editingMsg()) { await handleEdit(); return; }
+
     const text = messageInput().trim();
     if (!text || sending()) return;
 
@@ -123,6 +128,65 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
     }, 0);
   };
 
+  const msgIdToHex = (id: unknown): string => {
+    if (typeof id === 'string') return id;
+    if (id instanceof Uint8Array) return Array.from(id).map((b) => b.toString(16).padStart(2, '0')).join('');
+    if (Array.isArray(id)) return id.map((b: number) => b.toString(16).padStart(2, '0')).join('');
+    return String(id);
+  };
+
+  const canEdit = (msg: any) =>
+    msg.author === walletAddress() && !msg.deleted &&
+    (Date.now() - new Date(msg.timestamp).getTime()) < EDIT_WINDOW_MS;
+
+  const canDelete = (msg: any) => msg.author === walletAddress() && !msg.deleted;
+
+  const startEdit = (msg: any) => {
+    setEditingMsg({ msgId: msgIdToHex(msg.msg_id), content: getPayloadContent(msg.payload) });
+    setMessageInput(getPayloadContent(msg.payload));
+    inputRef?.focus();
+  };
+
+  const cancelEdit = () => { setEditingMsg(null); setMessageInput(''); };
+
+  const handleEdit = async () => {
+    const edit = editingMsg();
+    if (!edit || !messageInput().trim()) return;
+    setSending(true);
+    try {
+      const client = getClient();
+      await client.editDm(props.peerAddress, edit.msgId, messageInput().trim());
+      setLocalMessages((prev) => prev.map((m) =>
+        msgIdToHex(m.msg_id) === edit.msgId
+          ? { ...m, payload: messageInput().trim(), edited: true }
+          : m,
+      ));
+      setEditingMsg(null);
+      setMessageInput('');
+    } catch { /* failed */ }
+    finally { setSending(false); }
+  };
+
+  const handleDeleteDm = async (msg: any) => {
+    if (!window.confirm(t('chat_delete_confirm'))) return;
+    try {
+      const client = getClient();
+      await client.deleteDm(props.peerAddress, msgIdToHex(msg.msg_id));
+      setLocalMessages((prev) => prev.map((m) =>
+        msgIdToHex(m.msg_id) === msgIdToHex(msg.msg_id) ? { ...m, deleted: true } : m,
+      ));
+    } catch { /* failed */ }
+  };
+
+  const handleReactDm = async (msg: any, emoji: string) => {
+    if (!walletAddress()) return;
+    setShowReactPicker(null);
+    try {
+      const client = getClient();
+      await client.reactToDm(props.peerAddress, msgIdToHex(msg.msg_id), emoji);
+    } catch { /* failed */ }
+  };
+
   const truncateAddress = (addr: string) =>
     `${addr.slice(0, 8)}...${addr.slice(-4)}`;
 
@@ -148,22 +212,64 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
           <For each={allMessages()}>
             {(msg) => (
               <div
-                class={`dm-msg ${msg.author === walletAddress() ? 'own' : 'peer'}`}
+                class={`dm-msg ${msg.author === walletAddress() ? 'own' : 'peer'} ${msg.deleted ? 'deleted' : ''}`}
               >
-                <div class="dm-msg-body">
-                  <FormattedText content={getPayloadContent(msg.payload)} />
-                </div>
+                <Show
+                  when={!msg.deleted}
+                  fallback={<div class="dm-msg-body dm-msg-deleted">{t('message_deleted')}</div>}
+                >
+                  <div class="dm-msg-body">
+                    <FormattedText content={getPayloadContent(msg.payload)} />
+                  </div>
+                </Show>
                 <span class="dm-msg-time">
                   {new Date(msg.timestamp).toLocaleTimeString(undefined, {
                     hour: '2-digit',
                     minute: '2-digit',
                   })}
+                  <Show when={msg.edited}>
+                    <span class="dm-edited"> ({t('message_edited')})</span>
+                  </Show>
                 </span>
+                <Show when={!msg.deleted}>
+                  <div class="dm-msg-actions">
+                    <Show when={walletAddress()}>
+                      <button class="dm-action-btn" onClick={() => setShowReactPicker(showReactPicker() === msgIdToHex(msg.msg_id) ? null : msgIdToHex(msg.msg_id))} title={t('chat_react')}>😊</button>
+                    </Show>
+                    <Show when={canEdit(msg)}>
+                      <button class="dm-action-btn" onClick={() => startEdit(msg)} title={t('chat_edit')}>✏</button>
+                    </Show>
+                    <Show when={canDelete(msg)}>
+                      <button class="dm-action-btn" onClick={() => handleDeleteDm(msg)} title={t('chat_delete')}>🗑</button>
+                    </Show>
+                  </div>
+                </Show>
+                <Show when={showReactPicker() === msgIdToHex(msg.msg_id)}>
+                  <div class="dm-react-picker">
+                    {['👍', '👎', '❤️', '🔥', '😂', '😮'].map((emoji) => (
+                      <button class="dm-react-btn" onClick={() => handleReactDm(msg, emoji)}>{emoji}</button>
+                    ))}
+                  </div>
+                </Show>
+                <Show when={msg.reactions && Object.keys(msg.reactions).length > 0}>
+                  <div class="dm-msg-reactions">
+                    {Object.entries(msg.reactions as Record<string, number>).map(([emoji, count]) => (
+                      <span class="reaction-badge">{emoji} {count}</span>
+                    ))}
+                  </div>
+                </Show>
               </div>
             )}
           </For>
         </Show>
       </div>
+
+      <Show when={editingMsg()}>
+        <div class="dm-edit-indicator">
+          <span class="dm-edit-label">✏ {t('chat_edit_mode')}</span>
+          <button class="dm-edit-cancel" onClick={cancelEdit}>{t('chat_edit_cancel')}</button>
+        </div>
+      </Show>
 
       <Show when={authStatus() === 'ready'}>
         <div class="dm-input-area">
@@ -321,6 +427,31 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
           font-size: var(--font-size-sm);
         }
         .dm-send-btn:disabled { opacity: 0.5; cursor: default; }
+        .dm-msg-actions { display: flex; gap: 2px; opacity: 0; transition: opacity 0.15s; margin-top: var(--spacing-xs); }
+        .dm-msg:hover .dm-msg-actions { opacity: 1; }
+        .dm-action-btn { font-size: var(--font-size-xs); color: var(--color-text-secondary); cursor: pointer; padding: 2px 4px; border-radius: var(--radius-sm); }
+        .dm-action-btn:hover { color: var(--color-accent-primary); background: var(--color-bg-tertiary); }
+        .dm-react-picker { display: flex; gap: 4px; padding: var(--spacing-xs) 0; }
+        .dm-react-btn { font-size: var(--font-size-md); padding: 2px 4px; border-radius: var(--radius-sm); cursor: pointer; }
+        .dm-react-btn:hover { background: var(--color-bg-tertiary); }
+        .dm-edit-indicator {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: var(--spacing-xs) var(--spacing-md); background: var(--color-bg-tertiary);
+          border-top: 1px solid var(--color-accent-primary); font-size: var(--font-size-sm);
+        }
+        .dm-edit-label { color: var(--color-accent-primary); font-weight: 600; }
+        .dm-edit-cancel { font-size: var(--font-size-xs); color: var(--color-text-secondary); cursor: pointer; padding: var(--spacing-xs); }
+        .dm-edit-cancel:hover { color: var(--color-text-primary); }
+        .dm-msg.deleted { opacity: 0.5; }
+        .dm-msg-deleted { font-style: italic; color: var(--color-text-secondary); }
+        .dm-edited { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+        .dm-msg-reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: var(--spacing-xs); }
+        .reaction-badge {
+          display: inline-flex; align-items: center; gap: 2px;
+          padding: 2px 6px; font-size: var(--font-size-xs);
+          background: var(--color-bg-tertiary); border: 1px solid var(--color-border);
+          border-radius: var(--radius-full);
+        }
       `}</style>
     </div>
   );
