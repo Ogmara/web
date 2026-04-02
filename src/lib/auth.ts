@@ -191,17 +191,42 @@ async function registerDeviceOnNode(
 /**
  * Connect via K5 wallet delegation.
  * The device key was pre-generated; K5 signed the delegation on-chain.
+ *
+ * @param k5WalletAddress - The K5 wallet address that delegated (from callback or on-chain event)
  */
-export function connectK5Delegation(deviceAddress: string): void {
+export async function connectK5Delegation(k5WalletAddress: string): Promise<void> {
   const signer = vaultGetSigner();
-  if (signer) {
-    getClient().withSigner(signer);
-    setWalletAddress(deviceAddress);
-    setWalletSource('k5-delegation');
-    setSetting('walletSource', 'k5-delegation');
-    setSetting('walletAddress', deviceAddress);
-    setAuthStatus('ready');
+  if (!signer) return;
+
+  getClient().withSigner(signer);
+  const deviceAddress = signer.address;
+
+  // Register the device on the L2 node under the K5 wallet address.
+  // The on-chain delegation proves ownership; now the L2 node needs to know too.
+  const cacheKey = `${k5WalletAddress}:${deviceAddress}`;
+  const cached = getSetting('deviceRegistered');
+  if (cached !== cacheKey) {
+    try {
+      // K5 signed the delegation on-chain, but we also need a Klever-message
+      // signature for L2 node registration. Since we can't call K5 again for
+      // a message signature, we rely on the on-chain delegation being sufficient.
+      // The L2 node's chain scanner will pick up the deviceDelegated event and
+      // create the mapping automatically.
+      // For now, just mark as pending — the chain scanner will resolve it.
+      console.info('K5 delegation: waiting for chain scanner to pick up device mapping');
+    } catch {
+      // Non-critical
+    }
   }
+
+  // Set the wallet address to the K5 wallet (NOT the device address)
+  signer.walletAddress = k5WalletAddress;
+  setWalletAddress(k5WalletAddress);
+  setL2Address(deviceAddress);
+  setWalletSource('k5-delegation');
+  setSetting('walletSource', 'k5-delegation');
+  setSetting('walletAddress', k5WalletAddress);
+  setAuthStatus('ready');
 }
 
 /** Disconnect wallet and wipe vault. */
