@@ -522,7 +522,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       </Show>
 
       <style>{`
-        .chat-view { display: flex; flex-direction: column; height: 100%; }
+        .chat-view { display: flex; flex-direction: column; height: 100%; height: 100dvh; max-height: -webkit-fill-available; }
         .chat-messages { flex: 1; overflow-y: auto; padding: var(--spacing-md); display: flex; flex-direction: column; gap: var(--spacing-sm); }
         .chat-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-secondary); }
         .date-separator {

@@ -8,17 +8,17 @@
 import { Component, createResource, createSignal, createEffect, For, Show, onCleanup } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus } from '../lib/auth';
+import { authStatus, walletAddress } from '../lib/auth';
 import { navigate, route } from '../lib/router';
 import { getSetting, setSetting } from '../lib/settings';
 
 export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
   const [channelsOpen, setChannelsOpen] = createSignal(getSetting('channelsExpanded'));
-  const [contextMenu, setContextMenu] = createSignal<{ x: number; y: number; channelId: number } | null>(null);
+  const [contextMenu, setContextMenu] = createSignal<{ x: number; y: number; channelId: number; creator?: string } | null>(null);
 
-  const handleContextMenu = (e: MouseEvent, channelId: number) => {
+  const handleContextMenu = (e: MouseEvent, channelId: number, creator?: string) => {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, channelId });
+    setContextMenu({ x: e.clientX, y: e.clientY, channelId, creator });
   };
 
   const handleMarkRead = async () => {
@@ -149,7 +149,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
                 <button
                   class={`sidebar-item ${currentChannelId() === channel.channel_id ? 'active' : ''}`}
                   onClick={() => go(`/chat/${channel.channel_id}`)}
-                  onContextMenu={(e) => handleContextMenu(e, channel.channel_id)}
+                  onContextMenu={(e) => handleContextMenu(e, channel.channel_id, channel.creator)}
                 >
                   <span class="channel-hash">#</span>
                   <span class="channel-name">{channel.display_name || channel.slug}</span>
@@ -244,22 +244,23 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           }}>
             ✕ {t('channel_leave')}
           </button>
-          <button class="context-menu-item context-menu-danger" onClick={async () => {
-            const ctx = contextMenu();
-            setContextMenu(null);
-            if (!ctx) return;
-            if (!window.confirm('Delete this channel permanently?')) return;
-            try {
-              await getClient().deleteChannel(ctx.channelId);
-              window.dispatchEvent(new Event('ogmara:channels-changed'));
-              navigate('/news');
-            } catch (e: any) {
-              // Will fail with 403 if not the creator — that's expected
-              alert(e?.message || 'Only the channel creator can delete');
-            }
-          }}>
-            🗑 Delete channel
-          </button>
+          <Show when={contextMenu()?.creator === walletAddress()}>
+            <button class="context-menu-item context-menu-danger" onClick={async () => {
+              const ctx = contextMenu();
+              setContextMenu(null);
+              if (!ctx) return;
+              if (!window.confirm('Delete this channel permanently?')) return;
+              try {
+                await getClient().deleteChannel(ctx.channelId);
+                window.dispatchEvent(new Event('ogmara:channels-changed'));
+                navigate('/news');
+              } catch (e: any) {
+                alert(e?.message || 'Failed to delete channel');
+              }
+            }}>
+              🗑 Delete channel
+            </button>
+          </Show>
         </div>
       </Show>
 
