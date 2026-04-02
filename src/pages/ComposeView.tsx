@@ -18,7 +18,7 @@ export const ComposeView: Component = () => {
   const [error, setError] = createSignal('');
 
   const handleSubmit = async () => {
-    if (!title().trim() || !content().trim()) return;
+    if (!content().trim()) return;
     if (!getSigner()) {
       setError(t('auth_required'));
       return;
@@ -95,7 +95,7 @@ export const ComposeView: Component = () => {
         <button
           class="compose-submit"
           onClick={handleSubmit}
-          disabled={submitting() || !title().trim() || !content().trim() || authStatus() !== 'ready'}
+          disabled={submitting() || !content().trim() || authStatus() !== 'ready'}
         >
           {submitting() ? t('loading') : t('compose_submit')}
         </button>
