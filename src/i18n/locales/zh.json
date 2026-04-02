@@ -182,6 +182,7 @@
   "channel_type_private": "私密",
   "channel_leave": "离开频道",
   "channel_leave_confirm": "确定要离开此频道吗？",
+  "channel_delete_confirm": "永久删除此频道？此操作无法撤销。",
   "channel_settings": "频道设置",
   "channel_save": "保存",
   "channel_created": "频道已创建！",

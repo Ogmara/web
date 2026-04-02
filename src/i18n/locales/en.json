@@ -182,6 +182,7 @@
   "channel_type_private": "Private",
   "channel_leave": "Leave channel",
   "channel_leave_confirm": "Are you sure you want to leave this channel?",
+  "channel_delete_confirm": "Delete this channel permanently? This cannot be undone.",
   "channel_settings": "Channel Settings",
   "channel_save": "Save",
   "channel_created": "Channel created!",

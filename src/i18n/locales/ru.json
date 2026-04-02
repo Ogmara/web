@@ -182,6 +182,7 @@
   "channel_type_private": "Приватный",
   "channel_leave": "Покинуть канал",
   "channel_leave_confirm": "Вы уверены, что хотите покинуть этот канал?",
+  "channel_delete_confirm": "Удалить этот канал навсегда? Это действие нельзя отменить.",
   "channel_settings": "Настройки канала",
   "channel_save": "Сохранить",
   "channel_created": "Канал создан!",
