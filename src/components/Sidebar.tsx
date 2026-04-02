@@ -68,24 +68,28 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     window.addEventListener('ogmara:channels-changed', () => setChannelVersion(v => v + 1));
   }
 
-  // Poll unread counts every 30 seconds when authenticated
-  let unreadTimer: ReturnType<typeof setInterval> | null = null;
-  const fetchUnread = async () => {
+  // Poll unread counts + refresh channel list every 30 seconds when authenticated
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  const pollData = async () => {
     if (authStatus() !== 'ready') return;
     try {
       const client = getClient();
-      const resp = await client.getUnreadCounts();
-      setUnreadCounts(resp.unread ?? {});
+      const [unread] = await Promise.all([
+        client.getUnreadCounts().catch(() => ({ unread: {} })),
+        // Refresh channel list to sync cross-device changes (leave/delete/create)
+        refetchChannels(),
+      ]);
+      setUnreadCounts(unread.unread ?? {});
     } catch { /* ignore */ }
   };
   createEffect(() => {
-    if (unreadTimer) clearInterval(unreadTimer);
+    if (pollTimer) clearInterval(pollTimer);
     if (authStatus() === 'ready') {
-      fetchUnread();
-      unreadTimer = setInterval(fetchUnread, 30000);
+      pollData();
+      pollTimer = setInterval(pollData, 30000);
     }
   });
-  onCleanup(() => { if (unreadTimer) clearInterval(unreadTimer); });
+  onCleanup(() => { if (pollTimer) clearInterval(pollTimer); });
 
   const currentChannelId = () => {
     const r = route();
