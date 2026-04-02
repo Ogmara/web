@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from channel detail response instead.
 - **Missing `nav_back` i18n key** — added "Back" translation across all 7 locales.
 
+## [0.19.12] - 2026-04-02
+
+### Fixed
+- **K5 device registration: device-signed fallback** — when `signMessage`
+  fails (K5 mobile browser doesn't support it), the device key now signs the
+  claim itself. The L2 node accepts device-signed claims if the wallet is a
+  registered on-chain user. Combined with the server-side fallback in v0.9.6,
+  this enables full cross-device sync on K5 mobile.
+
 ## [0.19.11] - 2026-04-02
 
 ### Fixed
