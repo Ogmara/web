@@ -111,12 +111,13 @@ export const SearchView: Component = () => {
             <h3>{t('search_channels')}</h3>
             <For each={results().channels}>
               {(ch) => (
-                <button class="search-channel" onClick={() => navigate(`/chat/${ch.channel_id}`)}>
+                <button class="search-channel" onClick={() => navigate(`/join/${ch.channel_id}`)}>
                   <span class="channel-hash">#</span>
                   <span class="channel-name">{ch.display_name || ch.slug}</span>
-                  <Show when={ch.description}>
-                    <span class="channel-desc">{ch.description}</span>
+                  <Show when={ch.member_count}>
+                    <span class="channel-members">{ch.member_count} {t('channel_members')}</span>
                   </Show>
+                  <span class="channel-join-hint">{t('channel_join')}</span>
                 </button>
               )}
             </For>
@@ -207,7 +208,13 @@ export const SearchView: Component = () => {
         .search-channel:hover { background: var(--color-bg-secondary); }
         .search-channel .channel-hash { opacity: 0.5; font-weight: 700; }
         .search-channel .channel-name { font-weight: 600; }
-        .search-channel .channel-desc { font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-left: auto; }
+        .search-channel .channel-members { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+        .search-channel .channel-join-hint {
+          margin-left: auto;
+          font-size: var(--font-size-xs);
+          color: var(--color-accent-primary);
+          font-weight: 600;
+        }
         .search-post {
           background: var(--color-bg-secondary);
           border: 1px solid var(--color-border);

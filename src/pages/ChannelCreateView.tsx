@@ -72,6 +72,7 @@ export const ChannelCreateView: Component = () => {
         rules: rules().trim() || undefined,
       });
 
+      window.dispatchEvent(new Event('ogmara:channels-changed'));
       navigate(`/chat/${channelId}`);
     } catch (e: any) {
       setError(e?.message || 'Failed to create channel');
