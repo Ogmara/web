@@ -21,6 +21,7 @@ export interface Settings {
   mutedUsers: string[];
   walletSource: string;
   nodeUrl: string;
+  channelsExpanded: boolean;
   /** Cached device registration status: "wallet:device" key to avoid re-registration. */
   deviceRegistered: string;
 }
@@ -40,6 +41,7 @@ const defaults: Settings = {
   pinnedChannels: [],
   mutedChannels: [],
   mutedUsers: [],
+  channelsExpanded: false,
   walletSource: '',
   nodeUrl: '',
   deviceRegistered: '',

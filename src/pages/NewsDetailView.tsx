@@ -142,7 +142,7 @@ export const NewsDetailView: Component = () => {
   let commentInputRef: HTMLTextAreaElement | undefined;
 
   const requireAuthOrRedirect = (): boolean => {
-    if (!getSigner()) {
+    if (!getSigner() || !walletAddress()) {
       navigate('/wallet');
       return false;
     }

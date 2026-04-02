@@ -5,7 +5,7 @@
 import { Component, createSignal, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, getSigner } from '../lib/auth';
+import { authStatus, getSigner, walletAddress } from '../lib/auth';
 import { navigate } from '../lib/router';
 import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
 
@@ -19,7 +19,7 @@ export const ComposeView: Component = () => {
 
   const handleSubmit = async () => {
     if (!content().trim()) return;
-    if (!getSigner()) {
+    if (!getSigner() || !walletAddress()) {
       setError(t('auth_required'));
       return;
     }
