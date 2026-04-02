@@ -5,6 +5,15 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.9] - 2026-04-02
+
+### Fixed
+- **Admin dashboard hidden for channel owner** — `isOwner()` relied on finding the
+  user in the members list with role `"creator"`, but channels created via chain
+  scanner never added the creator as a member. Now uses `channel.creator` field
+  from channel detail response instead.
+- **Missing `nav_back` i18n key** — added "Back" translation across all 7 locales.
+
 ## [0.19.8] - 2026-04-02
 
 ### Fixed
