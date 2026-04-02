@@ -349,7 +349,9 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
               removeJoinedChannel(ctx.channelId);
               window.dispatchEvent(new Event('ogmara:channels-changed'));
               navigate('/news');
-            } catch { /* ignore */ }
+            } catch (e: any) {
+              alert(e?.message || 'Failed to leave channel');
+            }
           }}>
             ✕ {t('channel_leave')}
           </button>
