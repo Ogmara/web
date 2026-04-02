@@ -5,6 +5,21 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.1] - 2026-04-02
+
+### Fixed
+
+- Sidebar now only shows joined channels + default "ogmara" channel (was showing all public channels)
+- Channel join/create/leave/delete properly tracks membership in localStorage
+- ChannelSettingsView now displays channel details (name, description, owner, member count) for all users
+- Renamed "Channel Settings" to "Channel Details" for non-admin/non-moderator users
+- Hardcoded "Delete channel" text now uses i18n key
+
+### Added
+
+- `channel_details` and `channel_delete` i18n keys in all 7 locales
+- Exported `addJoinedChannel` / `removeJoinedChannel` helpers from Sidebar for cross-component use
+
 ## [0.20.0] - 2026-04-02
 
 ### Added

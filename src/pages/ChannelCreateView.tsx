@@ -11,6 +11,7 @@ import { getClient } from '../lib/api';
 import { authStatus, walletAddress, getSigner } from '../lib/auth';
 import { navigate, goBack } from '../lib/router';
 import { kleverAvailable, createChannelOnChain, getChannelIdFromTx } from '../lib/klever';
+import { addJoinedChannel } from '../components/Sidebar';
 import { keccak_256 } from '@noble/hashes/sha3';
 
 export const ChannelCreateView: Component = () => {
@@ -72,6 +73,7 @@ export const ChannelCreateView: Component = () => {
         rules: rules().trim() || undefined,
       });
 
+      addJoinedChannel(channelId);
       window.dispatchEvent(new Event('ogmara:channels-changed'));
       navigate(`/chat/${channelId}`);
     } catch (e: any) {

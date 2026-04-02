@@ -252,5 +252,7 @@
   "settings_export_downloading": "Preparando exportação...",
   "moderation_trust_score": "Pontuação de confiança",
   "moderation_reports_received": "Denúncias",
-  "moderation_account_age": "Idade da conta"
+  "moderation_account_age": "Idade da conta",
+  "channel_details": "Detalhes do canal",
+  "channel_delete": "Excluir canal"
 }

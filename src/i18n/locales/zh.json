@@ -252,5 +252,7 @@
   "settings_export_downloading": "准备导出...",
   "moderation_trust_score": "信任评分",
   "moderation_reports_received": "举报数",
-  "moderation_account_age": "账户年龄"
+  "moderation_account_age": "账户年龄",
+  "channel_details": "频道详情",
+  "channel_delete": "删除频道"
 }
