@@ -231,7 +231,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const handleSend = async () => {
     const text = messageInput().trim();
     if (!text || !props.channelId) return;
-    if (!getSigner()) { navigate('/wallet'); return; }
+    if (!getSigner() || !walletAddress()) { navigate('/wallet'); return; }
 
     setSending(true);
     try {
@@ -394,7 +394,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                   handleSend();
                 }
               }}
-              disabled={sending()}
+              disabled={sending() || !walletAddress()}
             />
             <div class="chat-input-actions">
               <div class="emoji-container">
@@ -415,7 +415,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
               <button
                 class="send-btn"
                 onClick={handleSend}
-                disabled={sending() || !messageInput().trim()}
+                disabled={sending() || !messageInput().trim() || !walletAddress()}
               >
                 {t('chat_send')}
               </button>

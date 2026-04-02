@@ -79,7 +79,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
     if (!text || sending()) return;
 
     const signer = getSigner();
-    if (!signer) return;
+    if (!signer || !walletAddress()) return;
 
     setSending(true);
     try {

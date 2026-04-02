@@ -10,9 +10,10 @@ import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus } from '../lib/auth';
 import { navigate, route } from '../lib/router';
+import { getSetting, setSetting } from '../lib/settings';
 
 export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
-  const [channelsOpen, setChannelsOpen] = createSignal(false);
+  const [channelsOpen, setChannelsOpen] = createSignal(getSetting('channelsExpanded'));
   const [unreadCounts, setUnreadCounts] = createSignal<Record<string, number>>({});
 
   /** Navigate and auto-close sidebar on mobile. */
@@ -85,7 +86,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         <div class="sidebar-heading-row">
           <button
             class="sidebar-collapse-btn"
-            onClick={() => setChannelsOpen(!channelsOpen())}
+            onClick={() => { const next = !channelsOpen(); setChannelsOpen(next); setSetting('channelsExpanded', next); }}
           >
             <span class={`collapse-arrow ${channelsOpen() ? 'open' : ''}`}>▸</span>
             <h3 class="sidebar-heading">{t('sidebar_channels')}</h3>
