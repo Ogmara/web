@@ -309,24 +309,22 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
               onPaste={async (e) => {
                 const items = e.clipboardData?.items;
                 if (!items || !walletAddress()) return;
-                for (const item of Array.from(items)) {
-                  if (item.type.startsWith('image/')) {
-                    e.preventDefault();
-                    const file = item.getAsFile();
-                    if (!file) continue;
-                    try {
-                      const client = getClient();
-                      const result = await client.uploadMedia(file, `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`);
-                      setAttachments((prev) => [...prev, {
-                        cid: result.cid,
-                        mime_type: file.type,
-                        size_bytes: file.size,
-                        filename: `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`,
-                        thumbnail_cid: result.thumbnail_cid,
-                      }]);
-                    } catch { /* upload failed */ }
-                    break;
-                  }
+                const imageItem = Array.from(items).find((i) => i.type.startsWith('image/'));
+                if (imageItem) {
+                  e.preventDefault();
+                  const file = imageItem.getAsFile();
+                  if (!file) return;
+                  try {
+                    const client = getClient();
+                    const result = await client.uploadMedia(file, `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`);
+                    setAttachments((prev) => [...prev, {
+                      cid: result.cid,
+                      mime_type: file.type,
+                      size_bytes: file.size,
+                      filename: `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`,
+                      thumbnail_cid: result.thumbnail_cid,
+                    }]);
+                  } catch { /* upload failed */ }
                 }
               }}
               disabled={sending() || !walletAddress()}
@@ -351,7 +349,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
               <button
                 class="dm-send-btn"
                 onClick={handleSend}
-                disabled={sending() || !messageInput().trim() || !walletAddress()}
+                disabled={sending() || (!messageInput().trim() && attachments().length === 0) || !walletAddress()}
               >
                 {t('chat_send')}
               </button>
