@@ -5,6 +5,20 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.5] - 2026-04-04
+
+### Fixed
+
+- Message delete, edit, and reactions now work correctly — optimistic updates take priority in dedup so changes appear immediately
+- Reactions show instant feedback with optimistic count increment instead of waiting for next poll
+- Pin message restricted to channel owner and moderators only
+- Message context menu (pin, report) now triggers on right-clicking the message bubble instead of the author name
+- Silent error swallowing replaced with console warnings for delete, edit, and react failures
+
+### Changed
+
+- Native browser right-click menu disabled globally (except on text inputs) so only in-app context menus appear
+
 ## [0.20.4] - 2026-04-02
 
 ### Fixed
