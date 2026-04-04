@@ -101,7 +101,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
       const client = getClient();
       const envelope = await buildDirectMessage(signer, {
         recipient: props.peerAddress,
-        content: text || ' ',
+        content: text,
         attachments: atts.length > 0 ? atts : undefined,
       });
       await client.sendDm(props.peerAddress, envelope);
@@ -306,17 +306,16 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
                   handleSend();
                 }
               }}
-              onPaste={async (e) => {
+              onPaste={(e) => {
                 const items = e.clipboardData?.items;
                 if (!items || !walletAddress()) return;
                 const imageItem = Array.from(items).find((i) => i.type.startsWith('image/'));
-                if (imageItem) {
-                  e.preventDefault();
-                  const file = imageItem.getAsFile();
-                  if (!file) return;
-                  try {
-                    const client = getClient();
-                    const result = await client.uploadMedia(file, `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`);
+                if (!imageItem) return;
+                e.preventDefault();
+                const file = imageItem.getAsFile();
+                if (!file) return;
+                getClient().uploadMedia(file, `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`)
+                  .then((result) => {
                     setAttachments((prev) => [...prev, {
                       cid: result.cid,
                       mime_type: file.type,
@@ -324,8 +323,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
                       filename: `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`,
                       thumbnail_cid: result.thumbnail_cid,
                     }]);
-                  } catch { /* upload failed */ }
-                }
+                  }).catch(() => { /* upload failed */ });
               }}
               disabled={sending() || !walletAddress()}
             />
