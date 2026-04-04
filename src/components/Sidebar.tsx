@@ -110,6 +110,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     onCleanup(() => document.removeEventListener('click', closeContextMenu));
   }
   const [unreadCounts, setUnreadCounts] = createSignal<Record<string, number>>({});
+  const [dmUnreadTotal, setDmUnreadTotal] = createSignal(0);
 
   // --- Private channel member list (collapsible per channel) ---
   const [expandedMembers, setExpandedMembers] = createSignal<Set<number>>(new Set());
@@ -129,17 +130,39 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     if (!channelMembers()[channelId]) {
       try {
         const resp = await getClient().getChannelMembers(channelId, { limit: 100 });
-        setChannelMembers((prev) => ({ ...prev, [channelId]: resp.members }));
-        // Resolve profiles
-        for (const m of resp.members) {
+        // Resolve profiles first, then sort
+        const members = resp.members;
+        for (const m of members) {
           if (!memberProfiles().has(m.address)) {
             resolveProfile(m.address).then((p) => {
               setMemberProfiles((prev) => { const next = new Map(prev); next.set(m.address, p); return next; });
+              // Re-sort after profile resolves
+              sortAndStoreMembers(channelId, members);
             });
           }
         }
+        sortAndStoreMembers(channelId, members);
       } catch { /* ignore */ }
     }
+  };
+
+  /** Sort members: creator > moderator > named users > wallets, alphabetically within each. */
+  const sortAndStoreMembers = (channelId: number, members: { address: string; role: string }[]) => {
+    const roleOrder = (role: string) => role === 'creator' ? 0 : role === 'moderator' ? 1 : 2;
+    const sorted = [...members].sort((a, b) => {
+      const ra = roleOrder(a.role), rb = roleOrder(b.role);
+      if (ra !== rb) return ra - rb;
+      const nameA = memberProfiles().get(a.address)?.display_name || '';
+      const nameB = memberProfiles().get(b.address)?.display_name || '';
+      // Named users before wallets
+      if (nameA && !nameB) return -1;
+      if (!nameA && nameB) return 1;
+      // Alphabetical within group
+      const labelA = (nameA || a.address).toLowerCase();
+      const labelB = (nameB || b.address).toLowerCase();
+      return labelA.localeCompare(labelB);
+    });
+    setChannelMembers((prev) => ({ ...prev, [channelId]: sorted }));
   };
 
   const memberDisplayName = (addr: string) => {
@@ -285,12 +308,15 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     if (authStatus() !== 'ready') return;
     try {
       const client = getClient();
-      const [unread] = await Promise.all([
+      const [unread, dmUnread] = await Promise.all([
         client.getUnreadCounts().catch(() => ({ unread: {} })),
+        client.getDmUnread().catch(() => ({ unread: {} })),
         // Refresh channel list to sync cross-device changes (leave/delete/create)
         refetchChannels(),
       ]);
       setUnreadCounts(unread.unread ?? {});
+      const dmCounts = dmUnread.unread ?? {};
+      setDmUnreadTotal(Object.values(dmCounts).reduce((a: number, b: number) => a + b, 0));
     } catch { /* ignore */ }
   };
   createEffect(() => {
@@ -417,6 +443,9 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           onClick={() => go('/dm')}
         >
           💬 {t('nav_dms')}
+          <Show when={dmUnreadTotal() > 0}>
+            <span class="unread-badge">{dmUnreadTotal()}</span>
+          </Show>
         </button>
       </div>
 

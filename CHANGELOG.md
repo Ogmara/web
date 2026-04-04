@@ -5,6 +5,17 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.5] - 2026-04-04
+
+### Added
+
+- **DM unread badge** on Messages sidebar item — shows total unread DM count, polled every 30s alongside channel unreads
+
+### Fixed
+
+- Private channel member list now sorted: owners first, then moderators, then named users, then wallet addresses — alphabetically within each group
+- Member list re-sorts as profiles resolve (display names load asynchronously)
+
 ## [0.22.4] - 2026-04-04
 
 ### Fixed
