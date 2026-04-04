@@ -130,6 +130,8 @@
   "channel_add_mod": "Moderator hinzufügen",
   "channel_kick": "Rauswerfen",
   "channel_ban": "Sperren",
+  "channel_promote_mod": "Zum Moderator befördern",
+  "channel_demote_mod": "Moderator entfernen",
   "channel_unban": "Entsperren",
   "channel_pin": "Anheften",
   "channel_unpin": "Lösen",

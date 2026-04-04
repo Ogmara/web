@@ -147,6 +147,88 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     return p?.display_name || `${addr.slice(0, 8)}...${addr.slice(-4)}`;
   };
 
+  // --- Member context menu (right-click on member in sidebar) ---
+  const [memberMenu, setMemberMenu] = createSignal<{
+    x: number; y: number; channelId: number; address: string; role: string; creator?: string;
+  } | null>(null);
+
+  const closeMemberMenu = () => setMemberMenu(null);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('click', closeMemberMenu);
+    onCleanup(() => document.removeEventListener('click', closeMemberMenu));
+  }
+
+  /** Get the current user's role in a channel from the cached member list. */
+  const myRoleIn = (channelId: number): string => {
+    const members = channelMembers()[channelId];
+    if (!members) return 'member';
+    const me = walletAddress();
+    const entry = members.find((m) => m.address === me);
+    return entry?.role || 'member';
+  };
+
+  const isModOrOwner = (channelId: number) => {
+    const role = myRoleIn(channelId);
+    return role === 'creator' || role === 'moderator';
+  };
+
+  const isOwner = (channelId: number) => myRoleIn(channelId) === 'creator';
+
+  /** Refresh member list for a channel after moderation action. */
+  const refreshMembers = async (channelId: number) => {
+    try {
+      const resp = await getClient().getChannelMembers(channelId, { limit: 100 });
+      setChannelMembers((prev) => ({ ...prev, [channelId]: resp.members }));
+      for (const m of resp.members) {
+        if (!memberProfiles().has(m.address)) {
+          resolveProfile(m.address).then((p) => {
+            setMemberProfiles((prev) => { const next = new Map(prev); next.set(m.address, p); return next; });
+          });
+        }
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleMemberAction = async (action: string) => {
+    const ctx = memberMenu();
+    if (!ctx) return;
+    setMemberMenu(null);
+    const client = getClient();
+    try {
+      switch (action) {
+        case 'profile':
+          go(`/user/${ctx.address}`);
+          break;
+        case 'kick':
+          if (window.confirm(`Kick ${memberDisplayName(ctx.address)}?`))  {
+            await client.kickUser(ctx.channelId, ctx.address);
+            await refreshMembers(ctx.channelId);
+          }
+          break;
+        case 'ban': {
+          const reason = window.prompt(t('channel_ban_reason'));
+          if (reason !== null) {
+            await client.banUser(ctx.channelId, ctx.address, reason || undefined);
+            await refreshMembers(ctx.channelId);
+          }
+          break;
+        }
+        case 'promote': {
+          await client.addModerator(ctx.channelId, ctx.address);
+          await refreshMembers(ctx.channelId);
+          break;
+        }
+        case 'demote': {
+          await client.removeModerator(ctx.channelId, ctx.address);
+          await refreshMembers(ctx.channelId);
+          break;
+        }
+      }
+    } catch (e: any) {
+      alert(e?.message || 'Action failed');
+    }
+  };
+
   /** Navigate and auto-close sidebar on mobile. */
   const go = (path: string) => {
     navigate(path);
@@ -306,6 +388,11 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
                             <button
                               class="sidebar-member-item"
                               onClick={() => go(`/user/${member.address}`)}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setMemberMenu({ x: e.clientX, y: e.clientY, channelId: channel.channel_id, address: member.address, role: member.role, creator: channel.creator });
+                              }}
                               title={member.address}
                             >
                               <span class="member-dot" classList={{ 'member-mod': member.role === 'moderator', 'member-owner': member.role === 'creator' }} />
@@ -436,6 +523,49 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
             }}>
               🗑 {t('channel_delete')}
             </button>
+          </Show>
+        </div>
+      </Show>
+
+      {/* Member context menu (right-click on member in sidebar) */}
+      <Show when={memberMenu()}>
+        <div
+          class="channel-context-menu"
+          style={{ left: `${memberMenu()!.x}px`, top: `${memberMenu()!.y}px` }}
+        >
+          <button class="context-menu-item" onClick={() => handleMemberAction('profile')}>
+            👤 {t('channel_view_profile')}
+          </button>
+          {/* Kick/ban: visible to mods and owner, but not on yourself or the owner */}
+          <Show when={
+            isModOrOwner(memberMenu()!.channelId) &&
+            memberMenu()!.address !== walletAddress() &&
+            memberMenu()!.role !== 'creator'
+          }>
+            <div class="ctx-divider" />
+            <button class="context-menu-item context-menu-warn" onClick={() => handleMemberAction('kick')}>
+              ⚡ {t('channel_kick')}
+            </button>
+            <button class="context-menu-item context-menu-danger" onClick={() => handleMemberAction('ban')}>
+              ⛔ {t('channel_ban')}
+            </button>
+          </Show>
+          {/* Promote/demote: owner only, not on yourself */}
+          <Show when={
+            isOwner(memberMenu()!.channelId) &&
+            memberMenu()!.address !== walletAddress()
+          }>
+            <div class="ctx-divider" />
+            <Show when={memberMenu()!.role !== 'moderator'}>
+              <button class="context-menu-item" onClick={() => handleMemberAction('promote')}>
+                ⬆ {t('channel_promote_mod')}
+              </button>
+            </Show>
+            <Show when={memberMenu()!.role === 'moderator'}>
+              <button class="context-menu-item context-menu-warn" onClick={() => handleMemberAction('demote')}>
+                ⬇ {t('channel_demote_mod')}
+              </button>
+            </Show>
           </Show>
         </div>
       </Show>
@@ -573,8 +703,10 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           color: var(--color-text-primary);
         }
         .context-menu-item:hover { background: var(--color-bg-tertiary); }
+        .context-menu-warn { color: var(--color-text-secondary); }
         .context-menu-danger { color: #f44; }
         .context-menu-danger:hover { background: rgba(255,68,68,0.1); }
+        .ctx-divider { height: 1px; background: var(--color-border); margin: 4px 0; }
         .channel-group { display: flex; flex-direction: column; }
         .sidebar-members-toggle {
           display: flex;

@@ -96,6 +96,8 @@
   "channel_add_mod": "Добавить модератора",
   "channel_kick": "Кикнуть",
   "channel_ban": "Забанить",
+  "channel_promote_mod": "Назначить модератором",
+  "channel_demote_mod": "Снять модератора",
   "channel_unban": "Разбанить",
   "channel_pin": "Закрепить",
   "channel_unpin": "Открепить",
