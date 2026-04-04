@@ -24,6 +24,7 @@ export const SettingsView: Component = () => {
   const [lang, setLang] = createSignal(currentLanguage());
   const [nodeUrl, setNodeUrl] = createSignal(getSetting('nodeUrl'));
   const [compact, setCompact] = createSignal(getSetting('compactLayout'));
+  const [mediaAutoload, setMediaAutoload] = createSignal(getSetting('mediaAutoload') || 'always');
   const [sounds, setSounds] = createSignal(getSetting('notificationSound'));
   const [pushEnabled, setPushEnabled] = createSignal(getSetting('pushEnabled'));
   const [pushStatus, setPushStatus] = createSignal('');
@@ -84,6 +85,21 @@ export const SettingsView: Component = () => {
           />
           {t('settings_compact')}
         </label>
+        <h3 style="margin-top: var(--spacing-md)">{t('settings_media')}</h3>
+        <div class="settings-radio-group">
+          {(['always', 'never'] as const).map((value) => (
+            <label class="settings-radio">
+              <input
+                type="radio"
+                name="mediaAutoload"
+                value={value}
+                checked={mediaAutoload() === value}
+                onChange={() => { setMediaAutoload(value); setSetting('mediaAutoload', value); }}
+              />
+              {t(`settings_media_${value}`)}
+            </label>
+          ))}
+        </div>
       </section>
 
       <section class="settings-section">

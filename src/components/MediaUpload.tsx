@@ -19,8 +19,21 @@ export interface MediaAttachment {
 }
 
 /** Accepted file types for uploads. */
-const ACCEPTED_TYPES = 'image/*,video/*,audio/*,.pdf,.txt,.md';
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB (matches L2 node body limit)
+const ACCEPTED_TYPES = 'image/*,video/*,audio/*,.pdf,.txt,.md,.csv,.json';
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
+/** File extensions that are always blocked (executable/scripting). */
+const BLOCKED_EXTENSIONS = new Set([
+  'exe', 'bat', 'cmd', 'com', 'msi', 'scr', 'pif', 'vbs', 'vbe',
+  'js', 'jse', 'wsf', 'wsh', 'ps1', 'psm1', 'psd1',
+  'sh', 'bash', 'csh', 'ksh',
+  'app', 'action', 'command', 'workflow',
+  'dll', 'sys', 'drv', 'ocx',
+  'jar', 'class', 'war',
+  'apk', 'deb', 'rpm', 'dmg', 'iso',
+  'reg', 'inf', 'lnk', 'url',
+  'hta', 'cpl', 'msc', 'gadget',
+]);
 
 export const MediaUpload: Component<{
   attachments: MediaAttachment[];
@@ -39,6 +52,13 @@ export const MediaUpload: Component<{
 
     // Reset input so the same file can be re-selected
     input.value = '';
+
+    // Block executable file types
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+    if (BLOCKED_EXTENSIONS.has(ext)) {
+      setUploadError(t('media_blocked_type'));
+      return;
+    }
 
     if (file.size > MAX_FILE_SIZE) {
       setUploadError(t('media_too_large'));

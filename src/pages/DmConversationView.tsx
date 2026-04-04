@@ -9,7 +9,8 @@ import { authStatus, walletAddress, getSigner } from '../lib/auth';
 import { onWsEvent } from '../lib/ws';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
-import { getPayloadContent } from '../lib/payload';
+import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
+import { getPayloadContent, getPayloadAttachments } from '../lib/payload';
 import { EmojiPicker } from '../components/EmojiPicker';
 import { buildDirectMessage } from '@ogmara/sdk';
 
@@ -24,6 +25,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
   const [showEmoji, setShowEmoji] = createSignal(false);
   const [editingMsg, setEditingMsg] = createSignal<{ msgId: string; content: string } | null>(null);
   const [showReactPicker, setShowReactPicker] = createSignal<string | null>(null);
+  const [attachments, setAttachments] = createSignal<MediaAttachment[]>([]);
   const EDIT_WINDOW_MS = 30 * 60 * 1000;
   let inputRef: HTMLTextAreaElement | undefined;
 
@@ -88,7 +90,8 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
     if (editingMsg()) { await handleEdit(); return; }
 
     const text = messageInput().trim();
-    if (!text || sending()) return;
+    const atts = attachments();
+    if ((!text && atts.length === 0) || sending()) return;
 
     const signer = getSigner();
     if (!signer || !walletAddress()) return;
@@ -98,10 +101,12 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
       const client = getClient();
       const envelope = await buildDirectMessage(signer, {
         recipient: props.peerAddress,
-        content: text,
+        content: text || ' ',
+        attachments: atts.length > 0 ? atts : undefined,
       });
       await client.sendDm(props.peerAddress, envelope);
       setMessageInput('');
+      setAttachments([]);
 
       // Optimistic: show sent message immediately
       setLocalMessages((prev) => [...prev, {
@@ -223,7 +228,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
                   fallback={<div class="dm-msg-body dm-msg-deleted">{t('message_deleted')}</div>}
                 >
                   <div class="dm-msg-body">
-                    <FormattedText content={getPayloadContent(msg.payload)} />
+                    <FormattedText content={getPayloadContent(msg.payload)} attachments={getPayloadAttachments(msg.payload)} />
                   </div>
                 </Show>
                 <span class="dm-msg-time">
@@ -276,6 +281,16 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
       </Show>
 
       <Show when={authStatus() === 'ready'}>
+        <Show when={!editingMsg()}>
+          <div class="dm-media-bar">
+            <MediaUpload
+              attachments={attachments()}
+              onAttach={(a) => setAttachments((prev) => [...prev, a])}
+              onRemove={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+              disabled={sending()}
+            />
+          </div>
+        </Show>
         <div class="dm-input-area">
           <div class="dm-input-row">
             <textarea
@@ -383,6 +398,10 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
           color: var(--color-text-secondary);
           text-align: right;
           margin-top: var(--spacing-xs);
+        }
+        .dm-media-bar {
+          padding: var(--spacing-xs) var(--spacing-md);
+          border-top: 1px solid var(--color-border);
         }
         .dm-input-area {
           border-top: 1px solid var(--color-border);

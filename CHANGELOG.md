@@ -5,6 +5,20 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.0] - 2026-04-04
+
+### Added
+
+- **File and media attachments** in channel chats and DMs — upload images, videos, audio, PDFs, and text files (max 10 MB) via the attach button below the input area
+- **Inline video rendering** — MP4, WebM, OGG videos play directly in message bubbles with native controls
+- **Media autoload setting** — choose between "Show images and videos inline" (default) or "Show as download links only" under Settings > Theme > Media
+- **Blocked file types** — executable files (.exe, .bat, .sh, .apk, etc.) are blocked from upload for security
+
+### Changed
+
+- Channel messages and DMs now extract and display attachments from received messages
+- DM send handler updated to pass attachments through SDK's `buildDirectMessage`
+
 ## [0.22.8] - 2026-04-04
 
 ### Changed
