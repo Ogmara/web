@@ -5,6 +5,15 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.8] - 2026-04-04
+
+### Changed
+
+- **Message actions redesigned** — reply, edit, delete moved to right-click context menu; inline action buttons removed from message headers
+- **Floating emoji bar** — appears on message hover (top-right), replaces the click-to-open reaction picker
+- Continuation messages no longer have a hidden time/action row — zero extra vertical space
+- Context menu now shows message actions (reply, edit, delete) at the top, followed by user/moderation actions
+
 ## [0.22.7] - 2026-04-04
 
 ### Changed
