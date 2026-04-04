@@ -69,7 +69,30 @@ export const FormattedText: Component<Props> = (props) => {
             case 'url': {
               // Defense-in-depth: only allow http/https links
               const safe = seg.url.startsWith('http://') || seg.url.startsWith('https://');
-              return safe ? (
+              if (!safe) return <span>{seg.display}</span>;
+              // Check if this is an internal app link (same origin or ogmara.org with hash route)
+              const isInternal = (() => {
+                try {
+                  const u = new URL(seg.url);
+                  const here = window.location;
+                  const sameOrigin = u.origin === here.origin;
+                  const ogmaraApp = u.hostname === 'ogmara.org' && (u.pathname === '/app/' || u.pathname === '/app');
+                  return (sameOrigin || ogmaraApp) && u.hash.startsWith('#/');
+                } catch { return false; }
+              })();
+              return isInternal ? (
+                <a
+                  href={seg.url}
+                  class="msg-link"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const hash = new URL(seg.url).hash.replace('#', '');
+                    navigate(hash);
+                  }}
+                >
+                  {seg.display}
+                </a>
+              ) : (
                 <a
                   href={seg.url}
                   target="_blank"
@@ -78,8 +101,6 @@ export const FormattedText: Component<Props> = (props) => {
                 >
                   {seg.display}
                 </a>
-              ) : (
-                <span>{seg.display}</span>
               );
             }
             case 'bold':
