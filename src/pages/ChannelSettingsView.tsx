@@ -147,7 +147,7 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
   // --- Invite link ---
   const [linkCopied, setLinkCopied] = createSignal(false);
   const handleCopyLink = () => {
-    const url = `${window.location.origin}/#/join/${channelIdNum()}`;
+    const url = `${window.location.origin}/app/#/join/${channelIdNum()}`;
     navigator.clipboard.writeText(url).then(() => {
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
