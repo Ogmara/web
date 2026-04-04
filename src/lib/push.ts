@@ -96,9 +96,16 @@ async function unregisterFromGateway(
   subscriptionJson: string,
   address: string,
 ): Promise<void> {
+  const signer = getSigner();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (signer) {
+    const authHeaders = await signer.signRequest('POST', '/unregister');
+    Object.assign(headers, authHeaders);
+  }
+
   await fetch(`${gatewayUrl}/unregister`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       address,
       token: subscriptionJson,
