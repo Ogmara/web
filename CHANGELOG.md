@@ -5,6 +5,16 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.2] - 2026-04-04
+
+### Added
+
+- **Member context menu** in sidebar — right-click any member in a private channel's member list for moderation actions
+- Kick and ban actions for moderators and owners (with confirmation prompts)
+- Promote/demote moderator actions for channel owners
+- Member list auto-refreshes after moderation actions
+- Permission gating: cannot kick/ban/demote the channel owner, cannot act on yourself
+
 ## [0.22.1] - 2026-04-04
 
 ### Added

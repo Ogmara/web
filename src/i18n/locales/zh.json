@@ -130,6 +130,8 @@
   "channel_add_mod": "添加版主",
   "channel_kick": "踢出",
   "channel_ban": "封禁",
+  "channel_promote_mod": "提升为管理员",
+  "channel_demote_mod": "移除管理员",
   "channel_unban": "解封",
   "channel_pin": "置顶",
   "channel_unpin": "取消置顶",

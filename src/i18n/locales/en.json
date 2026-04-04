@@ -163,6 +163,8 @@
   "channel_add_mod": "Add Moderator",
   "channel_kick": "Kick",
   "channel_ban": "Ban",
+  "channel_promote_mod": "Promote to moderator",
+  "channel_demote_mod": "Remove moderator",
   "channel_unban": "Unban",
   "channel_pin": "Pin",
   "channel_unpin": "Unpin",

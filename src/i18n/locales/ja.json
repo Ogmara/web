@@ -130,6 +130,8 @@
   "channel_add_mod": "モデレーター追加",
   "channel_kick": "キック",
   "channel_ban": "BAN",
+  "channel_promote_mod": "モデレーターに昇格",
+  "channel_demote_mod": "モデレーターを解除",
   "channel_unban": "BAN解除",
   "channel_pin": "ピン留め",
   "channel_unpin": "ピン解除",
