@@ -5,6 +5,14 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.7] - 2026-04-04
+
+### Changed
+
+- Continuation messages stack tighter — removed border gap, reduced padding to 2px
+- Own message bubble color darkened (accent mix reduced from 35% to 15%) for subtler contrast with other users' bubbles
+- Own message border color softened to blend better with the darker background
+
 ## [0.22.6] - 2026-04-04
 
 ### Changed
