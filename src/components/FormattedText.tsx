@@ -10,6 +10,7 @@ import { JSX } from 'solid-js/jsx-runtime';
 import { parseMessageContent, type TextSegment, type Attachment } from '@ogmara/sdk';
 import { getClient } from '../lib/api';
 import { navigate } from '../lib/router';
+import { getSetting } from '../lib/settings';
 
 interface Props {
   content: string;
@@ -19,6 +20,8 @@ interface Props {
 
 /** Image MIME types that should render inline. SVG excluded — can contain scripts. */
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+/** Video MIME types that render as inline <video> elements. */
+const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/ogg'];
 
 /** Regex for hashtags: # followed by word chars (letters, digits, underscore). */
 const HASHTAG_RE = /#([\w\u00C0-\u024F]+)/g;
@@ -119,32 +122,52 @@ export const FormattedText: Component<Props> = (props) => {
         }}
       </For>
 
-      {/* Render inline images from attachments */}
+      {/* Render attachments: images, videos, and files */}
       <Show when={props.attachments && props.attachments.length > 0}>
         <div class="msg-attachments">
           <For each={props.attachments}>
             {(att) => {
               const isImage = IMAGE_TYPES.includes(att.mime_type);
+              const isVideo = VIDEO_TYPES.includes(att.mime_type);
               const mediaUrl = getClient().getMediaUrl(att.cid);
-              return isImage ? (
-                <a href={mediaUrl} target="_blank" rel="noopener noreferrer">
-                  <img
-                    src={att.thumbnail_cid
-                      ? getClient().getMediaUrl(att.thumbnail_cid)
-                      : mediaUrl}
-                    alt={att.filename || 'image'}
-                    class="msg-image"
-                    loading="lazy"
-                  />
-                </a>
-              ) : (
+              const autoload = getSetting('mediaAutoload') !== 'never';
+
+              if (isImage && autoload) {
+                return (
+                  <a href={mediaUrl} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={att.thumbnail_cid
+                        ? getClient().getMediaUrl(att.thumbnail_cid)
+                        : mediaUrl}
+                      alt={att.filename || 'image'}
+                      class="msg-image"
+                      loading="lazy"
+                    />
+                  </a>
+                );
+              }
+              if (isVideo && autoload) {
+                return (
+                  <video
+                    class="msg-video"
+                    controls
+                    preload="metadata"
+                    src={mediaUrl}
+                  >
+                    <a href={mediaUrl} target="_blank" rel="noopener noreferrer">{att.filename || 'video'}</a>
+                  </video>
+                );
+              }
+              // Non-media files or autoload disabled — show as download link
+              const icon = isImage ? '🖼' : isVideo ? '🎬' : '📎';
+              return (
                 <a
                   href={mediaUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   class="msg-file"
                 >
-                  {att.filename || att.cid.slice(0, 12) + '...'}
+                  {icon} {att.filename || att.cid.slice(0, 12) + '...'}
                 </a>
               );
             }}
@@ -180,6 +203,12 @@ export const FormattedText: Component<Props> = (props) => {
           object-fit: cover;
         }
         .msg-image:hover { opacity: 0.9; }
+        .msg-video {
+          max-width: 400px;
+          max-height: 300px;
+          border-radius: var(--radius-md);
+          background: #000;
+        }
         .msg-file {
           display: inline-flex;
           align-items: center;

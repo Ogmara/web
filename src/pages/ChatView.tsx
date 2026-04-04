@@ -12,7 +12,8 @@ import { navigate } from '../lib/router';
 import { setSetting } from '../lib/settings';
 import { FormattedText } from '../components/FormattedText';
 import { EmojiPicker } from '../components/EmojiPicker';
-import { getPayloadContent, decodePayload } from '../lib/payload';
+import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
+import { getPayloadContent, getPayloadAttachments, decodePayload } from '../lib/payload';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
 
 /** Convert a msg_id (hex string, byte array, or Uint8Array) to a consistent hex string. */
@@ -71,7 +72,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [myRole, setMyRole] = createSignal<'creator' | 'moderator' | 'member'>('member');
   const [expandedMuted, setExpandedMuted] = createSignal<Set<string>>(new Set());
   const [editingMsg, setEditingMsg] = createSignal<{ msgId: string; content: string } | null>(null);
-  const [showReactPicker, setShowReactPicker] = createSignal<string | null>(null); // msg_id being reacted to
+  const [attachments, setAttachments] = createSignal<MediaAttachment[]>([]);
   const EDIT_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
   const GROUP_WINDOW_MS = 2 * 60 * 1000; // 2 minutes — combine consecutive messages
   let inputRef: HTMLTextAreaElement | undefined;
@@ -330,7 +331,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     if (editingMsg()) { await handleEdit(); return; }
 
     const text = messageInput().trim();
-    if (!text || !props.channelId) return;
+    const atts = attachments();
+    if ((!text && atts.length === 0) || !props.channelId) return;
     if (!getSigner() || !walletAddress()) { navigate('/wallet'); return; }
 
     setSending(true);
@@ -338,7 +340,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       const client = getClient();
       const options: any = {};
       if (replyTo()) options.replyTo = replyTo()!.msgId;
-      await client.sendMessage(props.channelId, text, options);
+      if (atts.length > 0) options.attachments = atts;
+      await client.sendMessage(props.channelId, text || ' ', options);
 
       // Optimistic: add message locally for instant display
       const addr = walletAddress() || '';
@@ -353,6 +356,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       setMessageInput('');
       setReplyTo(null);
       setShowEmoji(false);
+      setAttachments([]);
     } catch {
       // Send failed
     } finally {
@@ -585,7 +589,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                             </div>
                           }
                         >
-                          <div class="message-body"><FormattedText content={getPayloadContent(msg.payload)} /></div>
+                          <div class="message-body"><FormattedText content={getPayloadContent(msg.payload)} attachments={getPayloadAttachments(msg.payload)} /></div>
                         </Show>
                       </Show>
                       {/* Floating emoji bar on hover */}
@@ -627,6 +631,18 @@ export const ChatView: Component<ChatViewProps> = (props) => {
               <span class="reply-indicator-text">{replyTo()!.preview}</span>
             </div>
             <button class="reply-cancel" onClick={cancelReply}>✕</button>
+          </div>
+        </Show>
+
+        {/* Media attachments */}
+        <Show when={walletAddress() && !editingMsg()}>
+          <div class="chat-media-bar">
+            <MediaUpload
+              attachments={attachments()}
+              onAttach={(a) => setAttachments((prev) => [...prev, a])}
+              onRemove={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+              disabled={sending()}
+            />
           </div>
         </Show>
 
@@ -1004,6 +1020,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         .ctx-danger:hover { background: rgba(255,68,68,0.1); }
         .ctx-divider { height: 1px; background: var(--color-border); margin: 4px 0; }
 
+        .chat-media-bar {
+          padding: var(--spacing-xs) var(--spacing-md);
+          border-top: 1px solid var(--color-border);
+        }
         .chat-input-area {
           border-top: 1px solid var(--color-border);
           padding: var(--spacing-sm) var(--spacing-md);
