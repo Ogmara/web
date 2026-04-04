@@ -17,6 +17,12 @@ initI18n();
 // Apply theme before first paint (prevents flash)
 initTheme();
 
+// Apply compact layout class if saved
+import { getSetting } from './lib/settings';
+if (getSetting('compactLayout')) {
+  document.documentElement.classList.add('compact');
+}
+
 // Detect wallet integrations
 detectKleverExtension();
 detectK5();

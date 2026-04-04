@@ -10,6 +10,7 @@ import { t } from '../i18n/init';
 import { navigate, route } from '../lib/router';
 import { authStatus, walletAddress } from '../lib/auth';
 import { getClient } from '../lib/api';
+import { getSetting } from '../lib/settings';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
 
 interface ToolbarProps {
@@ -57,7 +58,10 @@ export const Toolbar: Component<ToolbarProps> = (props) => {
       <div class="toolbar-center">
         <button
           class={`toolbar-nav ${isActive('chat') ? 'active' : ''}`}
-          onClick={() => navigate('/chat')}
+          onClick={() => {
+            const last = getSetting('lastChannel');
+            navigate(last ? `/chat/${last}` : '/chat');
+          }}
         >
           {t('nav_chat')}
         </button>
