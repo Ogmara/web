@@ -73,6 +73,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [editingMsg, setEditingMsg] = createSignal<{ msgId: string; content: string } | null>(null);
   const [showReactPicker, setShowReactPicker] = createSignal<string | null>(null); // msg_id being reacted to
   const EDIT_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+  const GROUP_WINDOW_MS = 2 * 60 * 1000; // 2 minutes — combine consecutive messages
   let inputRef: HTMLTextAreaElement | undefined;
   let messagesRef: HTMLDivElement | undefined;
 
@@ -504,6 +505,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                 const showDateSep = currentDate !== prevDate;
                 const reply = resolveReply(msg);
                 const prof = () => getProfile(msg.author);
+                // Group consecutive messages from the same author within 2 minutes
+                const isContinuation = !showDateSep && !reply && prevMsg
+                  && prevMsg.author === msg.author
+                  && !prevMsg.deleted && !msg.deleted
+                  && (Math.abs(new Date(msg.timestamp).getTime() - new Date(prevMsg.timestamp).getTime()) < GROUP_WINDOW_MS);
 
                 return (
                   <>
@@ -513,7 +519,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                       </div>
                     </Show>
                     <div
-                      class={`message ${msg.author === walletAddress() ? 'own' : ''} ${msg.deleted ? 'deleted' : ''} ${msg.muted ? 'muted' : ''}`}
+                      class={`message ${msg.author === walletAddress() ? 'own' : ''} ${msg.deleted ? 'deleted' : ''} ${msg.muted ? 'muted' : ''} ${isContinuation ? 'continuation' : ''}`}
                       data-msg-id={msgIdToHex(msg.msg_id)}
                       onContextMenu={(e) => {
                         e.preventDefault();
@@ -526,49 +532,70 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                           <span class="reply-preview-text">{reply!.content}</span>
                         </div>
                       </Show>
-                      <div class="message-header">
-                        <Show when={prof()?.avatar_cid}>
-                          <img
-                            class="msg-avatar"
-                            src={getClient().getMediaUrl(prof()!.avatar_cid!)}
-                            alt=""
-                          />
-                        </Show>
-                        <Show when={!prof()?.avatar_cid}>
-                          <span class="msg-avatar-placeholder">
-                            {(prof()?.display_name || msg.author).slice(0, 2).toUpperCase()}
-                          </span>
-                        </Show>
-                        <span
-                          class="message-author"
-                          onClick={() => navigate(`/user/${msg.author}`)}
-                        >
-                          {displayName(msg.author)}
-                        </span>
-                        <Show when={prof()?.verified}>
-                          <span class="msg-verified">✓</span>
-                        </Show>
-                        <span class="message-time">
-                          {formatMessageTime(msg.timestamp)}
-                          <Show when={msg.edited}>
-                            <span class="edited-indicator" title={msg.last_edited_at ? new Date(msg.last_edited_at).toLocaleString() : ''}> ({t('message_edited')})</span>
+                      <Show when={!isContinuation}>
+                        <div class="message-header">
+                          <Show when={prof()?.avatar_cid}>
+                            <img
+                              class="msg-avatar"
+                              src={getClient().getMediaUrl(prof()!.avatar_cid!)}
+                              alt=""
+                            />
                           </Show>
-                        </span>
-                        <Show when={!msg.deleted}>
-                          <div class="msg-actions">
-                            <button class="reply-btn" onClick={() => handleReply(msg)} title={t('chat_reply')}>↩</button>
-                            <Show when={walletAddress()}>
-                              <button class="reply-btn" onClick={() => { setShowReactPicker(showReactPicker() === msgIdToHex(msg.msg_id) ? null : msgIdToHex(msg.msg_id)); }} title={t('chat_react')}>😊</button>
+                          <Show when={!prof()?.avatar_cid}>
+                            <span class="msg-avatar-placeholder">
+                              {(prof()?.display_name || msg.author).slice(0, 2).toUpperCase()}
+                            </span>
+                          </Show>
+                          <span
+                            class="message-author"
+                            onClick={() => navigate(`/user/${msg.author}`)}
+                          >
+                            {displayName(msg.author)}
+                          </span>
+                          <Show when={prof()?.verified}>
+                            <span class="msg-verified">✓</span>
+                          </Show>
+                          <span class="message-time">
+                            {formatMessageTime(msg.timestamp)}
+                            <Show when={msg.edited}>
+                              <span class="edited-indicator" title={msg.last_edited_at ? new Date(msg.last_edited_at).toLocaleString() : ''}> ({t('message_edited')})</span>
                             </Show>
-                            <Show when={canEdit(msg)}>
-                              <button class="reply-btn" onClick={() => startEdit(msg)} title={t('chat_edit')}>✏</button>
-                            </Show>
-                            <Show when={canDelete(msg)}>
-                              <button class="reply-btn" onClick={() => handleDelete(msg)} title={t('chat_delete')}>🗑</button>
-                            </Show>
-                          </div>
-                        </Show>
-                      </div>
+                          </span>
+                          <Show when={!msg.deleted}>
+                            <div class="msg-actions">
+                              <button class="reply-btn" onClick={() => handleReply(msg)} title={t('chat_reply')}>↩</button>
+                              <Show when={walletAddress()}>
+                                <button class="reply-btn" onClick={() => { setShowReactPicker(showReactPicker() === msgIdToHex(msg.msg_id) ? null : msgIdToHex(msg.msg_id)); }} title={t('chat_react')}>😊</button>
+                              </Show>
+                              <Show when={canEdit(msg)}>
+                                <button class="reply-btn" onClick={() => startEdit(msg)} title={t('chat_edit')}>✏</button>
+                              </Show>
+                              <Show when={canDelete(msg)}>
+                                <button class="reply-btn" onClick={() => handleDelete(msg)} title={t('chat_delete')}>🗑</button>
+                              </Show>
+                            </div>
+                          </Show>
+                        </div>
+                      </Show>
+                      <Show when={isContinuation}>
+                        <div class="continuation-row">
+                          <span class="continuation-time">{formatMessageTime(msg.timestamp)}</span>
+                          <Show when={!msg.deleted}>
+                            <div class="msg-actions">
+                              <button class="reply-btn" onClick={() => handleReply(msg)} title={t('chat_reply')}>↩</button>
+                              <Show when={walletAddress()}>
+                                <button class="reply-btn" onClick={() => { setShowReactPicker(showReactPicker() === msgIdToHex(msg.msg_id) ? null : msgIdToHex(msg.msg_id)); }} title={t('chat_react')}>😊</button>
+                              </Show>
+                              <Show when={canEdit(msg)}>
+                                <button class="reply-btn" onClick={() => startEdit(msg)} title={t('chat_edit')}>✏</button>
+                              </Show>
+                              <Show when={canDelete(msg)}>
+                                <button class="reply-btn" onClick={() => handleDelete(msg)} title={t('chat_delete')}>🗑</button>
+                              </Show>
+                            </div>
+                          </Show>
+                        </div>
+                      </Show>
                       <Show
                         when={!msg.deleted}
                         fallback={<div class="message-body message-deleted-text">{t('message_deleted')}</div>}
@@ -736,6 +763,27 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           background: var(--color-bg-secondary);
           border: 1px solid var(--color-border);
         }
+        .message.continuation {
+          margin-top: calc(-1 * var(--spacing-sm));
+          border-top-left-radius: var(--radius-sm);
+          border-top-right-radius: var(--radius-sm);
+          padding-top: var(--spacing-xs);
+        }
+        .message.own.continuation {
+          border-top-right-radius: var(--radius-sm);
+          border-top-left-radius: var(--radius-sm);
+        }
+        .continuation-row {
+          display: flex;
+          align-items: center;
+        }
+        .continuation-time {
+          font-size: var(--font-size-xs);
+          color: transparent;
+          user-select: none;
+        }
+        .message:hover .continuation-time { color: var(--color-text-secondary); }
+        .continuation-row .msg-actions { margin-left: auto; }
         .message.own {
           align-self: flex-end;
           background: color-mix(in srgb, var(--color-accent-primary) 35%, var(--color-bg-secondary));
