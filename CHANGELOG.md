@@ -5,6 +5,14 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.3] - 2026-04-04
+
+### Fixed
+
+- Join page now works for private channels — shows channel name, description, member count, and join button instead of "Loading..." forever
+- Join page shows "Channel not found" with navigation button when channel doesn't exist (instead of infinite loading)
+- Private channels display lock icon on join page
+
 ## [0.22.2] - 2026-04-04
 
 ### Added

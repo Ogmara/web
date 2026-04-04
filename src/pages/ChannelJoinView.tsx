@@ -20,16 +20,19 @@ interface ChannelJoinProps {
 export const ChannelJoinView: Component<ChannelJoinProps> = (props) => {
   const [joining, setJoining] = createSignal(false);
   const [error, setError] = createSignal('');
+  const [notFound, setNotFound] = createSignal(false);
 
   const channelIdNum = () => parseInt(props.channelId, 10);
 
   const [channel] = createResource(
     () => props.channelId,
     async (id) => {
+      setNotFound(false);
       try {
         const client = getClient();
         return await client.getChannelDetail(parseInt(id, 10));
       } catch {
+        setNotFound(true);
         return null;
       }
     },
@@ -59,37 +62,45 @@ export const ChannelJoinView: Component<ChannelJoinProps> = (props) => {
 
   return (
     <div class="join-view">
-      <Show when={channel()} fallback={<div class="join-loading">{t('loading')}</div>}>
+      <Show when={notFound()}>
+        <div class="join-card">
+          <h2 class="join-name">{t('channel_not_found')}</h2>
+          <p class="join-desc">{t('channel_not_found_desc')}</p>
+          <button class="join-btn" onClick={() => navigate('/news')}>{t('nav_news')}</button>
+        </div>
+      </Show>
+      <Show when={!notFound() && !channel()}>
+        <div class="join-loading">{t('loading')}</div>
+      </Show>
+      <Show when={!notFound() && channel()}>
         <div class="join-card">
           <h2 class="join-name">
-            # {channel()!.channel.display_name || channel()!.channel.slug}
+            {isPrivate() ? '🔒' : '#'} {channel()!.channel.display_name || channel()!.channel.slug}
           </h2>
           <Show when={channel()!.channel.description}>
             <p class="join-desc">{(channel()!.channel as any).description}</p>
           </Show>
           <div class="join-meta">
-            {channel()!.channel.member_count ?? 0} {t('channel_members')}
+            {(channel() as any)?.member_count ?? channel()!.channel.member_count ?? 0} {t('channel_members')}
           </div>
 
           <Show when={isPrivate()}>
-            <div class="join-private">{t('channel_private_invite')}</div>
+            <p class="join-private-hint">{t('channel_private_invite_link')}</p>
           </Show>
 
-          <Show when={!isPrivate()}>
-            <Show when={authStatus() !== 'ready'}>
-              <button class="join-btn" onClick={() => navigate('/wallet')}>
-                {t('auth_connect_prompt')}
-              </button>
-            </Show>
-            <Show when={authStatus() === 'ready'}>
-              <button
-                class="join-btn"
-                onClick={handleJoin}
-                disabled={joining()}
-              >
-                {joining() ? t('loading') : t('channel_join')}
-              </button>
-            </Show>
+          <Show when={authStatus() !== 'ready'}>
+            <button class="join-btn" onClick={() => navigate('/wallet')}>
+              {t('auth_connect_prompt')}
+            </button>
+          </Show>
+          <Show when={authStatus() === 'ready'}>
+            <button
+              class="join-btn"
+              onClick={handleJoin}
+              disabled={joining()}
+            >
+              {joining() ? t('loading') : t('channel_join')}
+            </button>
           </Show>
 
           <Show when={error()}>
@@ -135,6 +146,14 @@ export const ChannelJoinView: Component<ChannelJoinProps> = (props) => {
           font-size: var(--font-size-md);
         }
         .join-btn:disabled { opacity: 0.5; }
+        .join-private-hint {
+          font-size: var(--font-size-sm);
+          color: var(--color-text-secondary);
+          margin-bottom: var(--spacing-md);
+          padding: var(--spacing-sm);
+          background: var(--color-bg-tertiary);
+          border-radius: var(--radius-md);
+        }
         .join-error {
           margin-top: var(--spacing-md);
           color: #f44;
