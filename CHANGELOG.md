@@ -5,6 +5,12 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.6] - 2026-04-04
+
+### Changed
+
+- **Message grouping** — consecutive messages from the same author within 2 minutes are visually combined: continuation messages hide the avatar/name header, show only the timestamp on hover, and stack tightly with reduced spacing. Grouping breaks on date separators, replies, or deleted messages.
+
 ## [0.22.5] - 2026-04-04
 
 ### Added
