@@ -301,9 +301,32 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
               value={messageInput()}
               onInput={(e) => setMessageInput(e.currentTarget.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && messageInput().trim()) {
+                if (e.key === 'Enter' && !e.shiftKey && (messageInput().trim() || attachments().length > 0)) {
                   e.preventDefault();
                   handleSend();
+                }
+              }}
+              onPaste={async (e) => {
+                const items = e.clipboardData?.items;
+                if (!items || !walletAddress()) return;
+                for (const item of Array.from(items)) {
+                  if (item.type.startsWith('image/')) {
+                    e.preventDefault();
+                    const file = item.getAsFile();
+                    if (!file) continue;
+                    try {
+                      const client = getClient();
+                      const result = await client.uploadMedia(file, `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`);
+                      setAttachments((prev) => [...prev, {
+                        cid: result.cid,
+                        mime_type: file.type,
+                        size_bytes: file.size,
+                        filename: `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`,
+                        thumbnail_cid: result.thumbnail_cid,
+                      }]);
+                    } catch { /* upload failed */ }
+                    break;
+                  }
                 }
               }}
               disabled={sending() || !walletAddress()}
