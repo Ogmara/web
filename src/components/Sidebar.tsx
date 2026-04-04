@@ -11,6 +11,7 @@ import { getClient } from '../lib/api';
 import { authStatus, walletAddress } from '../lib/auth';
 import { navigate, route } from '../lib/router';
 import { getSetting, setSetting } from '../lib/settings';
+import { resolveProfile, type CachedProfile } from '../lib/profile';
 
 /** Default channel slug shown to all users (even unauthenticated). */
 const DEFAULT_CHANNEL_SLUG = 'ogmara';
@@ -109,6 +110,42 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     onCleanup(() => document.removeEventListener('click', closeContextMenu));
   }
   const [unreadCounts, setUnreadCounts] = createSignal<Record<string, number>>({});
+
+  // --- Private channel member list (collapsible per channel) ---
+  const [expandedMembers, setExpandedMembers] = createSignal<Set<number>>(new Set());
+  const [channelMembers, setChannelMembers] = createSignal<Record<number, { address: string; role: string }[]>>({});
+  const [memberProfiles, setMemberProfiles] = createSignal<Map<string, CachedProfile>>(new Map());
+
+  const toggleMembers = async (channelId: number) => {
+    const expanded = new Set(expandedMembers());
+    if (expanded.has(channelId)) {
+      expanded.delete(channelId);
+      setExpandedMembers(expanded);
+      return;
+    }
+    expanded.add(channelId);
+    setExpandedMembers(expanded);
+    // Fetch members if not already loaded
+    if (!channelMembers()[channelId]) {
+      try {
+        const resp = await getClient().getChannelMembers(channelId, { limit: 100 });
+        setChannelMembers((prev) => ({ ...prev, [channelId]: resp.members }));
+        // Resolve profiles
+        for (const m of resp.members) {
+          if (!memberProfiles().has(m.address)) {
+            resolveProfile(m.address).then((p) => {
+              setMemberProfiles((prev) => { const next = new Map(prev); next.set(m.address, p); return next; });
+            });
+          }
+        }
+      } catch { /* ignore */ }
+    }
+  };
+
+  const memberDisplayName = (addr: string) => {
+    const p = memberProfiles().get(addr);
+    return p?.display_name || `${addr.slice(0, 8)}...${addr.slice(-4)}`;
+  };
 
   /** Navigate and auto-close sidebar on mobile. */
   const go = (path: string) => {
@@ -242,17 +279,44 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           <Show when={hasLoadedOnce() || !allChannels.loading} fallback={<div class="sidebar-loading">{t('loading')}</div>}>
             <For each={channels()}>
               {(channel) => (
-                <button
-                  class={`sidebar-item ${currentChannelId() === channel.channel_id ? 'active' : ''}`}
-                  onClick={() => go(`/chat/${channel.channel_id}`)}
-                  onContextMenu={(e) => handleContextMenu(e, channel.channel_id, channel.creator)}
-                >
-                  <span class="channel-hash">#</span>
-                  <span class="channel-name">{channel.display_name || channel.slug}</span>
-                  <Show when={(unreadCounts()[String(channel.channel_id)] ?? 0) > 0}>
-                    <span class="unread-badge">{unreadCounts()[String(channel.channel_id)]}</span>
+                <div class="channel-group">
+                  <button
+                    class={`sidebar-item ${currentChannelId() === channel.channel_id ? 'active' : ''}`}
+                    onClick={() => go(`/chat/${channel.channel_id}`)}
+                    onContextMenu={(e) => handleContextMenu(e, channel.channel_id, channel.creator)}
+                  >
+                    <span class="channel-hash">{channel.channel_type === 2 ? '🔒' : '#'}</span>
+                    <span class="channel-name">{channel.display_name || channel.slug}</span>
+                    <Show when={(unreadCounts()[String(channel.channel_id)] ?? 0) > 0}>
+                      <span class="unread-badge">{unreadCounts()[String(channel.channel_id)]}</span>
+                    </Show>
+                  </button>
+                  <Show when={channel.channel_type === 2}>
+                    <button
+                      class="sidebar-members-toggle"
+                      onClick={() => toggleMembers(channel.channel_id)}
+                    >
+                      <span class={`collapse-arrow ${expandedMembers().has(channel.channel_id) ? 'open' : ''}`}>▸</span>
+                      <span>{t('channel_members')}</span>
+                    </button>
+                    <Show when={expandedMembers().has(channel.channel_id)}>
+                      <div class="sidebar-member-list">
+                        <For each={channelMembers()[channel.channel_id] ?? []}>
+                          {(member) => (
+                            <button
+                              class="sidebar-member-item"
+                              onClick={() => go(`/user/${member.address}`)}
+                              title={member.address}
+                            >
+                              <span class="member-dot" classList={{ 'member-mod': member.role === 'moderator', 'member-owner': member.role === 'creator' }} />
+                              <span class="member-name">{memberDisplayName(member.address)}</span>
+                            </button>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
                   </Show>
-                </button>
+                </div>
               )}
             </For>
           </Show>
@@ -511,6 +575,45 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         .context-menu-item:hover { background: var(--color-bg-tertiary); }
         .context-menu-danger { color: #f44; }
         .context-menu-danger:hover { background: rgba(255,68,68,0.1); }
+        .channel-group { display: flex; flex-direction: column; }
+        .sidebar-members-toggle {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-xs);
+          padding: 2px var(--spacing-sm);
+          padding-left: calc(var(--spacing-lg) + var(--spacing-sm));
+          font-size: var(--font-size-xs);
+          color: var(--color-text-secondary);
+          width: 100%;
+          text-align: left;
+        }
+        .sidebar-members-toggle:hover { color: var(--color-text-primary); }
+        .sidebar-member-list {
+          display: flex;
+          flex-direction: column;
+        }
+        .sidebar-member-item {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-xs);
+          padding: 2px var(--spacing-sm);
+          padding-left: calc(var(--spacing-lg) + var(--spacing-lg));
+          font-size: var(--font-size-xs);
+          color: var(--color-text-secondary);
+          width: 100%;
+          text-align: left;
+        }
+        .sidebar-member-item:hover { background: var(--color-bg-tertiary); color: var(--color-text-primary); }
+        .member-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: var(--radius-full);
+          background: var(--color-text-secondary);
+          flex-shrink: 0;
+        }
+        .member-dot.member-mod { background: var(--color-accent-primary); }
+        .member-dot.member-owner { background: var(--color-success); }
+        .member-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       `}</style>
     </aside>
   );
