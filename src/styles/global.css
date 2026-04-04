@@ -175,3 +175,19 @@ a {
 a:hover {
   text-decoration: underline;
 }
+
+/* Compact layout — tighter spacing and smaller fonts */
+html.compact {
+  --spacing-xs: 2px;
+  --spacing-sm: 4px;
+  --spacing-md: 10px;
+  --spacing-lg: 16px;
+  --spacing-xl: 22px;
+
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 17px;
+  --font-size-xl: 20px;
+  --font-size-xxl: 26px;
+}

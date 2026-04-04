@@ -69,6 +69,18 @@ export const SettingsView: Component = () => {
             </label>
           ))}
         </div>
+        <label class="settings-toggle">
+          <input
+            type="checkbox"
+            checked={compact()}
+            onChange={(e) => {
+              setCompact(e.currentTarget.checked);
+              setSetting('compactLayout', e.currentTarget.checked);
+              document.documentElement.classList.toggle('compact', e.currentTarget.checked);
+            }}
+          />
+          {t('settings_compact')}
+        </label>
       </section>
 
       <section class="settings-section">
@@ -83,17 +95,6 @@ export const SettingsView: Component = () => {
             }}
           />
           {t('settings_sounds')}
-        </label>
-        <label class="settings-toggle">
-          <input
-            type="checkbox"
-            checked={compact()}
-            onChange={(e) => {
-              setCompact(e.currentTarget.checked);
-              setSetting('compactLayout', e.currentTarget.checked);
-            }}
-          />
-          {t('settings_compact')}
         </label>
       </section>
 

@@ -9,6 +9,7 @@ import { getClient } from '../lib/api';
 import { authStatus, getSigner, walletAddress } from '../lib/auth';
 import { onWsEvent, wsSubscribeChannels, wsUnsubscribeChannels } from '../lib/ws';
 import { navigate } from '../lib/router';
+import { setSetting } from '../lib/settings';
 import { FormattedText } from '../components/FormattedText';
 import { EmojiPicker } from '../components/EmojiPicker';
 import { getPayloadContent, decodePayload } from '../lib/payload';
@@ -208,6 +209,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     if (prevChannelId) wsUnsubscribeChannels([prevChannelId]);
     if (id) {
       wsSubscribeChannels([id]);
+      // Remember last opened channel for the Chat nav link
+      setSetting('lastChannel', parseInt(id, 10));
       // Mark channel as read when entering
       if (authStatus() === 'ready') {
         try { getClient().markChannelRead(parseInt(id, 10)).catch(() => {}); }
