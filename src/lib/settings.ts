@@ -24,6 +24,8 @@ export interface Settings {
   channelsExpanded: boolean;
   /** Cached device registration status: "wallet:device" key to avoid re-registration. */
   deviceRegistered: string;
+  /** Push gateway URL. Empty = auto-derive from nodeUrl (same host, port 41722). */
+  pushGatewayUrl: string;
 }
 
 const defaults: Settings = {
@@ -45,6 +47,7 @@ const defaults: Settings = {
   walletSource: '',
   nodeUrl: '',
   deviceRegistered: '',
+  pushGatewayUrl: '',
 };
 
 /** Load a setting from localStorage with fallback to default. */

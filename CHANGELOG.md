@@ -5,6 +5,20 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.0] - 2026-04-04
+
+### Added
+- **Web Push notification support** — full integration with the push gateway
+- Push notification toggle in Settings (under Notifications section), with
+  browser permission handling and error feedback
+- New `src/lib/push.ts` module: VAPID key fetch, PushManager subscription,
+  gateway registration/unregistration lifecycle
+- Service worker push event handler (`sw.js`) — decrypts and displays OS
+  notifications with app icon and deduplication by message ID
+- Notification click handler — navigates to the relevant channel or DM
+- `pushGatewayUrl` and `pushEnabled` settings with auto-derivation from node URL
+- i18n strings for push errors (denied/unsupported/error) in all 7 locales
+
 ## [0.21.0] - 2026-04-04
 
 ### Added

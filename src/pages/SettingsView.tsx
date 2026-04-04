@@ -7,6 +7,7 @@ import { navigate } from '../lib/router';
 import { getClient } from '../lib/api';
 import { uploadSettings, downloadSettings } from '../lib/settings-sync';
 import { vaultExportKey } from '../lib/vault';
+import { enablePush, disablePush } from '../lib/push';
 
 const LANGUAGE_NAMES: Record<string, string> = {
   en: 'English',
@@ -24,6 +25,8 @@ export const SettingsView: Component = () => {
   const [nodeUrl, setNodeUrl] = createSignal(getSetting('nodeUrl'));
   const [compact, setCompact] = createSignal(getSetting('compactLayout'));
   const [sounds, setSounds] = createSignal(getSetting('notificationSound'));
+  const [pushEnabled, setPushEnabled] = createSignal(getSetting('pushEnabled'));
+  const [pushStatus, setPushStatus] = createSignal('');
   const [syncStatus, setSyncStatus] = createSignal('');
   const [exportStatus, setExportStatus] = createSignal('');
 
@@ -96,6 +99,38 @@ export const SettingsView: Component = () => {
           />
           {t('settings_sounds')}
         </label>
+        <Show when={authStatus() === 'ready'}>
+          <label class="settings-toggle">
+            <input
+              type="checkbox"
+              checked={pushEnabled()}
+              onChange={async (e) => {
+                const checked = e.currentTarget.checked;
+                setPushStatus('');
+                if (checked) {
+                  const result = await enablePush();
+                  if (result === 'ok') {
+                    setPushEnabled(true);
+                  } else {
+                    e.currentTarget.checked = false;
+                    setPushStatus(
+                      result === 'denied' ? t('settings_push_denied')
+                        : result === 'unsupported' ? t('settings_push_unsupported')
+                        : t('settings_push_error')
+                    );
+                  }
+                } else {
+                  await disablePush();
+                  setPushEnabled(false);
+                }
+              }}
+            />
+            {t('settings_push')}
+          </label>
+          <Show when={pushStatus()}>
+            <div class="settings-status">{pushStatus()}</div>
+          </Show>
+        </Show>
       </section>
 
       <section class="settings-section">
