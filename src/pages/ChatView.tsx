@@ -357,6 +357,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       const options: any = {};
       if (replyTo()) options.replyTo = replyTo()!.msgId;
       if (atts.length > 0) options.attachments = atts;
+      // Extract @mentions (klv1 addresses) from the message text
+      const mentionMatches = text.match(/@(klv1[a-z0-9]{58})/g);
+      if (mentionMatches) {
+        options.mentions = [...new Set(mentionMatches.map((m: string) => m.slice(1)))];
+      }
       await client.sendMessage(props.channelId, text, options);
 
       // Optimistic: add message locally for instant display
