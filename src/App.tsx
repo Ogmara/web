@@ -20,6 +20,7 @@ import { ChannelCreateView } from './pages/ChannelCreateView';
 import { ChannelSettingsView } from './pages/ChannelSettingsView';
 import { ChannelJoinView } from './pages/ChannelJoinView';
 import { NotificationsView } from './pages/NotificationsView';
+import { FollowListView } from './pages/FollowListView';
 import { StatusBar } from './components/StatusBar';
 import { route } from './lib/router';
 
@@ -76,6 +77,9 @@ export const App: Component = () => {
             </Match>
             <Match when={route().view === 'user'}>
               <UserProfileView address={route().params.address} />
+            </Match>
+            <Match when={route().view === 'follow-list'}>
+              <FollowListView address={route().params.address} tab={route().params.tab as 'followers' | 'following'} />
             </Match>
             <Match when={route().view === 'search'}>
               <SearchView />

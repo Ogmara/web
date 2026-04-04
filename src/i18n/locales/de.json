@@ -57,6 +57,8 @@
   "profile_posts": "Beiträge",
   "profile_edit": "Profil bearbeiten",
   "profile_no_posts": "Noch keine Beiträge",
+  "profile_no_followers": "Noch keine Follower",
+  "profile_no_following": "Folgt noch niemandem",
   "profile_display_name": "Anzeigename",
   "wallet_connect": "Wallet verbinden",
   "wallet_disconnect": "Trennen",

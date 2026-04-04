@@ -44,6 +44,7 @@ interface UserProfileProps {
 
 export const UserProfileView: Component<UserProfileProps> = (props) => {
   const [following, setFollowing] = createSignal(false);
+  const [followingCount, setFollowingCount] = createSignal(0);
   const [editing, setEditing] = createSignal(false);
   const [editName, setEditName] = createSignal('');
   const [editBio, setEditBio] = createSignal('');
@@ -104,7 +105,7 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
     },
   );
 
-  const [followers] = createResource(
+  const [followers, { refetch: refetchFollowers }] = createResource(
     () => props.address,
     async (address) => {
       if (!address) return { total: 0 };
@@ -114,6 +115,24 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
       } catch {
         return { total: 0 };
       }
+    },
+  );
+
+  // Fetch following count and check if current user follows this profile
+  createResource(
+    () => ({ address: props.address, me: walletAddress() }),
+    async ({ address, me }) => {
+      if (!address) return;
+      try {
+        const client = getClient();
+        const resp = await client.getFollowing(address);
+        setFollowingCount(resp.total ?? 0);
+        // Check if we follow this user by looking at their followers list
+        if (me && me !== address) {
+          const myFollowing = await client.getFollowing(me);
+          setFollowing((myFollowing.following ?? []).includes(address));
+        }
+      } catch { /* ignore */ }
     },
   );
 
@@ -127,8 +146,12 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
         await client.follow(props.address);
         setFollowing(true);
       }
-    } catch {
-      // Failed silently
+      // Refresh counts
+      refetchFollowers();
+      const resp = await client.getFollowing(props.address);
+      setFollowingCount(resp.total ?? 0);
+    } catch (e) {
+      console.warn('Follow/unfollow failed:', e);
     }
   };
 
@@ -231,12 +254,12 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
           <span class="stat-value">{posts()?.length ?? 0}</span>
           <span class="stat-label">{t('profile_posts')}</span>
         </div>
-        <div class="stat">
+        <div class="stat" onClick={() => navigate(`/user/${props.address}/followers`)} style="cursor:pointer">
           <span class="stat-value">{followers()?.total ?? 0}</span>
           <span class="stat-label">{t('profile_followers')}</span>
         </div>
-        <div class="stat">
-          <span class="stat-value">{profile()?.following_count ?? 0}</span>
+        <div class="stat" onClick={() => navigate(`/user/${props.address}/following`)} style="cursor:pointer">
+          <span class="stat-value">{followingCount()}</span>
           <span class="stat-label">{t('profile_following')}</span>
         </div>
       </div>

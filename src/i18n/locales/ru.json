@@ -168,6 +168,8 @@
   "profile_posts": "Публикации",
   "profile_edit": "Редактировать профиль",
   "profile_no_posts": "Нет публикаций",
+  "profile_no_followers": "Пока нет подписчиков",
+  "profile_no_following": "Пока ни на кого не подписан",
   "profile_display_name": "Отображаемое имя",
   "channel_create": "Создать канал",
   "channel_create_slug": "Идентификатор канала",

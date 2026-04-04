@@ -37,7 +37,8 @@ export type ViewName =
   | 'channel-create'
   | 'channel-settings'
   | 'channel-join'
-  | 'notifications';
+  | 'notifications'
+  | 'follow-list';
 
 export interface Route {
   view: ViewName;
@@ -88,6 +89,12 @@ function parseHash(hash: string): Route {
       return { view: 'dm', params: {}, query };
 
     case 'user':
+      if (third === 'followers') {
+        return { view: 'follow-list', params: { address: second, tab: 'followers' }, query };
+      }
+      if (third === 'following') {
+        return { view: 'follow-list', params: { address: second, tab: 'following' }, query };
+      }
       return { view: 'user', params: { address: second }, query };
 
     case 'search':

@@ -57,6 +57,8 @@
   "profile_posts": "帖子",
   "profile_edit": "编辑资料",
   "profile_no_posts": "暂无帖子",
+  "profile_no_followers": "暂无关注者",
+  "profile_no_following": "暂未关注任何人",
   "profile_display_name": "显示名称",
   "wallet_connect": "连接钱包",
   "wallet_disconnect": "断开连接",
