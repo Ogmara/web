@@ -127,7 +127,6 @@ export const SettingsView: Component = () => {
                 setPushStatus('');
                 if (checked) {
                   enablePush().then((result) => {
-                    console.log('enablePush result:', result);
                     if (result !== 'ok') {
                       setPushEnabled(false);
                       setSetting('pushEnabled', false);
