@@ -5,6 +5,13 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.1] - 2026-04-04
+
+### Added
+
+- **Private channel member list** in sidebar — collapsible "Members" submenu under each private channel (🔒), lazy-loads on expand, shows display names with role indicators (green dot = owner, purple dot = moderator)
+- Private channels now show 🔒 icon instead of # in sidebar
+
 ## [0.22.0] - 2026-04-04
 
 ### Added
