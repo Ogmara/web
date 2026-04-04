@@ -52,6 +52,10 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
           const next = [...prev, msg];
           return next.length > MAX_LOCAL_MESSAGES ? next.slice(-MAX_LOCAL_MESSAGES) : next;
         });
+        // Mark as read while viewing so unread badge doesn't appear
+        if (authStatus() === 'ready') {
+          getClient().markDmRead(props.peerAddress).catch(() => {});
+        }
       }
     }
   });
