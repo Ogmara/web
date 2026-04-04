@@ -244,8 +244,19 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   // Deduplicate and sort messages
   const allMessages = createMemo(() => {
     const seen = new Set<string>();
+    const apiMsgs = messages() || [];
+    const local = localMessages();
+    // Remove optimistic messages that now have a real counterpart from the API
+    // (same author, similar timestamp, optimistic flag)
+    const filteredLocal = local.filter((lm) => {
+      if (!lm._optimistic) return true;
+      return !apiMsgs.some((am) =>
+        am.author === lm.author &&
+        Math.abs(new Date(am.timestamp).getTime() - new Date(lm.timestamp).getTime()) < 10000,
+      );
+    });
     // localMessages first so optimistic updates (delete, edit, react) take priority in dedup
-    const combined = [...localMessages(), ...(messages() || [])];
+    const combined = [...filteredLocal, ...apiMsgs];
     const deduped = combined.filter((msg) => {
       const id = msgIdToHex(msg.msg_id);
       if (!id || seen.has(id)) return false;
