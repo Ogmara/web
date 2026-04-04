@@ -378,8 +378,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       setReplyTo(null);
       setShowEmoji(false);
       setAttachments([]);
-    } catch {
-      // Send failed
+    } catch (err) {
+      console.error('sendMessage failed:', err);
     } finally {
       setSending(false);
       // Focus after sending is cleared (textarea is no longer disabled)
