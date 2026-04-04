@@ -192,6 +192,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           const next = [...prev, msg];
           return next.length > MAX_LOCAL_MESSAGES ? next.slice(-MAX_LOCAL_MESSAGES) : next;
         });
+        // Mark channel as read while viewing so unread badge doesn't appear
+        if (authStatus() === 'ready') {
+          getClient().markChannelRead(props.channelId!).catch(() => {});
+        }
       }
     }
   });
@@ -335,11 +339,12 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       setMessageInput('');
       setReplyTo(null);
       setShowEmoji(false);
-      inputRef?.focus();
     } catch {
       // Send failed
     } finally {
       setSending(false);
+      // Focus after sending is cleared (textarea is no longer disabled)
+      setTimeout(() => inputRef?.focus(), 0);
     }
   };
 
