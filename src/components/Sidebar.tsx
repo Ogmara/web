@@ -111,6 +111,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
   }
   const [unreadCounts, setUnreadCounts] = createSignal<Record<string, number>>({});
   const [dmUnreadTotal, setDmUnreadTotal] = createSignal(0);
+  const [notifUnread, setNotifUnread] = createSignal(0);
 
   // --- Private channel member list (collapsible per channel) ---
   const [expandedMembers, setExpandedMembers] = createSignal<Set<number>>(new Set());
@@ -308,15 +309,18 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     if (authStatus() !== 'ready') return;
     try {
       const client = getClient();
-      const [unread, dmUnread] = await Promise.all([
+      const lastSeenNotif = parseInt(localStorage.getItem('ogmara.lastSeenNotifTs') || '0', 10);
+      const [unread, dmUnread, notifResp] = await Promise.all([
         client.getUnreadCounts().catch(() => ({ unread: {} })),
         client.getDmUnread().catch(() => ({ unread: {} })),
+        client.getNotifications(lastSeenNotif || undefined, 50).catch(() => ({ notifications: [] })),
         // Refresh channel list to sync cross-device changes (leave/delete/create)
         refetchChannels(),
       ]);
       setUnreadCounts(unread.unread ?? {});
       const dmCounts = dmUnread.unread ?? {};
       setDmUnreadTotal(Object.values(dmCounts).reduce((a: number, b: number) => a + b, 0));
+      setNotifUnread((notifResp as any).notifications?.length ?? 0);
     } catch { /* ignore */ }
   };
   createEffect(() => {
@@ -454,9 +458,17 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         <div class="sidebar-section">
           <button
             class={`sidebar-nav-item ${route().view === 'notifications' ? 'active' : ''}`}
-            onClick={() => go('/notifications')}
+            onClick={() => {
+              // Mark notifications as seen (store current timestamp)
+              localStorage.setItem('ogmara.lastSeenNotifTs', Date.now().toString());
+              setNotifUnread(0);
+              go('/notifications');
+            }}
           >
             🔔 {t('nav_notifications')}
+            <Show when={notifUnread() > 0}>
+              <span class="unread-badge">{notifUnread()}</span>
+            </Show>
           </button>
         </div>
       </Show>
