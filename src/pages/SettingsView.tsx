@@ -121,14 +121,15 @@ export const SettingsView: Component = () => {
               type="checkbox"
               checked={pushEnabled()}
               onChange={async (e) => {
-                const checked = e.currentTarget.checked;
+                const wantEnabled = e.currentTarget.checked;
                 setPushStatus('');
-                if (checked) {
+                if (wantEnabled) {
                   const result = await enablePush();
                   if (result === 'ok') {
                     setPushEnabled(true);
                   } else {
-                    e.currentTarget.checked = false;
+                    // Revert toggle via signal (currentTarget may be null after await)
+                    setPushEnabled(false);
                     setPushStatus(
                       result === 'denied' ? t('settings_push_denied')
                         : result === 'unsupported' ? t('settings_push_unsupported')

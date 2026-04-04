@@ -11,7 +11,6 @@
 
 import { getSetting, setSetting } from './settings';
 import { getSigner, walletAddress } from './auth';
-import { getClient } from './api';
 
 /** Derive the push gateway URL from configuration. */
 export function getPushGatewayUrl(): string {
@@ -19,7 +18,7 @@ export function getPushGatewayUrl(): string {
   if (explicit) return explicit;
 
   // Auto-derive from node URL: same host, port 41722
-  const nodeUrl = getSetting('nodeUrl') || getClient().baseUrl;
+  const nodeUrl = getSetting('nodeUrl');
   if (!nodeUrl) return '';
 
   try {
