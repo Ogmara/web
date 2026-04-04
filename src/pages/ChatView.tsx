@@ -764,10 +764,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           border: 1px solid var(--color-border);
         }
         .message.continuation {
-          margin-top: calc(-1 * var(--spacing-sm));
+          margin-top: calc(-1 * var(--spacing-sm) - 1px);
           border-top-left-radius: var(--radius-sm);
           border-top-right-radius: var(--radius-sm);
-          padding-top: var(--spacing-xs);
+          padding-top: 2px;
+          border-top-color: transparent;
         }
         .message.own.continuation {
           border-top-right-radius: var(--radius-sm);
@@ -786,9 +787,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         .continuation-row .msg-actions { margin-left: auto; }
         .message.own {
           align-self: flex-end;
-          background: color-mix(in srgb, var(--color-accent-primary) 35%, var(--color-bg-secondary));
+          background: color-mix(in srgb, var(--color-accent-primary) 15%, var(--color-bg-secondary));
           color: var(--color-text-primary);
-          border-color: var(--color-accent-primary);
+          border-color: color-mix(in srgb, var(--color-accent-primary) 40%, var(--color-border));
         }
         .message.own .message-author { color: var(--color-accent-primary); }
         .message.own .message-time { color: var(--color-text-secondary); }
