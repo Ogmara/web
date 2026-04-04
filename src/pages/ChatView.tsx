@@ -90,10 +90,20 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     setUserMenu(null);
 
     const client = getClient();
+    const targetMsg = msgById().get(ctx.msgId);
     try {
       switch (action) {
         case 'profile':
           navigate(`/user/${ctx.address}`);
+          break;
+        case 'reply':
+          if (targetMsg) handleReply(targetMsg);
+          break;
+        case 'edit':
+          if (targetMsg) startEdit(targetMsg);
+          break;
+        case 'delete':
+          if (targetMsg) await handleDelete(targetMsg);
           break;
         case 'kick':
           if (window.confirm(`Kick ${ctx.address.slice(0, 12)}...?`))
@@ -561,39 +571,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                               <span class="edited-indicator" title={msg.last_edited_at ? new Date(msg.last_edited_at).toLocaleString() : ''}> ({t('message_edited')})</span>
                             </Show>
                           </span>
-                          <Show when={!msg.deleted}>
-                            <div class="msg-actions">
-                              <button class="reply-btn" onClick={() => handleReply(msg)} title={t('chat_reply')}>↩</button>
-                              <Show when={walletAddress()}>
-                                <button class="reply-btn" onClick={() => { setShowReactPicker(showReactPicker() === msgIdToHex(msg.msg_id) ? null : msgIdToHex(msg.msg_id)); }} title={t('chat_react')}>😊</button>
-                              </Show>
-                              <Show when={canEdit(msg)}>
-                                <button class="reply-btn" onClick={() => startEdit(msg)} title={t('chat_edit')}>✏</button>
-                              </Show>
-                              <Show when={canDelete(msg)}>
-                                <button class="reply-btn" onClick={() => handleDelete(msg)} title={t('chat_delete')}>🗑</button>
-                              </Show>
-                            </div>
-                          </Show>
-                        </div>
-                      </Show>
-                      <Show when={isContinuation}>
-                        <div class="continuation-row">
-                          <span class="continuation-time">{formatMessageTime(msg.timestamp)}</span>
-                          <Show when={!msg.deleted}>
-                            <div class="msg-actions">
-                              <button class="reply-btn" onClick={() => handleReply(msg)} title={t('chat_reply')}>↩</button>
-                              <Show when={walletAddress()}>
-                                <button class="reply-btn" onClick={() => { setShowReactPicker(showReactPicker() === msgIdToHex(msg.msg_id) ? null : msgIdToHex(msg.msg_id)); }} title={t('chat_react')}>😊</button>
-                              </Show>
-                              <Show when={canEdit(msg)}>
-                                <button class="reply-btn" onClick={() => startEdit(msg)} title={t('chat_edit')}>✏</button>
-                              </Show>
-                              <Show when={canDelete(msg)}>
-                                <button class="reply-btn" onClick={() => handleDelete(msg)} title={t('chat_delete')}>🗑</button>
-                              </Show>
-                            </div>
-                          </Show>
                         </div>
                       </Show>
                       <Show
@@ -611,10 +588,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                           <div class="message-body"><FormattedText content={getPayloadContent(msg.payload)} /></div>
                         </Show>
                       </Show>
-                      <Show when={showReactPicker() === msgIdToHex(msg.msg_id)}>
-                        <div class="inline-react-picker">
-                          {['👍', '👎', '❤️', '🔥', '😂', '😮', '😢'].map((emoji) => (
-                            <button class="inline-react-btn" onClick={() => handleReact(msg, emoji)}>{emoji}</button>
+                      {/* Floating emoji bar on hover */}
+                      <Show when={walletAddress() && !msg.deleted}>
+                        <div class="msg-react-hover">
+                          {['👍', '👎', '❤️', '🔥', '😂', '😮'].map((emoji) => (
+                            <button class="react-hover-btn" onClick={() => handleReact(msg, emoji)}>{emoji}</button>
                           ))}
                         </div>
                       </Show>
@@ -705,6 +683,22 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           class="user-context-menu"
           style={{ left: `${userMenu()!.x}px`, top: `${userMenu()!.y}px` }}
         >
+          {/* Message actions — always available */}
+          <button class="ctx-item" onClick={() => handleUserAction('reply')}>
+            ↩ {t('chat_reply')}
+          </button>
+          <Show when={(() => { const m = msgById().get(userMenu()!.msgId); return m && canEdit(m); })()}>
+            <button class="ctx-item" onClick={() => handleUserAction('edit')}>
+              ✏ {t('chat_edit')}
+            </button>
+          </Show>
+          <Show when={(() => { const m = msgById().get(userMenu()!.msgId); return m && canDelete(m); })()}>
+            <button class="ctx-item ctx-danger" onClick={() => handleUserAction('delete')}>
+              🗑 {t('chat_delete')}
+            </button>
+          </Show>
+          <div class="ctx-divider" />
+          {/* User actions */}
           <button class="ctx-item" onClick={() => handleUserAction('profile')}>
             👤 {t('channel_view_profile')}
           </button>
@@ -714,7 +708,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
             </button>
           </Show>
           <Show when={walletAddress() && userMenu()!.address !== walletAddress()}>
-            <div class="ctx-divider" />
             <button class="ctx-item" onClick={() => handleUserAction('report')}>
               🚩 {t('report_title')}
             </button>
@@ -775,17 +768,29 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           border-top-right-radius: var(--radius-sm);
           border-top-left-radius: var(--radius-sm);
         }
-        .continuation-row {
-          display: flex;
-          align-items: center;
+        .msg-react-hover {
+          display: none;
+          position: absolute;
+          top: -14px;
+          right: var(--spacing-sm);
+          background: var(--color-bg-secondary);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-full);
+          padding: 1px 4px;
+          gap: 2px;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+          z-index: 10;
         }
-        .continuation-time {
-          font-size: var(--font-size-xs);
-          color: transparent;
-          user-select: none;
+        .message { position: relative; }
+        .message:hover .msg-react-hover { display: flex; }
+        .react-hover-btn {
+          font-size: 14px;
+          padding: 1px 3px;
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+          line-height: 1;
         }
-        .message:hover .continuation-time { color: var(--color-text-secondary); }
-        .continuation-row .msg-actions { margin-left: auto; }
+        .react-hover-btn:hover { background: var(--color-bg-tertiary); transform: scale(1.2); }
         .message.own {
           align-self: flex-end;
           background: color-mix(in srgb, var(--color-accent-primary) 15%, var(--color-bg-secondary));
@@ -855,22 +860,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           border: 1px solid var(--color-border);
           border-radius: var(--radius-full);
         }
-        .msg-actions {
-          display: flex;
-          gap: 2px;
-          margin-left: auto;
-          opacity: 0;
-          transition: opacity 0.15s;
-        }
-        .message:hover .msg-actions { opacity: 1; }
-        .reply-btn {
-          font-size: var(--font-size-xs);
-          color: var(--color-text-secondary);
-          cursor: pointer;
-          padding: 2px 4px;
-          border-radius: var(--radius-sm);
-        }
-        .reply-btn:hover { color: var(--color-accent-primary); background: var(--color-bg-tertiary); }
         .inline-react-picker {
           display: flex;
           gap: 4px;
