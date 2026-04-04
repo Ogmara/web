@@ -14,19 +14,19 @@ import { getSigner, walletAddress } from './auth';
 
 /** Derive the push gateway URL from configuration. */
 export function getPushGatewayUrl(): string {
-  const explicit = getSetting('pushGatewayUrl');
+  const explicit = getSetting('pushGatewayUrl') as string;
   if (explicit) return explicit;
 
-  // Auto-derive from node URL: same host, port 41722
-  const nodeUrl = getSetting('nodeUrl');
+  // Auto-derive: try /push path on the node's origin first (path-based routing),
+  // then fall back to port 41722 (direct access). Node operators configure
+  // pushGatewayUrl explicitly if neither convention applies.
+  const nodeUrl = getSetting('nodeUrl') as string;
   if (!nodeUrl) return '';
 
   try {
     const url = new URL(nodeUrl);
-    url.port = '41722';
-    // Push gateway uses plain HTTP path (no /api/v1 prefix)
-    url.pathname = '';
-    return url.origin;
+    // Default convention: push gateway behind reverse proxy at /push
+    return `${url.origin}/push`;
   } catch {
     return '';
   }
