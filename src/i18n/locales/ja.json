@@ -57,6 +57,8 @@
   "profile_posts": "投稿",
   "profile_edit": "プロフィール編集",
   "profile_no_posts": "投稿はまだありません",
+  "profile_no_followers": "フォロワーはまだいません",
+  "profile_no_following": "誰もフォローしていません",
   "profile_display_name": "表示名",
   "wallet_connect": "ウォレットを接続",
   "wallet_disconnect": "切断",

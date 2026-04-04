@@ -57,6 +57,8 @@
   "profile_posts": "Publicaciones",
   "profile_edit": "Editar perfil",
   "profile_no_posts": "Sin publicaciones",
+  "profile_no_followers": "Aún no tiene seguidores",
+  "profile_no_following": "No sigue a nadie todavía",
   "profile_display_name": "Nombre visible",
   "wallet_connect": "Conectar billetera",
   "wallet_disconnect": "Desconectar",

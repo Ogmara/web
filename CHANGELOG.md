@@ -5,6 +5,19 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.0] - 2026-04-04
+
+### Added
+
+- Followers/Following list page (`#/user/:address/followers`, `#/user/:address/following`) with profile resolution, follow/unfollow buttons, and tab switching
+- Clickable follower/following counts on user profiles navigate to list pages
+
+### Fixed
+
+- Following count now displays correctly using `follower_count`/`following_count` from L2 node v0.11.6 profile response
+- Follow/Unfollow button state now persists across page loads by checking current user's following list on profile view
+- Follow/unfollow actions refresh follower counts immediately
+
 ## [0.20.9] - 2026-04-04
 
 ### Fixed
