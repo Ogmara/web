@@ -38,6 +38,14 @@ getClient().networkStats().then((stats: any) => {
   if (stats?.network) setKleverNetwork(stats.network);
 }).catch(() => { /* node may be unreachable at startup */ });
 
+// Disable native browser context menu globally so only in-app right-click menus appear.
+// Allow native context menu on text inputs/textareas for paste/spellcheck.
+document.addEventListener('contextmenu', (e) => {
+  const target = e.target as HTMLElement;
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+  e.preventDefault();
+});
+
 const root = document.getElementById('root');
 if (root) {
   render(() => <App />, root);

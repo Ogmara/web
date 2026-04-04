@@ -220,7 +220,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   // Deduplicate and sort messages
   const allMessages = createMemo(() => {
     const seen = new Set<string>();
-    const combined = [...(messages() || []), ...localMessages()];
+    // localMessages first so optimistic updates (delete, edit, react) take priority in dedup
+    const combined = [...localMessages(), ...(messages() || [])];
     const deduped = combined.filter((msg) => {
       const id = msgIdToHex(msg.msg_id);
       if (!id || seen.has(id)) return false;
@@ -395,21 +396,26 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
   const handleEdit = async () => {
     const edit = editingMsg();
-    if (!edit || !messageInput().trim() || !props.channelId) return;
+    const newContent = messageInput().trim();
+    if (!edit || !newContent || !props.channelId) return;
     setSending(true);
     try {
       const client = getClient();
-      await client.editMessage(props.channelId, edit.msgId, messageInput().trim());
-      // Optimistic update
-      setLocalMessages((prev) => prev.map((m) =>
-        msgIdToHex(m.msg_id) === edit.msgId
-          ? { ...m, payload: messageInput().trim(), edited: true, last_edited_at: Date.now() }
-          : m,
-      ));
+      await client.editMessage(props.channelId, edit.msgId, newContent);
+      // Optimistic update — add/update in localMessages so it wins in dedup
+      setLocalMessages((prev) => {
+        const updates = { payload: newContent, edited: true, last_edited_at: Date.now() };
+        const exists = prev.some((m) => msgIdToHex(m.msg_id) === edit.msgId);
+        if (exists) return prev.map((m) => msgIdToHex(m.msg_id) === edit.msgId ? { ...m, ...updates } : m);
+        // Find original message in allMessages to clone
+        const original = allMessages().find((m) => msgIdToHex(m.msg_id) === edit.msgId);
+        return original ? [...prev, { ...original, ...updates }] : prev;
+      });
       setEditingMsg(null);
       setMessageInput('');
-    } catch { /* failed */ }
-    finally { setSending(false); }
+    } catch (e) {
+      console.warn('Edit message failed:', e);
+    } finally { setSending(false); }
   };
 
   const handleDelete = async (msg: any) => {
@@ -418,10 +424,16 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     try {
       const client = getClient();
       await client.deleteMessage(props.channelId, msgIdToHex(msg.msg_id));
-      setLocalMessages((prev) => prev.map((m) =>
-        msgIdToHex(m.msg_id) === msgIdToHex(msg.msg_id) ? { ...m, deleted: true } : m,
-      ));
-    } catch { /* failed */ }
+      // Optimistic update — add/update in localMessages so it wins in dedup
+      setLocalMessages((prev) => {
+        const id = msgIdToHex(msg.msg_id);
+        const exists = prev.some((m) => msgIdToHex(m.msg_id) === id);
+        if (exists) return prev.map((m) => msgIdToHex(m.msg_id) === id ? { ...m, deleted: true } : m);
+        return [...prev, { ...msg, deleted: true }];
+      });
+    } catch (e) {
+      console.warn('Delete message failed:', e);
+    }
   };
 
   const handleReact = async (msg: any, emoji: string) => {
@@ -430,7 +442,21 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     try {
       const client = getClient();
       await client.reactToMessage(props.channelId, msgIdToHex(msg.msg_id), emoji);
-    } catch { /* failed */ }
+      // Optimistic update — increment reaction count locally
+      const id = msgIdToHex(msg.msg_id);
+      const updateReactions = (m: any) => {
+        const reactions = { ...(m.reactions || {}) };
+        reactions[emoji] = (reactions[emoji] || 0) + 1;
+        return { ...m, reactions };
+      };
+      setLocalMessages((prev) => {
+        const exists = prev.some((m) => msgIdToHex(m.msg_id) === id);
+        if (exists) return prev.map((m) => msgIdToHex(m.msg_id) === id ? updateReactions(m) : m);
+        return [...prev, updateReactions(msg)];
+      });
+    } catch (e) {
+      console.warn('React to message failed:', e);
+    }
   };
 
   return (
@@ -481,6 +507,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                     <div
                       class={`message ${msg.author === walletAddress() ? 'own' : ''} ${msg.deleted ? 'deleted' : ''} ${msg.muted ? 'muted' : ''}`}
                       data-msg-id={msgIdToHex(msg.msg_id)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setUserMenu({ x: e.clientX, y: e.clientY, address: msg.author, msgId: msgIdToHex(msg.msg_id) });
+                      }}
                     >
                       <Show when={reply && !msg.deleted}>
                         <div class="reply-preview" onClick={() => scrollToMessage(reply!.msgId)}>
@@ -504,10 +534,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                         <span
                           class="message-author"
                           onClick={() => navigate(`/user/${msg.author}`)}
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            setUserMenu({ x: e.clientX, y: e.clientY, address: msg.author, msgId: msgIdToHex(msg.msg_id) });
-                          }}
                         >
                           {displayName(msg.author)}
                         </span>
@@ -647,9 +673,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           <button class="ctx-item" onClick={() => handleUserAction('profile')}>
             👤 {t('channel_view_profile')}
           </button>
-          <button class="ctx-item" onClick={() => handleUserAction('pin')}>
-            📌 {t('channel_pin_message')}
-          </button>
+          <Show when={isMod()}>
+            <button class="ctx-item" onClick={() => handleUserAction('pin')}>
+              📌 {t('channel_pin_message')}
+            </button>
+          </Show>
           <Show when={walletAddress() && userMenu()!.address !== walletAddress()}>
             <div class="ctx-divider" />
             <button class="ctx-item" onClick={() => handleUserAction('report')}>
