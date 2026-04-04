@@ -134,19 +134,15 @@ export async function enablePush(): Promise<'ok' | 'denied' | 'unsupported' | 'e
   }
 
   const address = walletAddress();
-  if (!address) { console.warn('enablePush: no wallet address'); return 'error'; }
+  if (!address) return 'error';
 
   const gatewayUrl = getPushGatewayUrl();
-  if (!gatewayUrl) { console.warn('enablePush: no gateway URL'); return 'error'; }
+  if (!gatewayUrl) return 'error';
 
   try {
-    console.log('enablePush: gateway URL =', gatewayUrl);
     const vapidKey = await fetchVapidKey(gatewayUrl);
-    console.log('enablePush: VAPID key fetched, length =', vapidKey.length);
     const subscription = await subscribeToPush(vapidKey);
-    console.log('enablePush: subscribed');
     await registerWithGateway(gatewayUrl, subscription, address);
-    console.log('enablePush: registered with gateway');
 
     setSetting('pushEnabled', true);
     return 'ok';
