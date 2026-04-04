@@ -9,6 +9,7 @@
  * 4. Service worker handles incoming push events
  */
 
+import { DEFAULT_NODE_URL } from '@ogmara/sdk';
 import { getSetting, setSetting } from './settings';
 import { getSigner, walletAddress } from './auth';
 
@@ -17,10 +18,9 @@ export function getPushGatewayUrl(): string {
   const explicit = getSetting('pushGatewayUrl') as string;
   if (explicit) return explicit;
 
-  // Auto-derive: try /push path on the node's origin first (path-based routing),
-  // then fall back to port 41722 (direct access). Node operators configure
-  // pushGatewayUrl explicitly if neither convention applies.
-  const nodeUrl = getSetting('nodeUrl') as string;
+  // Auto-derive: /push path on the node's origin (path-based reverse proxy).
+  // Falls back to DEFAULT_NODE_URL if nodeUrl setting is empty.
+  const nodeUrl = (getSetting('nodeUrl') as string) || DEFAULT_NODE_URL;
   if (!nodeUrl) return '';
 
   try {
