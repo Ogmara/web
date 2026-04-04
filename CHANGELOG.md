@@ -5,6 +5,14 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.7] - 2026-04-04
+
+### Fixed
+
+- Cursor focus now returns to chat input after sending a message (was failing because textarea was still disabled during focus)
+- Active channel marked as read on every incoming WS message, preventing unread badges while viewing the channel
+- Settings download updated to use new response format from L2 node v0.11.4
+
 ## [0.20.6] - 2026-04-04
 
 ### Fixed

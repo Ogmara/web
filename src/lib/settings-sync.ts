@@ -65,14 +65,14 @@ export async function encryptSettings(hexKey: string): Promise<{ encrypted_setti
 /** Decrypt settings blob and apply to local storage. */
 export async function decryptAndApplySettings(
   hexKey: string,
-  encrypted_blob: string,
-  iv: string,
+  encryptedSettings: Uint8Array,
+  nonce: Uint8Array,
 ): Promise<void> {
   const key = await deriveKey(hexKey);
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: fromHex(iv) },
+    { name: 'AES-GCM', iv: nonce },
     key,
-    fromHex(encrypted_blob),
+    encryptedSettings,
   );
   let settings: Record<string, unknown>;
   try {
@@ -103,6 +103,10 @@ export async function downloadSettings(hexKey: string): Promise<boolean> {
   const client = getClient();
   const resp = await client.getSettings();
   if (!resp) return false;
-  await decryptAndApplySettings(hexKey, resp.encrypted_blob, resp.iv);
+  await decryptAndApplySettings(
+    hexKey,
+    new Uint8Array(resp.encrypted_settings),
+    new Uint8Array(resp.nonce),
+  );
   return true;
 }
