@@ -736,7 +736,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
       <style>{`
         .chat-view { display: flex; flex-direction: column; height: 100%; height: 100dvh; max-height: -webkit-fill-available; }
-        .chat-messages { flex: 1; overflow-y: auto; padding: var(--spacing-md); display: flex; flex-direction: column; gap: var(--spacing-sm); }
+        .chat-messages { flex: 1; overflow-y: auto; padding: var(--spacing-md); display: flex; flex-direction: column; }
+        .chat-messages > * + * { margin-top: var(--spacing-sm); }
+        .chat-messages > .message.continuation { margin-top: 0; }
         .chat-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-secondary); }
         .date-separator {
           display: flex;
@@ -764,7 +766,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           border: 1px solid var(--color-border);
         }
         .message.continuation {
-          margin-top: calc(-1 * var(--spacing-sm) - 1px);
           border-top-left-radius: var(--radius-sm);
           border-top-right-radius: var(--radius-sm);
           padding-top: 2px;
