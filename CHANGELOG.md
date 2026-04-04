@@ -5,6 +5,13 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.1] - 2026-04-04
+
+### Fixed
+- Push toggle no longer crashes after async permission request — uses signal
+  to revert checkbox state instead of `e.currentTarget` (null after `await`)
+- Removed nonexistent `getClient().baseUrl` in push URL derivation
+
 ## [0.23.0] - 2026-04-04
 
 ### Added
