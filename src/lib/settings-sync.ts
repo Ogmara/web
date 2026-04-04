@@ -46,18 +46,19 @@ function fromHex(hex: string): Uint8Array {
 }
 
 /** Collect current settings and encrypt them. */
-export async function encryptSettings(hexKey: string): Promise<{ encrypted_blob: string; iv: string }> {
+export async function encryptSettings(hexKey: string): Promise<{ encrypted_settings: Uint8Array; nonce: Uint8Array; key_epoch: number }> {
   const settings: Record<string, unknown> = {};
   for (const key of SYNC_KEYS) {
     settings[key] = getSetting(key);
   }
   const plaintext = new TextEncoder().encode(JSON.stringify(settings));
   const key = await deriveKey(hexKey);
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, key, plaintext);
   return {
-    encrypted_blob: toHex(new Uint8Array(ciphertext)),
-    iv: toHex(iv),
+    encrypted_settings: new Uint8Array(ciphertext),
+    nonce,
+    key_epoch: 0,
   };
 }
 
