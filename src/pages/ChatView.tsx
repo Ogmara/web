@@ -72,6 +72,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [myRole, setMyRole] = createSignal<'creator' | 'moderator' | 'member'>('member');
   const [expandedMuted, setExpandedMuted] = createSignal<Set<string>>(new Set());
   const [editingMsg, setEditingMsg] = createSignal<{ msgId: string; content: string } | null>(null);
+  const [sendError, setSendError] = createSignal<string | null>(null);
   const [attachments, setAttachments] = createSignal<MediaAttachment[]>([]);
   const EDIT_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
   const GROUP_WINDOW_MS = 2 * 60 * 1000; // 2 minutes — combine consecutive messages
@@ -400,6 +401,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     if (!getSigner() || !walletAddress()) { navigate('/wallet'); return; }
 
     setSending(true);
+    setSendError(null);
     try {
       const client = getClient();
       const options: any = {};
@@ -426,8 +428,12 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       setReplyTo(null);
       setShowEmoji(false);
       setAttachments([]);
-    } catch (err) {
+    } catch (err: any) {
       console.error('sendMessage failed:', err);
+      const msg = err?.message || String(err);
+      setSendError(msg);
+      // Auto-clear error after 6 seconds
+      setTimeout(() => setSendError(null), 6000);
     } finally {
       setSending(false);
       // Focus after sending is cleared (textarea is no longer disabled)
@@ -697,6 +703,13 @@ export const ChatView: Component<ChatViewProps> = (props) => {
             </For>
           </Show>
         </div>
+
+        {/* Send error banner */}
+        <Show when={sendError()}>
+          <div class="send-error-banner" onClick={() => setSendError(null)}>
+            {sendError()}
+          </div>
+        </Show>
 
         {/* Edit mode indicator */}
         <Show when={editingMsg()}>
@@ -1011,6 +1024,14 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           cursor: pointer;
         }
         .inline-react-btn:hover { background: var(--color-bg-tertiary); }
+        .send-error-banner {
+          padding: var(--spacing-xs) var(--spacing-md);
+          background: var(--color-error);
+          color: white;
+          font-size: var(--font-size-sm);
+          cursor: pointer;
+          text-align: center;
+        }
         .edit-indicator {
           display: flex;
           align-items: center;

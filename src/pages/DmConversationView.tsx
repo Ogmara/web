@@ -26,6 +26,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
   const [editingMsg, setEditingMsg] = createSignal<{ msgId: string; content: string } | null>(null);
   const [showReactPicker, setShowReactPicker] = createSignal<string | null>(null);
   const [attachments, setAttachments] = createSignal<MediaAttachment[]>([]);
+  const [sendError, setSendError] = createSignal<string | null>(null);
   const EDIT_WINDOW_MS = 30 * 60 * 1000;
   let inputRef: HTMLTextAreaElement | undefined;
 
@@ -97,6 +98,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
     if (!signer || !walletAddress()) return;
 
     setSending(true);
+    setSendError(null);
     try {
       const client = getClient();
       const envelope = await buildDirectMessage(signer, {
@@ -117,8 +119,11 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
       }]);
 
       setTimeout(() => inputRef?.focus(), 50);
-    } catch {
-      // Send failed
+    } catch (err: any) {
+      console.error('sendDm failed:', err);
+      const msg = err?.message || String(err);
+      setSendError(msg);
+      setTimeout(() => setSendError(null), 6000);
     } finally {
       setSending(false);
     }
@@ -293,6 +298,11 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
             />
           </div>
         </Show>
+        <Show when={sendError()}>
+          <div class="dm-send-error" onClick={() => setSendError(null)}>
+            {sendError()}
+          </div>
+        </Show>
         <div class="dm-input-area">
           <div class="dm-input-row">
             <textarea
@@ -423,6 +433,14 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
         .dm-media-bar {
           padding: var(--spacing-xs) var(--spacing-md);
           border-top: 1px solid var(--color-border);
+        }
+        .dm-send-error {
+          padding: var(--spacing-xs) var(--spacing-md);
+          background: var(--color-error);
+          color: white;
+          font-size: var(--font-size-sm);
+          cursor: pointer;
+          text-align: center;
         }
         .dm-input-area {
           border-top: 1px solid var(--color-border);
