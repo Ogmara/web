@@ -105,6 +105,8 @@
   "onchain_tx_failed": "交易失败",
   "auth_required": "需要身份验证",
   "auth_connect_prompt": "连接钱包以继续",
+  "verification_required": "需要链上注册。请验证钱包以使用此功能。",
+  "verification_go_to_wallet": "前往钱包",
   "compose_title": "标题",
   "compose_content": "内容",
   "compose_tags": "标签（用逗号分隔）",

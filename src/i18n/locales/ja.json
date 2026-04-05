@@ -105,6 +105,8 @@
   "onchain_tx_failed": "トランザクション失敗",
   "auth_required": "認証が必要です",
   "auth_connect_prompt": "続行するにはウォレットを接続してください",
+  "verification_required": "オンチェーン登録が必要です。この機能を使用するにはウォレットを認証してください。",
+  "verification_go_to_wallet": "ウォレットへ",
   "compose_title": "タイトル",
   "compose_content": "内容",
   "compose_tags": "タグ（カンマ区切り）",

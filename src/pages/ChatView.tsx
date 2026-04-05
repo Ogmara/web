@@ -6,7 +6,7 @@
 import { Component, createResource, createSignal, createEffect, createMemo, For, Show, onCleanup } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, getSigner, walletAddress } from '../lib/auth';
+import { authStatus, getSigner, walletAddress, isRegistered } from '../lib/auth';
 import { onWsEvent, wsSubscribeChannels, wsUnsubscribeChannels } from '../lib/ws';
 import { navigate } from '../lib/router';
 import { setSetting } from '../lib/settings';
@@ -468,12 +468,13 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const cancelReply = () => setReplyTo(null);
 
   const canEdit = (msg: any) =>
+    isRegistered() &&
     msg.author === walletAddress() &&
     !msg.deleted &&
     (Date.now() - new Date(msg.timestamp).getTime()) < EDIT_WINDOW_MS;
 
   const canDelete = (msg: any) =>
-    msg.author === walletAddress() && !msg.deleted;
+    isRegistered() && msg.author === walletAddress() && !msg.deleted;
 
   const startEdit = (msg: any) => {
     setEditingMsg({ msgId: msgIdToHex(msg.msg_id), content: getPayloadContent(msg.payload) });

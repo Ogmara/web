@@ -97,6 +97,8 @@
   "onchain_tx_failed": "Transaction failed",
   "auth_required": "Authentication required",
   "auth_connect_prompt": "Connect wallet to continue",
+  "verification_required": "On-chain registration required. Verify your wallet to use this feature.",
+  "verification_go_to_wallet": "Go to Wallet",
   "compose_title": "Title",
   "compose_content": "Content",
   "compose_tags": "Tags (comma-separated)",

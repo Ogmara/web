@@ -159,6 +159,8 @@
   "onchain_tx_failed": "Транзакция не удалась",
   "auth_required": "Требуется авторизация",
   "auth_connect_prompt": "Подключите кошелёк, чтобы продолжить",
+  "verification_required": "Требуется регистрация в блокчейне. Подтвердите кошелёк, чтобы использовать эту функцию.",
+  "verification_go_to_wallet": "Перейти в кошелёк",
   "compose_title": "Заголовок",
   "compose_content": "Содержание",
   "compose_tags": "Теги (через запятую)",

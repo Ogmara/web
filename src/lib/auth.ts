@@ -72,16 +72,19 @@ export async function initAuth(): Promise<void> {
           setAuthStatus('ready');
           // Re-register device if cache key was lost (e.g. localStorage cleared)
           ensureDeviceRegistered(signer, savedAddress, address);
+          checkRegistrationStatus();
         } else if (savedSource === 'k5-delegation' && savedAddress) {
           setWalletAddress(savedAddress);
           setWalletSource('k5-delegation');
           signer.walletAddress = savedAddress;
           setAuthStatus('ready');
           ensureDeviceRegistered(signer, savedAddress, address);
+          checkRegistrationStatus();
         } else if (savedSource === 'builtin' && savedAddress) {
           setWalletAddress(address);
           setWalletSource('builtin');
           setAuthStatus('ready');
+          checkRegistrationStatus();
         } else {
           // Vault has a key but no wallet source saved (e.g. localStorage cleared).
           // This is an orphaned device key — don't activate as a wallet.
@@ -109,6 +112,7 @@ export async function connectWithKey(hexKey: string): Promise<string> {
   setSetting('walletSource', 'builtin');
   setSetting('walletAddress', address);
   setAuthStatus('ready');
+  checkRegistrationStatus();
   return address;
 }
 
@@ -123,6 +127,7 @@ export async function generateWallet(): Promise<string> {
   setSetting('walletSource', 'builtin');
   setSetting('walletAddress', address);
   setAuthStatus('ready');
+  checkRegistrationStatus();
   return address;
 }
 
@@ -195,6 +200,7 @@ export async function connectKleverExtension(extensionAddress: string): Promise<
   setSetting('walletSource', 'klever-extension');
   setSetting('walletAddress', extensionAddress);
   setAuthStatus('ready');
+  checkRegistrationStatus();
 }
 
 /**
@@ -273,6 +279,7 @@ export async function connectK5Delegation(k5WalletAddress: string): Promise<void
   setSetting('walletSource', 'k5-delegation');
   setSetting('walletAddress', k5WalletAddress);
   setAuthStatus('ready');
+  checkRegistrationStatus();
 }
 
 /** Disconnect wallet and wipe vault. */
@@ -298,4 +305,21 @@ export async function disconnectWallet(): Promise<void> {
 /** Update on-chain registration status. */
 export function setRegistrationStatus(registered: boolean): void {
   setIsRegistered(registered);
+}
+
+/**
+ * Check on-chain registration status by querying the L2 node's user profile.
+ * A user is "verified" when `registered_at > 0` (set by the chain scanner
+ * from a SC UserRegistered event, not from a ProfileUpdate).
+ */
+export async function checkRegistrationStatus(): Promise<void> {
+  const addr = walletAddress();
+  if (!addr) return;
+  try {
+    const resp = await getClient().getUserProfile(addr);
+    setIsRegistered(resp.user.registered_at > 0);
+  } catch {
+    // User not found on node or network error — assume unverified
+    setIsRegistered(false);
+  }
 }

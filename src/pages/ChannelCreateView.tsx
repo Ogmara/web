@@ -8,7 +8,7 @@
 import { Component, createSignal, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, walletAddress, getSigner } from '../lib/auth';
+import { authStatus, walletAddress, getSigner, isRegistered } from '../lib/auth';
 import { navigate, goBack } from '../lib/router';
 import { kleverAvailable, createChannelOnChain, getChannelIdFromTx } from '../lib/klever';
 import { addJoinedChannel } from '../components/Sidebar';
@@ -97,7 +97,14 @@ export const ChannelCreateView: Component = () => {
         </div>
       </Show>
 
-      <Show when={authStatus() === 'ready'}>
+      <Show when={authStatus() === 'ready' && !isRegistered()}>
+        <div class="create-auth-prompt">
+          <p>{t('verification_required')}</p>
+          <button onClick={() => navigate('/wallet')}>{t('verification_go_to_wallet')}</button>
+        </div>
+      </Show>
+
+      <Show when={authStatus() === 'ready' && isRegistered()}>
         <div class="create-form">
           <label class="create-label">{t('channel_create_slug')}</label>
           <input

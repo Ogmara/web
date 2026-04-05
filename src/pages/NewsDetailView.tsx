@@ -158,7 +158,7 @@ export const NewsDetailView: Component = () => {
     postData()?.post && !postData()!.post.deleted &&
     (Date.now() - new Date(postData()!.post.timestamp).getTime()) < EDIT_WINDOW_MS;
 
-  const canDeletePost = () => isOwnPost() && postData()?.post && !postData()!.post.deleted;
+  const canDeletePost = () => isOwnPost() && isRegistered() && postData()?.post && !postData()!.post.deleted;
 
   const requireAuthOrRedirect = (): boolean => {
     if (!getSigner() || !walletAddress()) {

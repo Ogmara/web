@@ -105,6 +105,8 @@
   "onchain_tx_failed": "Transação falhou",
   "auth_required": "Autenticação necessária",
   "auth_connect_prompt": "Conecte a carteira para continuar",
+  "verification_required": "Registro on-chain necessário. Verifique sua carteira para usar este recurso.",
+  "verification_go_to_wallet": "Ir para Carteira",
   "compose_title": "Título",
   "compose_content": "Conteúdo",
   "compose_tags": "Tags (separadas por vírgula)",
