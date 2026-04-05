@@ -5,6 +5,22 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.4] - 2026-04-05
+
+### Changed
+- **Incremental channel message polling** — poll now fetches only new messages
+  since the latest known msg_id using the `after` parameter instead of
+  re-fetching the entire channel history every 15 seconds. Preserves scroll
+  position when reading older messages.
+- Initial channel message load increased from 50 to 200 messages
+
+### Fixed
+- Emoji hover bar on own messages no longer gets clipped behind the sidebar —
+  bar now positions to the left on right-aligned messages
+- Messages with reactions now have a minimum width to prevent badge overflow
+- Scroll position no longer resets to bottom on poll refetch — auto-scroll only
+  triggers when the user is already near the bottom of the chat
+
 ## [0.23.3] - 2026-04-04
 
 ### Added

@@ -139,18 +139,20 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   };
 
   let lastChannelId: number | null = null;
-  const [messages, { refetch }] = createResource(
+  const [messages] = createResource(
     () => props.channelId,
     async (channelId) => {
       if (!channelId) return [];
-      // Only clear local messages on channel switch, not on poll refetch
+      // Only clear local messages on channel switch
       if (channelId !== lastChannelId) {
         setLocalMessages([]);
         lastChannelId = channelId;
+        prevMsgCount = 0;
+        initialLoad = true;
       }
       try {
         const client = getClient();
-        const resp = await client.getChannelMessages(channelId, 50);
+        const resp = await client.getChannelMessages(channelId, 200);
         return resp.messages;
       } catch {
         return [];
@@ -321,24 +323,55 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     return { author: '...', content: '(original message not loaded)', msgId: replyHex };
   };
 
-  // Poll fallback every 15s
+  // Incremental poll fallback every 15s — fetch only new messages since the latest known msg_id
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+  const pollNewMessages = async () => {
+    const channelId = props.channelId;
+    if (!channelId) return;
+    const msgs = allMessages();
+    if (msgs.length === 0) return;
+    const latestMsg = msgs[msgs.length - 1];
+    const latestMsgId = msgIdToHex(latestMsg.msg_id);
+    if (!latestMsgId) return;
+    try {
+      const client = getClient();
+      const resp = await client.getChannelMessages(channelId, 200, undefined, latestMsgId);
+      if (resp.messages && resp.messages.length > 0) {
+        setLocalMessages((prev) => {
+          const next = [...prev, ...resp.messages];
+          return next.length > MAX_LOCAL_MESSAGES ? next.slice(-MAX_LOCAL_MESSAGES) : next;
+        });
+      }
+    } catch { /* poll failure is non-critical */ }
+  };
   createEffect(() => {
     if (pollTimer) clearInterval(pollTimer);
-    if (props.channelId) pollTimer = setInterval(() => refetch(), 15000);
+    if (props.channelId) pollTimer = setInterval(pollNewMessages, 15000);
   });
   onCleanup(() => { if (pollTimer) clearInterval(pollTimer); });
 
-  // Auto-scroll on new messages
+  // Auto-scroll only when new messages arrive and user is near bottom
+  let prevMsgCount = 0;
+  let initialLoad = true;
   createEffect(() => {
     const msgs = allMessages();
-    if (msgs.length > 0) {
+    const count = msgs.length;
+    if (count > 0 && count !== prevMsgCount) {
+      const wasMore = count > prevMsgCount;
+      const isFirst = initialLoad;
+      prevMsgCount = count;
+      initialLoad = false;
+      if (!wasMore && !isFirst) return; // only scroll on new messages, not removals
       setTimeout(() => {
         if (!messagesRef) return;
+        // Always scroll to bottom on initial channel load
+        if (isFirst) { scrollToBottom(); return; }
         const { scrollTop, scrollHeight, clientHeight } = messagesRef;
         const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
-        if (isNearBottom || scrollTop === 0) scrollToBottom();
+        if (isNearBottom) scrollToBottom();
       }, 50);
+    } else {
+      prevMsgCount = count;
     }
   });
 
@@ -839,7 +872,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           z-index: 10;
         }
         .message { position: relative; }
+        .message:has(.message-reactions) { min-width: 120px; }
         .message:hover .msg-react-hover { display: flex; }
+        .message.own .msg-react-hover { right: auto; left: var(--spacing-sm); }
         .react-hover-btn {
           font-size: 14px;
           padding: 1px 3px;
