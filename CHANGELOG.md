@@ -5,6 +5,20 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.2] - 2026-04-05
+
+### Fixed
+- **Message deduplication** — three related bugs causing duplicate messages
+  and stale polling:
+  1. Optimistic messages were not removed when the WebSocket delivered the
+     real message (only checked against initial API load, not local messages).
+     Now the WS handler removes matching optimistic messages on arrival.
+  2. Poll `after` cursor could use an optimistic `local-*` msg_id, which the
+     server doesn't recognize, causing all subsequent polls to return nothing.
+     Now skips optimistic messages when selecting the cursor.
+  3. Poll results were appended to localMessages without dedup, causing
+     duplicate entries when WS and poll delivered the same message.
+
 ## [0.24.1] - 2026-04-05
 
 ### Fixed

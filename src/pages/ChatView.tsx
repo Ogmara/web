@@ -215,7 +215,16 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           }
         }
         setLocalMessages((prev) => {
-          const next = [...prev, msg];
+          // Remove optimistic messages that match this real message
+          // (same author, timestamp within 10s)
+          const filtered = prev.filter((m) => {
+            if (!m._optimistic) return true;
+            return !(m.author === msg.author &&
+              Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 10000);
+          });
+          // Skip if already present (WS can re-deliver)
+          if (filtered.some((m) => msgIdToHex(m.msg_id) === msgIdToHex(msg.msg_id))) return filtered;
+          const next = [...filtered, msg];
           return next.length > MAX_LOCAL_MESSAGES ? next.slice(-MAX_LOCAL_MESSAGES) : next;
         });
         // Mark channel as read while viewing so unread badge doesn't appear
@@ -336,15 +345,23 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     if (!channelId) return;
     const msgs = allMessages();
     if (msgs.length === 0) return;
-    const latestMsg = msgs[msgs.length - 1];
-    const latestMsgId = msgIdToHex(latestMsg.msg_id);
+    // Find the latest REAL message (skip optimistic ones with 'local-' ids)
+    let latestMsgId: string | null = null;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const id = msgIdToHex(msgs[i].msg_id);
+      if (id && !id.startsWith('local-')) { latestMsgId = id; break; }
+    }
     if (!latestMsgId) return;
     try {
       const client = getClient();
       const resp = await client.getChannelMessages(channelId, 200, undefined, latestMsgId);
       if (resp.messages && resp.messages.length > 0) {
         setLocalMessages((prev) => {
-          const next = [...prev, ...resp.messages];
+          // Dedup: only add messages not already in localMessages
+          const existingIds = new Set(prev.map((m) => msgIdToHex(m.msg_id)));
+          const newMsgs = resp.messages.filter((m: any) => !existingIds.has(msgIdToHex(m.msg_id)));
+          if (newMsgs.length === 0) return prev;
+          const next = [...prev, ...newMsgs];
           return next.length > MAX_LOCAL_MESSAGES ? next.slice(-MAX_LOCAL_MESSAGES) : next;
         });
       }
