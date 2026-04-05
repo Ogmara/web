@@ -62,25 +62,29 @@ export async function initAuth(): Promise<void> {
         const savedSource = getSetting('walletSource') as WalletSource;
         const savedAddress = getSetting('walletAddress');
 
-        // L2 address is always the device key (signer) address
-        setL2Address(address);
-
         if (savedSource === 'klever-extension' && savedAddress) {
+          // Device address uses ogd1... prefix for delegated keys
+          const deviceAddr = signer.deviceAddress;
+          setL2Address(deviceAddr);
           setWalletAddress(savedAddress);
           setWalletSource('klever-extension');
           signer.walletAddress = savedAddress;
           setAuthStatus('ready');
           // Re-register device if cache key was lost (e.g. localStorage cleared)
-          ensureDeviceRegistered(signer, savedAddress, address);
+          ensureDeviceRegistered(signer, savedAddress, deviceAddr);
           checkRegistrationStatus();
         } else if (savedSource === 'k5-delegation' && savedAddress) {
+          const deviceAddr = signer.deviceAddress;
+          setL2Address(deviceAddr);
           setWalletAddress(savedAddress);
           setWalletSource('k5-delegation');
           signer.walletAddress = savedAddress;
           setAuthStatus('ready');
-          ensureDeviceRegistered(signer, savedAddress, address);
+          ensureDeviceRegistered(signer, savedAddress, deviceAddr);
           checkRegistrationStatus();
         } else if (savedSource === 'builtin' && savedAddress) {
+          // Built-in wallet mode: signer IS the wallet, uses klv1...
+          setL2Address(address);
           setWalletAddress(address);
           setWalletSource('builtin');
           setAuthStatus('ready');
@@ -167,12 +171,13 @@ async function ensureDeviceRegistered(
  */
 export async function connectKleverExtension(extensionAddress: string): Promise<void> {
   // Reuse existing device key if available, otherwise generate a new one
-  let deviceAddress = await vaultInit();
-  if (!deviceAddress) {
-    deviceAddress = await vaultGenerate();
-  }
+  const vaultAddr = await vaultInit() ?? await vaultGenerate();
   const signer = vaultGetSigner()!;
   getClient().withSigner(signer);
+
+  // Device address uses ogd1... prefix (distinct from wallet's klv1...)
+  const deviceAddress = signer.deviceAddress;
+  void vaultAddr; // vault returns klv1; we use ogd1 for device identity
 
   // Register device on L2 node (skip if already registered for this pair)
   const cacheKey = `${extensionAddress}:${deviceAddress}`;
@@ -251,7 +256,7 @@ export async function connectK5Delegation(k5WalletAddress: string): Promise<void
   if (!signer) return;
 
   getClient().withSigner(signer);
-  const deviceAddress = signer.address;
+  const deviceAddress = signer.deviceAddress;
 
   // Register the device on the L2 node under the K5 wallet address.
   // The on-chain delegation proves ownership; now the L2 node needs to know too.
