@@ -139,6 +139,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   };
 
   let lastChannelId: number | null = null;
+  let prevMsgCount = 0;
+  let initialLoad = true;
   const [messages] = createResource(
     () => props.channelId,
     async (channelId) => {
@@ -351,8 +353,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   onCleanup(() => { if (pollTimer) clearInterval(pollTimer); });
 
   // Auto-scroll only when new messages arrive and user is near bottom
-  let prevMsgCount = 0;
-  let initialLoad = true;
   createEffect(() => {
     const msgs = allMessages();
     const count = msgs.length;
