@@ -365,23 +365,26 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       prevMsgCount = count;
       initialLoad = false;
       if (!wasMore && !isFirst) return; // only scroll on new messages, not removals
-      // Double-RAF ensures DOM has fully rendered before measuring scroll
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        if (!messagesRef) return;
-        if (isFirst) {
-          // On initial load, scroll to unread divider if present, otherwise bottom
+      if (isFirst) {
+        // Initial load: wait for SolidJS to render all <For> items into the DOM
+        setTimeout(() => {
+          if (!messagesRef) return;
           const divider = messagesRef.querySelector('.unread-divider');
           if (divider) {
             divider.scrollIntoView({ block: 'start' });
           } else {
             scrollToBottom();
           }
-          return;
-        }
-        const { scrollTop, scrollHeight, clientHeight } = messagesRef;
-        const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
-        if (isNearBottom) scrollToBottom();
-      }));
+        }, 150);
+      } else {
+        // Subsequent messages: quick RAF is sufficient since DOM is already populated
+        requestAnimationFrame(() => {
+          if (!messagesRef) return;
+          const { scrollTop, scrollHeight, clientHeight } = messagesRef;
+          const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
+          if (isNearBottom) scrollToBottom();
+        });
+      }
     } else {
       prevMsgCount = count;
     }
