@@ -5,6 +5,14 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.5] - 2026-04-05
+
+### Added
+- **Unread messages divider** — when opening a channel with unread messages,
+  a "New messages" divider line appears before the first unread message and the
+  view scrolls to it instead of jumping to the bottom. Styled with accent color
+  and translated in all 7 locales (EN/DE/ES/PT/JA/ZH/RU).
+
 ## [0.23.4] - 2026-04-05
 
 ### Changed
