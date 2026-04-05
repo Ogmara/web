@@ -7,7 +7,7 @@
 import { Component, createSignal, createResource, Show, onMount } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, getSigner, walletAddress } from '../lib/auth';
+import { authStatus, getSigner, walletAddress, isRegistered } from '../lib/auth';
 import { navigate, queryParam } from '../lib/router';
 import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
 import { getPayloadContent, getPayloadTitle, decodePayload } from '../lib/payload';
@@ -96,10 +96,18 @@ export const ComposeView: Component = () => {
         <div class="compose-auth-prompt">{t('auth_connect_prompt')}</div>
       </Show>
 
+      <Show when={isEditMode() && authStatus() === 'ready' && !isRegistered()}>
+        <div class="compose-auth-prompt">
+          <p>{t('verification_required')}</p>
+          <button onClick={() => navigate('/wallet')}>{t('verification_go_to_wallet')}</button>
+        </div>
+      </Show>
+
       <Show when={error()}>
         <div class="compose-error">{error()}</div>
       </Show>
 
+      <Show when={!isEditMode() || isRegistered()}>
       <div class="compose-form">
         <input
           type="text"
@@ -135,11 +143,12 @@ export const ComposeView: Component = () => {
         <button
           class="compose-submit"
           onClick={handleSubmit}
-          disabled={submitting() || !content().trim() || authStatus() !== 'ready'}
+          disabled={submitting() || !content().trim() || authStatus() !== 'ready' || (isEditMode() && !isRegistered())}
         >
           {submitting() ? t('loading') : isEditMode() ? t('news_save_edit') : t('compose_submit')}
         </button>
       </div>
+      </Show>
 
       <style>{`
         .compose-view {

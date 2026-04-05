@@ -5,7 +5,7 @@
 import { Component, createResource, createSignal, createMemo, For, Show, onCleanup, onMount } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, walletAddress, getSigner } from '../lib/auth';
+import { authStatus, walletAddress, getSigner, isRegistered } from '../lib/auth';
 import { onWsEvent } from '../lib/ws';
 import { navigate } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
@@ -145,10 +145,12 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
   };
 
   const canEdit = (msg: any) =>
+    isRegistered() &&
     msg.author === walletAddress() && !msg.deleted &&
     (Date.now() - new Date(msg.timestamp).getTime()) < EDIT_WINDOW_MS;
 
-  const canDelete = (msg: any) => msg.author === walletAddress() && !msg.deleted;
+  const canDelete = (msg: any) =>
+    isRegistered() && msg.author === walletAddress() && !msg.deleted;
 
   const startEdit = (msg: any) => {
     setEditingMsg({ msgId: msgIdToHex(msg.msg_id), content: getPayloadContent(msg.payload) });

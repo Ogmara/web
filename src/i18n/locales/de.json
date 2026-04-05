@@ -105,6 +105,8 @@
   "onchain_tx_failed": "Transaktion fehlgeschlagen",
   "auth_required": "Authentifizierung erforderlich",
   "auth_connect_prompt": "Wallet verbinden, um fortzufahren",
+  "verification_required": "On-Chain-Registrierung erforderlich. Verifiziere dein Wallet, um diese Funktion zu nutzen.",
+  "verification_go_to_wallet": "Zum Wallet",
   "compose_title": "Titel",
   "compose_content": "Inhalt",
   "compose_tags": "Tags (kommagetrennt)",

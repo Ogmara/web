@@ -5,6 +5,21 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.0] - 2026-04-05
+
+### Added
+- **Tiered access for unverified wallets** — users with vault-created wallets
+  (no on-chain registration) can now chat, post news, react, and use basic
+  features. Advanced features (editing, deleting, channel creation) show a
+  verification-required prompt directing users to the wallet page for on-chain
+  registration.
+- `checkRegistrationStatus()` in auth module — queries the L2 node user profile
+  on auth init to determine if the wallet is on-chain verified (`registered_at > 0`)
+- `isRegistered` gate on edit/delete actions in ChatView, DmConversationView,
+  NewsDetailView, ComposeView (edit mode), and ChannelCreateView
+- New i18n keys `verification_required` and `verification_go_to_wallet` in all
+  7 locales (EN/DE/ES/PT/JA/ZH/RU)
+
 ## [0.23.5] - 2026-04-05
 
 ### Added

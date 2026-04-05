@@ -105,6 +105,8 @@
   "onchain_tx_failed": "Transacción fallida",
   "auth_required": "Autenticación requerida",
   "auth_connect_prompt": "Conecte billetera para continuar",
+  "verification_required": "Se requiere registro en cadena. Verifique su billetera para usar esta función.",
+  "verification_go_to_wallet": "Ir a Billetera",
   "compose_title": "Título",
   "compose_content": "Contenido",
   "compose_tags": "Etiquetas (separadas por coma)",
