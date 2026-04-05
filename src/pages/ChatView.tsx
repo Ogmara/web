@@ -141,6 +141,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   let lastChannelId: number | null = null;
   let prevMsgCount = 0;
   let initialLoad = true;
+  const [lastReadTs, setLastReadTs] = createSignal<number | null>(null);
   const [messages] = createResource(
     () => props.channelId,
     async (channelId) => {
@@ -151,10 +152,12 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         lastChannelId = channelId;
         prevMsgCount = 0;
         initialLoad = true;
+        setLastReadTs(null);
       }
       try {
         const client = getClient();
         const resp = await client.getChannelMessages(channelId, 200);
+        if (resp.last_read_ts !== undefined) setLastReadTs(resp.last_read_ts);
         return resp.messages;
       } catch {
         return [];
@@ -362,14 +365,23 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       prevMsgCount = count;
       initialLoad = false;
       if (!wasMore && !isFirst) return; // only scroll on new messages, not removals
-      setTimeout(() => {
+      // Double-RAF ensures DOM has fully rendered before measuring scroll
+      requestAnimationFrame(() => requestAnimationFrame(() => {
         if (!messagesRef) return;
-        // Always scroll to bottom on initial channel load
-        if (isFirst) { scrollToBottom(); return; }
+        if (isFirst) {
+          // On initial load, scroll to unread divider if present, otherwise bottom
+          const divider = messagesRef.querySelector('.unread-divider');
+          if (divider) {
+            divider.scrollIntoView({ block: 'start' });
+          } else {
+            scrollToBottom();
+          }
+          return;
+        }
         const { scrollTop, scrollHeight, clientHeight } = messagesRef;
         const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
         if (isNearBottom) scrollToBottom();
-      }, 50);
+      }));
     } else {
       prevMsgCount = count;
     }
@@ -578,8 +590,22 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                   && !prevMsg.deleted && !msg.deleted
                   && (Math.abs(new Date(msg.timestamp).getTime() - new Date(prevMsg.timestamp).getTime()) < GROUP_WINDOW_MS);
 
+                // Show unread divider before the first message after last_read_ts
+                const readTs = lastReadTs();
+                const msgTs = new Date(msg.timestamp).getTime();
+                const prevMsgTs = prevMsg ? new Date(prevMsg.timestamp).getTime() : 0;
+                const showUnreadDivider = readTs !== null
+                  && msgTs > readTs
+                  && (prevMsgTs <= readTs || !prevMsg)
+                  && msg.author !== walletAddress();
+
                 return (
                   <>
+                    <Show when={showUnreadDivider}>
+                      <div class="unread-divider">
+                        <span class="unread-divider-label">{t('chat_new_messages')}</span>
+                      </div>
+                    </Show>
                     <Show when={showDateSep}>
                       <div class="date-separator">
                         <span class="date-separator-label">{currentDate}</span>
@@ -823,6 +849,23 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         .chat-messages > * + * { margin-top: var(--spacing-sm); }
         .chat-messages > .message.continuation { margin-top: 0; }
         .chat-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--color-text-secondary); }
+        .unread-divider {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-sm);
+          padding: var(--spacing-sm) 0;
+        }
+        .unread-divider::before, .unread-divider::after {
+          content: '';
+          flex: 1;
+          border-top: 2px solid var(--color-accent-primary);
+        }
+        .unread-divider-label {
+          font-size: var(--font-size-xs);
+          color: var(--color-accent-primary);
+          white-space: nowrap;
+          font-weight: 700;
+        }
         .date-separator {
           display: flex;
           align-items: center;
