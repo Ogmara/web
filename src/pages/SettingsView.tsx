@@ -1,6 +1,6 @@
 import { Component, createSignal, Show } from 'solid-js';
 import { t, setLanguage, currentLanguage, SUPPORTED_LANGUAGES } from '../i18n/init';
-import { getTheme, setTheme, type Theme } from '../lib/theme';
+import { getTheme, setTheme, getDesignStyle, setDesignStyle, DESIGN_STYLES, type Theme, type DesignStyle } from '../lib/theme';
 import { getSetting, setSetting } from '../lib/settings';
 import { authStatus, walletAddress, walletSource } from '../lib/auth';
 import { navigate } from '../lib/router';
@@ -30,6 +30,13 @@ export const SettingsView: Component = () => {
   const [pushStatus, setPushStatus] = createSignal('');
   const [syncStatus, setSyncStatus] = createSignal('');
   const [exportStatus, setExportStatus] = createSignal('');
+
+  const [designStyle, setDesignStyleState] = createSignal<DesignStyle>(getDesignStyle());
+
+  const handleDesignStyleChange = (value: DesignStyle) => {
+    setDesignStyleState(value);
+    setDesignStyle(value);
+  };
 
   const handleThemeChange = (value: Theme) => {
     setThemeState(value);
@@ -73,6 +80,26 @@ export const SettingsView: Component = () => {
             </label>
           ))}
         </div>
+        <h3 style="margin-top: var(--spacing-md)">{t('settings_design_style') || 'Design Style'}</h3>
+        <div class="settings-style-grid">
+          {DESIGN_STYLES.map((style) => (
+            <button
+              class={`style-card ${designStyle() === style ? 'style-card-active' : ''}`}
+              onClick={() => handleDesignStyleChange(style)}
+            >
+              <div class={`style-preview style-preview-${style}`}>
+                <div class="sp-sidebar" />
+                <div class="sp-content">
+                  <div class="sp-bubble sp-bubble-peer" />
+                  <div class="sp-bubble sp-bubble-own" />
+                  <div class="sp-bubble sp-bubble-peer sp-bubble-short" />
+                </div>
+              </div>
+              <span class="style-card-label">{t(`settings_style_${style}`) || style.charAt(0).toUpperCase() + style.slice(1)}</span>
+            </button>
+          ))}
+        </div>
+
         <label class="settings-toggle">
           <input
             type="checkbox"
@@ -325,6 +352,42 @@ export const SettingsView: Component = () => {
         .settings-wallet-btn:hover { background: var(--color-accent-primary); color: var(--color-text-inverse); }
         .settings-sync-row { display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-sm); }
         .settings-status { font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-top: var(--spacing-xs); }
+
+        .settings-style-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--spacing-sm); margin-bottom: var(--spacing-md); }
+        .style-card {
+          display: flex; flex-direction: column; align-items: center; gap: var(--spacing-xs);
+          padding: var(--spacing-sm); border-radius: var(--radius-md);
+          border: 2px solid var(--color-border); background: var(--color-bg-tertiary);
+          cursor: pointer; transition: all 0.2s; text-align: center;
+        }
+        .style-card:hover { border-color: var(--color-accent-primary); }
+        .style-card-active { border-color: var(--color-accent-primary); background: color-mix(in srgb, var(--color-accent-primary) 10%, var(--color-bg-tertiary)); box-shadow: 0 0 0 1px var(--color-accent-primary); }
+        .style-card-label { font-size: var(--font-size-xs); font-weight: 600; color: var(--color-text-primary); }
+
+        .style-preview {
+          width: 100%; aspect-ratio: 4/3; border-radius: 6px; overflow: hidden;
+          display: flex; background: #0c0c14; border: 1px solid rgba(255,255,255,0.06);
+        }
+        .sp-sidebar { width: 25%; background: #16161f; border-right: 1px solid rgba(255,255,255,0.06); }
+        .sp-content { flex: 1; padding: 6px; display: flex; flex-direction: column; gap: 3px; justify-content: center; }
+        .sp-bubble { border-radius: 3px; height: 8px; }
+        .sp-bubble-peer { background: #1e1e2a; width: 60%; align-self: flex-start; }
+        .sp-bubble-own { background: #2a2550; width: 55%; align-self: flex-end; }
+        .sp-bubble-short { width: 40%; }
+
+        .style-preview-glassmorphism { background: linear-gradient(135deg, #0f0a1a, #1a1035, #0d1b2a); }
+        .style-preview-glassmorphism .sp-sidebar { background: rgba(255,255,255,0.06); border-right-color: rgba(255,255,255,0.1); }
+        .style-preview-glassmorphism .sp-bubble-peer { background: rgba(255,255,255,0.06); border-radius: 6px; }
+        .style-preview-glassmorphism .sp-bubble-own { background: rgba(162,155,254,0.2); border-radius: 6px; }
+
+        .style-preview-elevated .sp-bubble-peer { box-shadow: 0 1px 3px rgba(0,0,0,0.3); border-radius: 6px; }
+        .style-preview-elevated .sp-bubble-own { box-shadow: 0 1px 4px rgba(0,0,0,0.4); border-radius: 6px; }
+
+        .style-preview-minimal .sp-bubble-peer { border-radius: 2px 6px 6px 6px; background: #1e1e2a; }
+        .style-preview-minimal .sp-bubble-own { border-radius: 6px 2px 6px 6px; background: #2a2550; }
+
+        .style-preview-classic .sp-bubble-peer { border-radius: 3px; border: 1px solid rgba(255,255,255,0.06); }
+        .style-preview-classic .sp-bubble-own { border-radius: 3px; border: 1px solid rgba(162,155,254,0.2); }
       `}</style>
     </div>
   );

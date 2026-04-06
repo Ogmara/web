@@ -5,6 +5,25 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.0] - 2026-04-06
+
+### Added
+- **Design style system** — four selectable visual themes: Glassmorphism (default),
+  Elevated Cards, Clean Minimal, and Classic (original). Each style changes the
+  visual language (border-radius, shadows, effects, depth) independently from
+  the light/dark color theme.
+- **Glassmorphism style** — frosted glass panels with `backdrop-filter: blur()`,
+  animated gradient background blobs, glow accents on buttons and badges.
+- **Elevated Cards style** — layered drop shadows for depth hierarchy, bold
+  gradient buttons, cards lift on hover, accent left-border on active sidebar items.
+- **Clean Minimal style** — pill-shaped navigation and badges, asymmetric message
+  bubble corners (Signal/Telegram-inspired), date separators as centered pills,
+  round send button, thinner scrollbars.
+- **Classic style** — preserves the original flat design for users who prefer it.
+- Design style picker in Settings with visual preview thumbnails for each style.
+- Light theme adjustments for all design styles.
+- i18n translations for design style names in all 7 languages.
+
 ## [0.25.1] - 2026-04-06
 
 ### Fixed
