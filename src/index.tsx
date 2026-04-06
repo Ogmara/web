@@ -10,6 +10,7 @@ import { detectK5, checkK5Callback } from './lib/k5';
 import { vaultGetSigner } from './lib/vault';
 import { getClient } from './lib/api';
 import './styles/global.css';
+import './styles/design-styles.css';
 
 // Initialize i18n before rendering
 initI18n();
