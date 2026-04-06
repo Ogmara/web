@@ -5,6 +5,12 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.1] - 2026-04-06
+
+### Fixed
+- New users no longer see all public channels on first load — only the default
+  "ogmara" channel is shown. Other channels appear after joining via Search.
+
 ## [0.25.0] - 2026-04-05
 
 ### Changed
