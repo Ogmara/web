@@ -8,11 +8,12 @@
 import { Component, createResource, createSignal, createEffect, createMemo, For, Show, onCleanup } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, walletAddress } from '../lib/auth';
+import { authStatus, walletAddress, disconnectWallet } from '../lib/auth';
 import { navigate, route } from '../lib/router';
 import { getSetting, setSetting } from '../lib/settings';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
-import { isMobileViewport } from '../lib/mobile-nav';
+import { isMobileViewport, showMobileDetail, showMobileList, mobileListOpen } from '../lib/mobile-nav';
+import { getTheme, setTheme } from '../lib/theme';
 
 /** Default channel slug shown to all users (even unauthenticated). */
 const DEFAULT_CHANNEL_SLUG = 'ogmara';
@@ -91,6 +92,10 @@ function syncJoinedWithApi(apiChannels: { channel_id: number; channel_type: numb
 
 type SidebarTab = 'chats' | 'feed' | 'dms';
 
+const SIDEBAR_MIN_W = 200;
+const SIDEBAR_MAX_W = 600;
+const SIDEBAR_DEFAULT_W = 320;
+
 export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
   const [channelsOpen, setChannelsOpen] = createSignal(getSetting('channelsExpanded'));
   const [contextMenu, setContextMenu] = createSignal<{ x: number; y: number; channelId: number; creator?: string } | null>(null);
@@ -98,6 +103,71 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
   const [searchQuery, setSearchQuery] = createSignal('');
   void channelsOpen; // retained for compatibility; not used in new layout
   void setChannelsOpen;
+
+  // --- Burger menu (moved from Toolbar) ---
+  const [burgerOpen, setBurgerOpen] = createSignal(false);
+  const [currentTheme, setCurrentTheme] = createSignal(getTheme());
+  const [burgerProfile, setBurgerProfile] = createSignal<CachedProfile>({});
+
+  if (typeof document !== 'undefined') {
+    const closeBurger = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.sidebar-burger-wrap')) setBurgerOpen(false);
+    };
+    document.addEventListener('click', closeBurger);
+    onCleanup(() => document.removeEventListener('click', closeBurger));
+  }
+
+  createEffect(() => {
+    const addr = walletAddress();
+    if (addr) resolveProfile(addr).then(setBurgerProfile);
+  });
+
+  const navTo = (path: string) => {
+    setBurgerOpen(false);
+    navigate(path);
+    if (isMobileViewport()) showMobileDetail();
+  };
+
+  const toggleTheme = () => {
+    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    setCurrentTheme(next);
+  };
+
+  const handleLogout = async () => {
+    setBurgerOpen(false);
+    await disconnectWallet();
+    navigate('/news');
+  };
+
+  // --- Resizable sidebar width ---
+  const savedW = parseInt(localStorage.getItem('ogmara_sidebar_width') || '', 10);
+  const [sidebarWidth, setSidebarWidth] = createSignal(
+    Number.isFinite(savedW) ? Math.max(SIDEBAR_MIN_W, Math.min(SIDEBAR_MAX_W, savedW)) : SIDEBAR_DEFAULT_W,
+  );
+  let dragging = false;
+  const onResizeStart = (e: MouseEvent) => {
+    e.preventDefault();
+    dragging = true;
+    const onMove = (ev: MouseEvent) => {
+      if (!dragging) return;
+      const newW = Math.max(SIDEBAR_MIN_W, Math.min(SIDEBAR_MAX_W, ev.clientX));
+      setSidebarWidth(newW);
+    };
+    const onUp = () => {
+      dragging = false;
+      localStorage.setItem('ogmara_sidebar_width', String(sidebarWidth()));
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   const handleContextMenu = (e: MouseEvent, channelId: number, creator?: string) => {
     e.preventDefault();
@@ -422,9 +492,91 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     (channel.display_name || channel.slug || '#').slice(0, 1).toUpperCase();
 
   return (
-    <aside class={`sidebar ${isMobileViewport() ? 'mobile-open' : ''}`}>
-      {/* ---------- Header: search + notifications ---------- */}
+    <aside
+      class={`sidebar ${isMobileViewport() ? 'mobile-open' : ''}`}
+      style={isMobileViewport() ? undefined : { width: `${sidebarWidth()}px`, 'min-width': `${sidebarWidth()}px` }}
+    >
+      {/* ---------- Header: burger + search + notifications ---------- */}
       <div class="sidebar-header">
+        {/* Burger / Back button */}
+        <div class="sidebar-burger-wrap">
+          <Show
+            when={isMobileViewport() && !mobileListOpen()}
+            fallback={
+              <button
+                class="sidebar-header-btn"
+                onClick={(e) => { e.stopPropagation(); setBurgerOpen(!burgerOpen()); }}
+                aria-label={t('menu') || 'Menü'}
+                title={t('menu') || 'Menü'}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+              </button>
+            }
+          >
+            <button
+              class="sidebar-header-btn"
+              onClick={() => showMobileList()}
+              aria-label={t('nav_back') || 'Zurück'}
+              title={t('nav_back') || 'Zurück'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M19 12H5" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+            </button>
+          </Show>
+
+          {/* Burger dropdown menu */}
+          <Show when={burgerOpen()}>
+            <div class="sidebar-burger-menu" role="menu">
+              <Show when={authStatus() === 'ready' && walletAddress()}>
+                <button class="sidebar-menu-profile" onClick={() => navTo(`/user/${walletAddress()}`)}>
+                  <Show
+                    when={burgerProfile().avatar_cid}
+                    fallback={<span class="sidebar-menu-avatar-ph">{(burgerProfile().display_name || walletAddress() || '').slice(0, 2).toUpperCase()}</span>}
+                  >
+                    <img class="sidebar-menu-avatar" src={getClient().getMediaUrl(burgerProfile().avatar_cid!)} alt="" />
+                  </Show>
+                  <div class="sidebar-menu-profile-text">
+                    <div class="sidebar-menu-profile-name">
+                      {burgerProfile().display_name || `${walletAddress()?.slice(0, 8)}...${walletAddress()?.slice(-4)}`}
+                      <Show when={burgerProfile().verified}><span class="sidebar-menu-verified">✓</span></Show>
+                    </div>
+                    <div class="sidebar-menu-profile-addr">{walletAddress()?.slice(0, 12)}…{walletAddress()?.slice(-6)}</div>
+                  </div>
+                </button>
+                <div class="sidebar-menu-divider" />
+              </Show>
+              <Show when={authStatus() === 'ready'}>
+                <button class="sidebar-menu-item" onClick={() => navTo(`/user/${walletAddress()}`)}>{t('menu_my_profile')}</button>
+                <button class="sidebar-menu-item" onClick={() => navTo('/wallet')}>{t('menu_wallet')}</button>
+                <div class="sidebar-menu-divider" />
+                <button class="sidebar-menu-item" onClick={() => navTo('/channel/create?type=group')}>{t('menu_new_group')}</button>
+                <button class="sidebar-menu-item" onClick={() => navTo('/channel/create?type=channel')}>{t('menu_new_channel')}</button>
+                <div class="sidebar-menu-divider" />
+                <button class="sidebar-menu-item" onClick={() => { localStorage.setItem('ogmara.lastSeenNotifTs', Date.now().toString()); navTo('/notifications'); }}>{t('menu_notifications')}</button>
+              </Show>
+              <button class="sidebar-menu-item" onClick={() => navTo('/search')}>{t('menu_search')}</button>
+              <button class="sidebar-menu-item" onClick={() => navTo('/bookmarks')}>{t('menu_bookmarks')}</button>
+              <button class="sidebar-menu-item" onClick={() => navTo('/settings')}>{t('menu_settings')}</button>
+              <button class="sidebar-menu-item" onClick={(e) => { e.stopPropagation(); toggleTheme(); }}>
+                {currentTheme() === 'dark' ? t('menu_theme_dark') : t('menu_theme_light')}
+              </button>
+              <Show when={authStatus() === 'ready'}>
+                <div class="sidebar-menu-divider" />
+                <button class="sidebar-menu-item sidebar-menu-danger" onClick={handleLogout}>{t('menu_disconnect')}</button>
+              </Show>
+              <Show when={authStatus() !== 'ready'}>
+                <div class="sidebar-menu-divider" />
+                <button class="sidebar-menu-item" onClick={() => navTo('/wallet')}>{t('wallet_connect')}</button>
+              </Show>
+            </div>
+          </Show>
+        </div>
         <div class="sidebar-search">
           <svg class="sidebar-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
@@ -749,8 +901,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
 
       <style>{`
         .sidebar {
-          width: 320px;
-          min-width: 320px;
+          position: relative;
           background: var(--color-bg-secondary);
           border-right: 1px solid var(--color-border);
           display: flex;
@@ -1153,7 +1304,107 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         .member-dot.member-mod { background: var(--color-accent-primary); }
         .member-dot.member-owner { background: var(--color-success); }
         .member-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sidebar-resize-handle {
+          position: absolute;
+          top: 0;
+          right: -3px;
+          width: 6px;
+          height: 100%;
+          cursor: col-resize;
+          z-index: 20;
+          background: transparent;
+          transition: background 0.15s;
+        }
+        .sidebar-resize-handle:hover,
+        .sidebar-resize-handle:active {
+          background: var(--color-accent-primary);
+        }
+
+        /* --- Burger menu (in sidebar header) --- */
+        .sidebar-burger-wrap { position: relative; flex-shrink: 0; }
+        .sidebar-burger-menu {
+          position: absolute;
+          top: 42px;
+          left: 0;
+          background: var(--color-bg-secondary);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-md);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+          z-index: 10000;
+          padding: 4px;
+          min-width: 220px;
+          animation: pop-in 0.12s ease-out;
+        }
+        @keyframes pop-in {
+          from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+          to { opacity: 1; transform: none; }
+        }
+        .sidebar-menu-item {
+          display: block;
+          width: 100%;
+          text-align: left;
+          padding: var(--spacing-sm) var(--spacing-md);
+          font-size: var(--font-size-sm);
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+          color: var(--color-text-primary);
+        }
+        .sidebar-menu-item:hover { background: var(--color-bg-tertiary); }
+        .sidebar-menu-danger { color: #f44; }
+        .sidebar-menu-danger:hover { background: rgba(255, 68, 68, 0.1); }
+        .sidebar-menu-divider { height: 1px; background: var(--color-border); margin: 4px 0; }
+        .sidebar-menu-profile {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-sm);
+          padding: var(--spacing-sm) var(--spacing-md);
+          width: 100%;
+          text-align: left;
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+        }
+        .sidebar-menu-profile:hover { background: var(--color-bg-tertiary); }
+        .sidebar-menu-avatar, .sidebar-menu-avatar-ph {
+          width: 36px;
+          height: 36px;
+          border-radius: var(--radius-full);
+          flex-shrink: 0;
+          object-fit: cover;
+        }
+        .sidebar-menu-avatar-ph {
+          background: var(--color-accent-bg);
+          color: var(--color-accent-primary);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 13px;
+          font-weight: 700;
+        }
+        .sidebar-menu-profile-text { overflow: hidden; }
+        .sidebar-menu-profile-name {
+          font-weight: 600;
+          font-size: var(--font-size-sm);
+          color: var(--color-text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .sidebar-menu-verified {
+          color: var(--color-accent-primary);
+          font-size: 12px;
+          margin-left: 4px;
+        }
+        .sidebar-menu-profile-addr {
+          font-size: 11px;
+          color: var(--color-text-secondary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
       `}</style>
+      <Show when={!isMobileViewport()}>
+        <div class="sidebar-resize-handle" onMouseDown={onResizeStart} />
+      </Show>
     </aside>
   );
 };
