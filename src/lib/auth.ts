@@ -324,8 +324,9 @@ async function repairLegacyDevice(legacyDeviceAddress: string): Promise<void> {
   console.info('[repair] Cleared deviceRegistered cache. Disconnect + reconnect to re-register.');
 }
 
-// Expose the repair helper on window so the user can call it from DevTools.
-if (typeof window !== 'undefined') {
+// Expose the repair helper on window in dev mode only (DevTools console).
+// Remove once the l2-node v0.15.0 migration is fully resolved.
+if (typeof window !== 'undefined' && import.meta.env.DEV) {
   (window as any).__ogmaraRepair = repairLegacyDevice;
 }
 

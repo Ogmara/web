@@ -79,6 +79,11 @@ export const networkReady: Promise<void> = new Promise((resolve) => {
   resolveNetworkReady = resolve;
 });
 
+/** Resolve networkReady with mainnet defaults when the L2 node is unreachable. */
+export function resolveNetworkReadyFallback(): void {
+  resolveNetworkReady();
+}
+
 /** Set the Klever network provider URLs (called after fetching node stats). */
 export function setKleverNetwork(network: string): void {
   currentNetwork = network;
@@ -138,12 +143,13 @@ export async function connectExtension(): Promise<string> {
     // call and may initialize the extension with mainnet provider URLs while
     // the L2 node is on testnet — the resulting wallet signatures are then
     // rejected by the L2 node and device registration fails with 500.
+    let timeoutId: ReturnType<typeof setTimeout>;
     await Promise.race([
       networkReady,
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Network detection timed out — L2 node may be unreachable')), 10_000),
-      ),
-    ]);
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Network detection timed out — L2 node may be unreachable')), 10_000);
+      }),
+    ]).finally(() => clearTimeout(timeoutId!));
     window.kleverWeb.provider = kleverProvider;
     await window.kleverWeb.initialize();
     const address = await window.kleverWeb.getWalletAddress();

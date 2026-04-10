@@ -5,6 +5,22 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.1] - 2026-04-10
+
+### Fixed
+- Fix unhandled promise rejection leak in wallet connect timeout — timer is
+  now cleared via `.finally()` when `networkReady` resolves first.
+- Resolve `networkReady` with mainnet fallback when L2 node is unreachable at
+  startup, preventing infinite hang on wallet connect.
+- Gate `window.__ogmaraRepair` DevTools helper behind `import.meta.env.DEV` —
+  no longer exposed in production builds.
+- Revert `last_anchor_age_seconds` interpretation to duration (seconds since
+  last anchor), matching the L2 node implementation. The PR #2 change
+  incorrectly treated it as a Unix timestamp.
+- Fix double signal evaluation in `isConnected()` — use `!= null` (single call).
+- Clamp anchor age display to `Math.max(0, ...)` to handle clock skew gracefully.
+- Remove dead `.status-indicator.disconnected` CSS rule (class never applied).
+
 ## [0.26.0] - 2026-04-06
 
 ### Added

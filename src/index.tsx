@@ -5,7 +5,7 @@ import { initI18n } from './i18n/init';
 import { initTheme } from './lib/theme';
 import { initAuth } from './lib/auth';
 import { initWs } from './lib/ws';
-import { detectKleverExtension, setContractAddress, setKleverNetwork } from './lib/klever';
+import { detectKleverExtension, setContractAddress, setKleverNetwork, resolveNetworkReadyFallback } from './lib/klever';
 import { detectK5, checkK5Callback } from './lib/k5';
 import { vaultGetSigner } from './lib/vault';
 import { getClient } from './lib/api';
@@ -43,7 +43,11 @@ initAuth().then(() => {
 getClient().networkStats().then((stats: any) => {
   if (stats?.contract_address) setContractAddress(stats.contract_address);
   if (stats?.network) setKleverNetwork(stats.network);
-}).catch(() => { /* node may be unreachable at startup */ });
+}).catch(() => {
+  // Node unreachable — resolve networkReady so connectExtension() doesn't
+  // hang forever. It will use mainnet provider URLs as a fallback.
+  resolveNetworkReadyFallback();
+});
 
 // Disable native browser context menu globally so only in-app right-click menus appear.
 // Allow native context menu on text inputs/textareas for paste/spellcheck.
