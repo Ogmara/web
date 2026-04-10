@@ -12,7 +12,7 @@ import { authStatus, walletAddress, disconnectWallet } from '../lib/auth';
 import { getClient } from '../lib/api';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
 import { getTheme, setTheme } from '../lib/theme';
-import { showMobileDetail, isMobileViewport } from '../lib/mobile-nav';
+import { showMobileDetail, showMobileList, isMobileViewport, mobileListOpen } from '../lib/mobile-nav';
 
 interface ToolbarProps {
   onToggleSidebar: () => void;
@@ -69,20 +69,39 @@ export const Toolbar: Component<ToolbarProps> = (props) => {
     <header class="toolbar">
       <div class="toolbar-left">
         <div class="toolbar-burger-wrap">
-          <button
-            class="toolbar-btn"
-            onClick={(e) => { e.stopPropagation(); setBurgerOpen(!burgerOpen()); }}
-            aria-label={t('menu') || 'Menü'}
-            aria-haspopup="menu"
-            aria-expanded={burgerOpen()}
-            title={t('menu') || 'Menü'}
+          {/* On mobile detail view: show back arrow to return to sidebar.
+              On desktop or mobile list view: show burger menu. */}
+          <Show
+            when={isMobileViewport() && !mobileListOpen()}
+            fallback={
+              <button
+                class="toolbar-btn"
+                onClick={(e) => { e.stopPropagation(); setBurgerOpen(!burgerOpen()); }}
+                aria-label={t('menu') || 'Menü'}
+                aria-haspopup="menu"
+                aria-expanded={burgerOpen()}
+                title={t('menu') || 'Menü'}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+              </button>
+            }
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="12" x2="21" y2="12" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-          </button>
+            <button
+              class="toolbar-btn"
+              onClick={() => showMobileList()}
+              aria-label={t('nav_back') || 'Zurück'}
+              title={t('nav_back') || 'Zurück'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M19 12H5" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+            </button>
+          </Show>
           <Show when={burgerOpen()}>
             <div class="toolbar-menu toolbar-burger-menu" role="menu">
               {/* Profile header — only shown when logged in */}
