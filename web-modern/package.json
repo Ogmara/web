@@ -1,0 +1,25 @@
+{
+  "name": "@ogmara/web-modern",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ogmara web-modern — alternative modern UI for the Ogmara PWA",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@msgpack/msgpack": "^3.0.0",
+    "@noble/ed25519": "^2.3.0",
+    "@noble/hashes": "^1.8.0",
+    "@ogmara/sdk": "file:../../sdk-js",
+    "i18next": "^25.2.0",
+    "solid-js": "^1.9.7"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vite-plugin-solid": "^2.11.6"
+  }
+}
