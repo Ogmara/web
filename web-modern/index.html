@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
+  <meta name="description" content="Ogmara — Decentralized chat and news on Klever blockchain" />
+  <meta name="theme-color" content="#0E1621" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="apple-touch-icon" href="icon-512.png" />
+  <link rel="manifest" href="manifest.json" />
+  <title>Ogmara</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/index.tsx"></script>
+  <script>
+    // In production, register the PWA service worker.
+    // In dev (localhost), unregister any leftover SW from previous sessions
+    // — they cache the SPA fallback HTML and break things like manifest.json,
+    // /api/v1/* proxy, and HMR reloads.
+    if ('serviceWorker' in navigator) {
+      const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      if (isLocalhost) {
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          regs.forEach((r) => r.unregister());
+        });
+      } else {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      }
+    }
+  </script>
+</body>
+</html>
