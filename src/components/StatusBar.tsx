@@ -38,14 +38,11 @@ export const StatusBar: Component = () => {
   const anchorLevel = (): AnchorStatus['level'] => {
     const s = stats();
     if (!s?.anchor_status?.is_anchorer) return 'none';
-    // Derive level from self anchor status.
-    // NOTE: despite the field name, last_anchor_age_seconds is actually a
-    // Unix timestamp (seconds since epoch), NOT a duration.
-    const lastTs = s.anchor_status.last_anchor_age_seconds;
-    const now = Date.now() / 1000;
-    const ageSecs = lastTs != null ? now - lastTs : Infinity;
-    if (ageSecs > 86400) return 'none';
+    // last_anchor_age_seconds is a duration (seconds since last anchor), not a timestamp.
+    const age = s.anchor_status.last_anchor_age_seconds;
+    if (age == null || age > 86400) return 'none';
     if (s.anchor_status.anchoring_since) {
+      const now = Date.now() / 1000;
       const since = s.anchor_status.anchoring_since; // Unix timestamp in seconds
       if (now - since > 7 * 86400) return 'active';
     }
@@ -53,7 +50,7 @@ export const StatusBar: Component = () => {
   };
 
   // Connected once we have stats from the node, otherwise show as connecting.
-  const isConnected = () => stats() !== null && stats() !== undefined;
+  const isConnected = () => stats() != null;
 
   return (
     <footer class="status-bar">
@@ -108,7 +105,7 @@ export const StatusBar: Component = () => {
             <Show when={stats()?.anchor_status?.last_anchor_age_seconds != null}>
               <div class="node-info-row">
                 <span>{t('anchor_last')}</span>
-                <span>{formatAge(Math.floor(Date.now() / 1000 - stats()!.anchor_status!.last_anchor_age_seconds!))}</span>
+                <span>{formatAge(Math.max(0, stats()!.anchor_status!.last_anchor_age_seconds!))}</span>
               </div>
             </Show>
             <div class="node-info-row">
@@ -154,7 +151,6 @@ export const StatusBar: Component = () => {
         }
         .status-indicator.connected { background: var(--color-success); box-shadow: 0 0 6px var(--color-success); }
         .status-indicator.connecting { background: var(--color-warning); animation: pulse 1.4s ease-in-out infinite; }
-        .status-indicator.disconnected { background: var(--color-error); }
         @keyframes pulse {
           0%, 100% { opacity: 0.4; }
           50% { opacity: 1; }
