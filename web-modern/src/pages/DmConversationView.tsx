@@ -2,7 +2,7 @@
  * DmConversationView — direct message conversation with a peer.
  */
 
-import { Component, createResource, createSignal, createMemo, For, Show, onCleanup, onMount } from 'solid-js';
+import { Component, createResource, createSignal, createEffect, createMemo, For, Show, onCleanup, onMount } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, walletAddress, getSigner, isRegistered } from '../lib/auth';
@@ -29,6 +29,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
   const [sendError, setSendError] = createSignal<string | null>(null);
   const EDIT_WINDOW_MS = 30 * 60 * 1000;
   let inputRef: HTMLTextAreaElement | undefined;
+  let messagesRef: HTMLDivElement | undefined;
 
   const [messages] = createResource(
     () => props.peerAddress,
@@ -75,6 +76,29 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
     });
   };
 
+  // Auto-scroll to bottom when messages change
+  let prevDmCount = 0;
+  let dmInitialLoad = true;
+  createEffect(() => {
+    const msgs = allMessages();
+    const count = msgs.length;
+    if (count === 0 || count === prevDmCount) { prevDmCount = count; return; }
+    const isFirst = dmInitialLoad;
+    prevDmCount = count;
+    dmInitialLoad = false;
+    setTimeout(() => {
+      if (!messagesRef) return;
+      if (isFirst) {
+        messagesRef.scrollTop = messagesRef.scrollHeight;
+      } else {
+        const { scrollTop, scrollHeight, clientHeight } = messagesRef;
+        if (scrollHeight - scrollTop - clientHeight < 150) {
+          messagesRef.scrollTo({ top: messagesRef.scrollHeight, behavior: 'smooth' });
+        }
+      }
+    }, 0);
+  });
+
   // Mark conversation as read on mount
   onMount(async () => {
     if (authStatus() === 'ready' && props.peerAddress) {
@@ -118,7 +142,10 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
         payload: text,
       }]);
 
-      setTimeout(() => inputRef?.focus(), 50);
+      setTimeout(() => {
+        inputRef?.focus();
+        if (messagesRef) messagesRef.scrollTo({ top: messagesRef.scrollHeight, behavior: 'smooth' });
+      }, 50);
     } catch (err: any) {
       console.error('sendDm failed:', err);
       const msg = err?.message || String(err);
@@ -220,7 +247,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
         </span>
       </div>
 
-      <div class="dm-conv-messages">
+      <div class="dm-conv-messages" ref={messagesRef}>
         <Show
           when={allMessages().length > 0}
           fallback={<div class="dm-conv-empty">{t('dm_no_messages')}</div>}
