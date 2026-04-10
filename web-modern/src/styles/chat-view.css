@@ -217,10 +217,18 @@
   align-items: center;
   justify-content: center;
   padding: var(--spacing-sm) 0;
-  position: sticky;
-  top: 0;
-  z-index: 1;
+}
+/* Floating current-date header pinned to top of chat scroll area */
+.chat-date-float {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
   pointer-events: none;
+}
+.chat-date-float .date-separator-label {
+  pointer-events: auto;
 }
 .date-separator-label {
   font-size: var(--font-size-xs);
@@ -230,7 +238,6 @@
   padding: 3px 10px;
   border-radius: var(--radius-full);
   border: 1px solid var(--color-border);
-  pointer-events: auto;
 }
 
 /* ---------- Message rows (avatar outside bubble) ---------- */
