@@ -138,7 +138,12 @@ export async function connectExtension(): Promise<string> {
     // call and may initialize the extension with mainnet provider URLs while
     // the L2 node is on testnet — the resulting wallet signatures are then
     // rejected by the L2 node and device registration fails with 500.
-    await networkReady;
+    await Promise.race([
+      networkReady,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Network detection timed out — L2 node may be unreachable')), 10_000),
+      ),
+    ]);
     window.kleverWeb.provider = kleverProvider;
     await window.kleverWeb.initialize();
     const address = await window.kleverWeb.getWalletAddress();
