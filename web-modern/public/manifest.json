@@ -1,0 +1,23 @@
+{
+  "name": "Ogmara",
+  "short_name": "Ogmara",
+  "description": "Decentralized chat and news on Klever blockchain",
+  "start_url": "/app/",
+  "display": "standalone",
+  "background_color": "#17212B",
+  "theme_color": "#0E1621",
+  "icons": [
+    {
+      "src": "/app/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/app/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
