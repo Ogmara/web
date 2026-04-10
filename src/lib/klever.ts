@@ -69,6 +69,16 @@ export function getExplorerUrl(): string {
     : 'https://kleverscan.org';
 }
 
+/**
+ * Resolves once the network has been detected from the L2 node's
+ * networkStats() at startup. Anything that needs the correct provider
+ * URLs (e.g. connectExtension) should `await networkReady`.
+ */
+let resolveNetworkReady!: () => void;
+export const networkReady: Promise<void> = new Promise((resolve) => {
+  resolveNetworkReady = resolve;
+});
+
 /** Set the Klever network provider URLs (called after fetching node stats). */
 export function setKleverNetwork(network: string): void {
   currentNetwork = network;
@@ -83,6 +93,7 @@ export function setKleverNetwork(network: string): void {
       node: 'https://node.klever.org',
     };
   }
+  resolveNetworkReady();
 }
 
 // --- Signals ---
@@ -122,7 +133,17 @@ export async function connectExtension(): Promise<string> {
   }
   setKleverConnecting(true);
   try {
-    // Set network provider before initializing (testnet or mainnet)
+    // Wait for the L2 node's network detection to complete before talking to
+    // the extension. Otherwise we race against the startup networkStats()
+    // call and may initialize the extension with mainnet provider URLs while
+    // the L2 node is on testnet — the resulting wallet signatures are then
+    // rejected by the L2 node and device registration fails with 500.
+    await Promise.race([
+      networkReady,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Network detection timed out — L2 node may be unreachable')), 10_000),
+      ),
+    ]);
     window.kleverWeb.provider = kleverProvider;
     await window.kleverWeb.initialize();
     const address = await window.kleverWeb.getWalletAddress();
