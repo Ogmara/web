@@ -373,7 +373,7 @@
 }
 .message-muted-text:hover { opacity: 0.8; }
 
-/* Inline timestamp — floats at the end of the last text line (Telegram-style).
+/* Inline timestamp — floats at the end of the last text line.
    An invisible spacer pseudo-element on .message-body reserves width so the
    text wraps around the timestamp instead of overlapping it. */
 .message-meta-inline {
@@ -433,7 +433,7 @@
 .reaction-emoji { font-size: 13px; line-height: 1; }
 .reaction-count { font-weight: 600; font-size: 11px; }
 
-/* ---------- Context menu emoji reactions (Telegram-style) ---------- */
+/* ---------- Context menu emoji reactions ---------- */
 
 .ctx-reactions-wrap {
   border-bottom: 1px solid var(--color-border);

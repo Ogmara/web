@@ -12,6 +12,7 @@ import { authStatus, walletAddress, disconnectWallet } from '../lib/auth';
 import { getClient } from '../lib/api';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
 import { getTheme, setTheme } from '../lib/theme';
+import { showMobileDetail, isMobileViewport } from '../lib/mobile-nav';
 
 interface ToolbarProps {
   onToggleSidebar: () => void;
@@ -31,6 +32,13 @@ export const Toolbar: Component<ToolbarProps> = (props) => {
     document.addEventListener('click', handleDocumentClick);
     onCleanup(() => document.removeEventListener('click', handleDocumentClick));
   }
+
+  /** Navigate and switch to detail pane on mobile. */
+  const navTo = (path: string) => {
+    setBurgerOpen(false);
+    navigate(path);
+    if (isMobileViewport()) showMobileDetail();
+  };
 
   const handleLogout = async () => {
     setBurgerOpen(false);
@@ -81,7 +89,7 @@ export const Toolbar: Component<ToolbarProps> = (props) => {
               <Show when={authStatus() === 'ready' && walletAddress()}>
                 <button
                   class="toolbar-menu-profile"
-                  onClick={() => { setBurgerOpen(false); navigate(`/user/${walletAddress()}`); }}
+                  onClick={() => navTo(`/user/${walletAddress()}`)}
                 >
                   <Show
                     when={profile().avatar_cid}
@@ -116,7 +124,7 @@ export const Toolbar: Component<ToolbarProps> = (props) => {
               <Show when={authStatus() === 'ready'}>
                 <button
                   class="toolbar-menu-item"
-                  onClick={() => { setBurgerOpen(false); navigate(`/user/${walletAddress()}`); }}
+                  onClick={() => navTo(`/user/${walletAddress()}`)}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="12" cy="8" r="4" />
@@ -126,7 +134,7 @@ export const Toolbar: Component<ToolbarProps> = (props) => {
                 </button>
                 <button
                   class="toolbar-menu-item"
-                  onClick={() => { setBurgerOpen(false); navigate('/wallet'); }}
+                  onClick={() => navTo('/wallet')}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
@@ -142,7 +150,7 @@ export const Toolbar: Component<ToolbarProps> = (props) => {
               <Show when={authStatus() === 'ready'}>
                 <button
                   class="toolbar-menu-item"
-                  onClick={() => { setBurgerOpen(false); navigate('/channel/create?type=group'); }}
+                  onClick={() => navTo('/channel/create?type=group')}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -154,7 +162,7 @@ export const Toolbar: Component<ToolbarProps> = (props) => {
                 </button>
                 <button
                   class="toolbar-menu-item"
-                  onClick={() => { setBurgerOpen(false); navigate('/channel/create?type=channel'); }}
+                  onClick={() => navTo('/channel/create?type=channel')}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M3 11l18-8-6 19-3-9-9-2z" />
@@ -169,9 +177,8 @@ export const Toolbar: Component<ToolbarProps> = (props) => {
                 <button
                   class="toolbar-menu-item"
                   onClick={() => {
-                    setBurgerOpen(false);
                     localStorage.setItem('ogmara.lastSeenNotifTs', Date.now().toString());
-                    navigate('/notifications');
+                    navTo('/notifications');
                   }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -183,7 +190,7 @@ export const Toolbar: Component<ToolbarProps> = (props) => {
               </Show>
               <button
                 class="toolbar-menu-item"
-                onClick={() => { setBurgerOpen(false); navigate('/search'); }}
+                onClick={() => navTo('/search')}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="11" cy="11" r="8" />
@@ -193,7 +200,7 @@ export const Toolbar: Component<ToolbarProps> = (props) => {
               </button>
               <button
                 class="toolbar-menu-item"
-                onClick={() => { setBurgerOpen(false); navigate('/bookmarks'); }}
+                onClick={() => navTo('/bookmarks')}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
@@ -202,7 +209,7 @@ export const Toolbar: Component<ToolbarProps> = (props) => {
               </button>
               <button
                 class="toolbar-menu-item"
-                onClick={() => { setBurgerOpen(false); navigate('/settings'); }}
+                onClick={() => navTo('/settings')}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="3" />

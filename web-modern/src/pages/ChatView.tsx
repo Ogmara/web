@@ -1234,7 +1234,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
             });
           }}
         >
-          {/* Quick emoji reactions — Telegram style */}
+          {/* Quick emoji reactions */}
           <Show when={walletAddress() && !msgById().get(userMenu()!.msgId)?.deleted}>
             {(() => {
               const quickEmojis = ['❤️', '😂', '👍', '🙏', '🔥', '👎'];
