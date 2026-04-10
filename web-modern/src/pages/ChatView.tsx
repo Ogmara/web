@@ -71,6 +71,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [showEmoji, setShowEmoji] = createSignal(false);
   const [profiles, setProfiles] = createSignal<Map<string, CachedProfile>>(new Map());
   const [userMenu, setUserMenu] = createSignal<{ x: number; y: number; address: string; msgId: string } | null>(null);
+  const [ctxEmojiExpanded, setCtxEmojiExpanded] = createSignal(false);
 
   /**
    * Open the user/message context menu at the given viewport coordinates,
@@ -88,6 +89,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const openUserMenu = (clientX: number, clientY: number, address: string, msgId: string) => {
     const maxX = window.innerWidth - MENU_ESTIMATED_WIDTH - MENU_EDGE_MARGIN;
     const maxY = window.innerHeight - MENU_ESTIMATED_HEIGHT - MENU_EDGE_MARGIN;
+    setCtxEmojiExpanded(false);
     setUserMenu({
       x: Math.max(MENU_EDGE_MARGIN, Math.min(clientX, maxX)),
       y: Math.max(MENU_EDGE_MARGIN, Math.min(clientY, maxY)),
@@ -155,9 +157,13 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   let messagesRef: HTMLDivElement | undefined;
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Close user context menu on any click
+  // Close user context menu on click outside
+  let ctxMenuRef: HTMLDivElement | undefined;
   if (typeof document !== 'undefined') {
-    const closeUserMenu = () => setUserMenu(null);
+    const closeUserMenu = (e: MouseEvent) => {
+      if (ctxMenuRef && ctxMenuRef.contains(e.target as Node)) return;
+      setUserMenu(null);
+    };
     document.addEventListener('click', closeUserMenu);
     onCleanup(() => document.removeEventListener('click', closeUserMenu));
   }
@@ -220,8 +226,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   let initialLoad = true;
   const [lastReadTs, setLastReadTs] = createSignal<number | null>(null);
   const [messages] = createResource(
-    () => props.channelId,
-    async (channelId) => {
+    () => ({ channelId: props.channelId, auth: authStatus() }),
+    async ({ channelId }) => {
       if (!channelId) return [];
       // Only clear local messages on channel switch
       if (channelId !== lastChannelId) {
@@ -243,8 +249,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   );
 
   const [pinnedMessages] = createResource(
-    () => props.channelId,
-    async (channelId) => {
+    () => ({ channelId: props.channelId, auth: authStatus() }),
+    async ({ channelId }) => {
       if (!channelId) return [];
       try {
         const client = getClient();
@@ -258,8 +264,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
   /** Channel metadata (name, description, member count) for the header bar. */
   const [channelInfo] = createResource(
-    () => props.channelId,
-    async (channelId) => {
+    () => ({ channelId: props.channelId, auth: authStatus() }),
+    async ({ channelId }) => {
       if (!channelId) return null;
       try {
         const client = getClient();
@@ -506,33 +512,47 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     if (isFirst) {
       // Initial load: jump to the unread divider (if any) or the bottom.
       // Uses setTimeout(0) so SolidJS has definitely committed the <For>
-      // items to DOM by the time we measure scrollHeight. Bare RAF can
-      // fire too early when the list is large. The scroll itself is
-      // instant because we removed `scroll-behavior: smooth` from the CSS.
-      setTimeout(() => {
+      // items to DOM by the time we measure scrollHeight.
+      const scrollToEnd = () => {
         if (!messagesRef) return;
         const divider = messagesRef.querySelector('.unread-divider') as HTMLElement | null;
         if (divider) {
-          messagesRef.scrollTop = Math.max(0, (divider as HTMLElement).offsetTop - 8);
+          messagesRef.scrollTop = Math.max(0, divider.offsetTop - 8);
         } else {
           messagesRef.scrollTop = messagesRef.scrollHeight;
         }
-        // Belt-and-suspenders: re-apply on the next frame in case images
-        // inside the last few messages finished loading and changed the
-        // total height. Still instant.
-        requestAnimationFrame(() => {
-          if (!messagesRef) return;
-          if (!divider) messagesRef.scrollTop = messagesRef.scrollHeight;
-        });
+      };
+      setTimeout(() => {
+        scrollToEnd();
+        // Re-scroll after images in the last few messages finish loading.
+        // A single RAF fires before images are ready; instead, listen for
+        // load events on any <img> inside the container and re-apply once.
+        if (messagesRef) {
+          const imgs = messagesRef.querySelectorAll('img');
+          let pending = 0;
+          imgs.forEach((img) => {
+            if (!img.complete) {
+              pending++;
+              img.addEventListener('load', () => { pending--; if (pending <= 0) scrollToEnd(); }, { once: true });
+              img.addEventListener('error', () => { pending--; if (pending <= 0) scrollToEnd(); }, { once: true });
+            }
+          });
+          // Fallback: re-scroll after 300ms even if no images were pending
+          // (covers edge cases like cached images that fire synchronously)
+          setTimeout(scrollToEnd, 300);
+        }
       }, 0);
     } else {
       // Subsequent messages — only auto-scroll if user was near bottom.
-      requestAnimationFrame(() => {
+      // Uses smooth scrolling so the new message slides into view gently.
+      setTimeout(() => {
         if (!messagesRef) return;
         const { scrollTop, scrollHeight, clientHeight } = messagesRef;
-        const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
-        if (isNearBottom) messagesRef.scrollTop = messagesRef.scrollHeight;
-      });
+        const isNearBottom = scrollHeight - scrollTop - clientHeight < SCROLL_NEAR_BOTTOM_PX;
+        if (isNearBottom) {
+          messagesRef.scrollTo({ top: messagesRef.scrollHeight, behavior: 'smooth' });
+        }
+      }, 0);
     }
   });
 
@@ -559,10 +579,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       }
       await client.sendMessage(props.channelId, text, options);
 
-      // Optimistic: add message locally for instant display.
-      // _attachments is read by the renderer so the image shows up
-      // immediately instead of only after the WS event arrives with the
-      // real (MessagePack-encoded) payload.
+      // Optimistic: add message locally for instant display
       const addr = walletAddress() || '';
       setLocalMessages((prev) => [...prev, {
         msg_id: `local-${Date.now()}`,
@@ -570,7 +587,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         timestamp: Date.now(),
         payload: text, // string payloads are handled by getPayloadContent
         _optimistic: true,
-        _attachments: atts.length > 0 ? atts : undefined,
       }]);
 
       setMessageInput('');
@@ -578,6 +594,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       setShowEmoji(false);
       setAttachments([]);
       if (inputRef) inputRef.style.height = 'auto';
+      // Scroll to bottom after sending own message
+      setTimeout(() => {
+        if (messagesRef) messagesRef.scrollTo({ top: messagesRef.scrollHeight, behavior: 'smooth' });
+      }, 50);
     } catch (err: any) {
       console.error('sendMessage failed:', err);
       const msg = err?.message || String(err);
@@ -969,21 +989,18 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                               }
                             >
                               <div class="message-body">
-                                <FormattedText
-                                  content={getPayloadContent(msg.payload)}
-                                  attachments={msg._attachments ?? getPayloadAttachments(msg.payload)}
-                                />
+                                <FormattedText content={getPayloadContent(msg.payload)} attachments={getPayloadAttachments(msg.payload)} />
+                                <span class="message-meta-inline">
+                                  <Show when={msg.edited}>
+                                    <span class="edited-indicator" title={msg.last_edited_at ? new Date(msg.last_edited_at).toLocaleString() : ''}>
+                                      {t('message_edited')}
+                                    </span>
+                                  </Show>
+                                  <span class="message-time">{formatMessageTime(msg.timestamp)}</span>
+                                </span>
                               </div>
                             </Show>
                           </Show>
-                          <div class="message-meta">
-                            <Show when={msg.edited}>
-                              <span class="edited-indicator" title={msg.last_edited_at ? new Date(msg.last_edited_at).toLocaleString() : ''}>
-                                {t('message_edited')}
-                              </span>
-                            </Show>
-                            <span class="message-time">{formatMessageTime(msg.timestamp)}</span>
-                          </div>
                           <Show when={msg.reactions && Object.keys(msg.reactions).length > 0}>
                             <div class="message-reactions">
                               {Object.entries(msg.reactions as Record<string, number>).map(([emoji, count]) => (
@@ -997,31 +1014,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                                   <span class="reaction-count">{count}</span>
                                 </button>
                               ))}
-                            </div>
-                          </Show>
-                          {/* Floating action bar on hover — quick reactions + ⋯ menu */}
-                          <Show when={walletAddress() && !msg.deleted}>
-                            <div class="msg-react-hover">
-                              {['👍', '❤️', '🔥', '😂', '😮', '😢'].map((emoji) => (
-                                <button
-                                  class="react-hover-btn"
-                                  onClick={() => handleReact(msg, emoji)}
-                                  aria-label={`React ${emoji}`}
-                                >
-                                  {emoji}
-                                </button>
-                              ))}
-                              <button
-                                class="react-hover-btn react-more-btn"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openUserMenu(e.clientX, e.clientY, msg.author, msgHex);
-                                }}
-                                aria-label="More actions"
-                                title="More actions"
-                              >
-                                ⋯
-                              </button>
                             </div>
                           </Show>
                         </div>
@@ -1223,6 +1215,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         <div
           class="user-context-menu"
           style={{ left: `${userMenu()!.x}px`, top: `${userMenu()!.y}px` }}
+          ref={ctxMenuRef}
           ref={(el) => {
             // After the menu mounts, measure its actual size and nudge it
             // back into the viewport if the worst-case estimate in
@@ -1241,7 +1234,43 @@ export const ChatView: Component<ChatViewProps> = (props) => {
             });
           }}
         >
-          {/* Message actions — always available */}
+          {/* Quick emoji reactions — Telegram style */}
+          <Show when={walletAddress() && !msgById().get(userMenu()!.msgId)?.deleted}>
+            {(() => {
+              const quickEmojis = ['❤️', '😂', '👍', '🙏', '🔥', '👎'];
+              const extraEmojis = ['😊','😍','🤔','😢','😤','🤯','🥳','👏','🤝','✌️','💪','👋','🧡','💛','💚','💙','💜','⭐','✨','💎','🎉','🎊'];
+              const reactTo = (emoji: string) => {
+                const m = msgById().get(userMenu()!.msgId);
+                if (m) handleReact(m, emoji);
+                setUserMenu(null);
+              };
+              return (
+                <div class="ctx-reactions-wrap">
+                  <div class="ctx-reactions">
+                    {quickEmojis.map((emoji) => (
+                      <button class="ctx-react-btn" onClick={() => reactTo(emoji)}>{emoji}</button>
+                    ))}
+                    <button
+                      class="ctx-react-btn ctx-react-more"
+                      onClick={(e) => { e.stopPropagation(); setCtxEmojiExpanded(!ctxEmojiExpanded()); }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d={ctxEmojiExpanded() ? 'M18 15l-6-6-6 6' : 'M6 9l6 6 6-6'} />
+                      </svg>
+                    </button>
+                  </div>
+                  <Show when={ctxEmojiExpanded()}>
+                    <div class="ctx-reactions-grid">
+                      {extraEmojis.map((emoji) => (
+                        <button class="ctx-react-btn" onClick={() => reactTo(emoji)}>{emoji}</button>
+                      ))}
+                    </div>
+                  </Show>
+                </div>
+              );
+            })()}
+          </Show>
+          {/* Message actions */}
           <button class="ctx-item" onClick={() => handleUserAction('reply')}>
             ↩ {t('chat_reply')}
           </button>

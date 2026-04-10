@@ -331,8 +331,9 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         client.getUnreadCounts().catch(() => ({ unread: {} })),
         client.getDmUnread().catch(() => ({ unread: {} })),
         client.getNotifications(lastSeenNotif || undefined, 50).catch(() => ({ notifications: [] })),
-        // Refresh channel list to sync cross-device changes (leave/delete/create)
+        // Refresh channel list + DM conversations to sync cross-device changes
         refetchChannels(),
+        refetchDms(),
       ]);
       setUnreadCounts(unread.unread ?? {});
       const dmCounts = dmUnread.unread ?? {};
@@ -384,7 +385,9 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
    *  unused until we wire up per-channel last-message timestamps. */
   const shortTime = (ts?: number): string => {
     if (!ts) return '';
-    const d = new Date(ts);
+    // L2 node timestamps may be in seconds or milliseconds — normalize.
+    const ms = ts < 1e12 ? ts * 1000 : ts;
+    const d = new Date(ms);
     const now = new Date();
     const same = d.toDateString() === now.toDateString();
     if (same) return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -392,7 +395,27 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     if (diff < 7) return d.toLocaleDateString(undefined, { weekday: 'short' });
     return d.toLocaleDateString(undefined, { day: '2-digit', month: '2-digit' });
   };
-  void shortTime;
+  // DM conversations resource — fetched when the DMs tab is active
+  const [dmConversations, { refetch: refetchDms }] = createResource(
+    () => activeTab() === 'dms' && authStatus() === 'ready',
+    async (shouldFetch) => {
+      if (!shouldFetch) return [];
+      try {
+        const resp = await getClient().getDmConversations({ limit: 50 });
+        // Resolve profiles for DM peers
+        for (const conv of resp.conversations) {
+          if (!memberProfiles().has(conv.peer)) {
+            resolveProfile(conv.peer).then((p) => {
+              setMemberProfiles((prev) => { const next = new Map(prev); next.set(conv.peer, p); return next; });
+            });
+          }
+        }
+        return resp.conversations;
+      } catch {
+        return [];
+      }
+    },
+  );
 
   /** One-letter channel "avatar". */
   const channelInitial = (channel: { display_name?: string; slug: string }) =>
@@ -561,11 +584,61 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         </Show>
 
         <Show when={activeTab() === 'dms'}>
-          <div class="sidebar-cta" onClick={() => go('/dm')}>
-            <div class="sidebar-cta-icon">✉️</div>
-            <div class="sidebar-cta-title">{t('nav_dms')}</div>
-            <div class="sidebar-cta-sub">Öffnet Direktnachrichten</div>
-          </div>
+          <Show when={authStatus() === 'ready'} fallback={
+            <div class="sidebar-empty">
+              <div class="sidebar-empty-icon">✉️</div>
+              <p>{t('auth_connect_prompt')}</p>
+            </div>
+          }>
+            <Show when={dmConversations() && dmConversations()!.length > 0} fallback={
+              <div class="sidebar-empty">
+                <div class="sidebar-empty-icon">✉️</div>
+                <p>{t('dm_empty')}</p>
+              </div>
+            }>
+              <For each={dmConversations()}>
+                {(conv) => {
+                  const isActive = () => route().view === 'dm-conversation' && route().params.address === conv.peer;
+                  const dmProfile = () => memberProfiles().get(conv.peer);
+                  const dmName = () => dmProfile()?.display_name || `${conv.peer.slice(0, 8)}...${conv.peer.slice(-4)}`;
+                  const dmInitial = () => (dmProfile()?.display_name || conv.peer).slice(0, 1).toUpperCase();
+                  return (
+                    <button
+                      class={`chat-row ${isActive() ? 'active' : ''} ${conv.unread_count > 0 ? 'has-unread' : ''}`}
+                      onClick={() => go(`/dm/${conv.peer}`)}
+                    >
+                      <div class="chat-row-avatar dm-avatar">
+                        <Show
+                          when={dmProfile()?.avatar_cid}
+                          fallback={<span>{dmInitial()}</span>}
+                        >
+                          <img
+                            class="chat-row-avatar-img"
+                            src={getClient().getMediaUrl(dmProfile()!.avatar_cid!)}
+                            alt=""
+                          />
+                        </Show>
+                      </div>
+                      <div class="chat-row-body">
+                        <div class="chat-row-top">
+                          <span class="chat-row-name">{dmName()}</span>
+                          <Show when={conv.last_message_at}>
+                            <span class="chat-row-time">{shortTime(conv.last_message_at)}</span>
+                          </Show>
+                        </div>
+                        <div class="chat-row-bottom">
+                          <span class="chat-row-preview">{conv.last_message_preview || '...'}</span>
+                          <Show when={conv.unread_count > 0}>
+                            <span class="chat-row-badge">{conv.unread_count}</span>
+                          </Show>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                }}
+              </For>
+            </Show>
+          </Show>
         </Show>
       </div>
 
