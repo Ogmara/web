@@ -41,22 +41,35 @@ function getReplyToHex(msg: any): string | null {
 }
 
 /** Format message time in user's local timezone. */
+function normalizeTs(timestamp: string | number): number {
+  if (typeof timestamp === 'string') {
+    // ISO date string (e.g. "2026-04-09T13:35:00Z") → parse directly
+    const parsed = Date.parse(timestamp);
+    if (!isNaN(parsed)) return parsed;
+    // Numeric string (unix seconds or ms)
+    const num = Number(timestamp);
+    if (!isNaN(num)) return num < 1e12 ? num * 1000 : num;
+    return 0;
+  }
+  return timestamp < 1e12 ? timestamp * 1000 : timestamp;
+}
+
 function formatMessageTime(timestamp: string | number): string {
-  return new Date(timestamp).toLocaleTimeString(undefined, {
+  return new Date(normalizeTs(timestamp)).toLocaleTimeString(undefined, {
     hour: '2-digit', minute: '2-digit',
   });
 }
 
 /** Get a date label for message grouping. */
 function getDateLabel(timestamp: string | number): string {
-  const date = new Date(timestamp);
+  const date = new Date(normalizeTs(timestamp));
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const diff = today.getTime() - msgDay.getTime();
-  if (diff === 0) return 'Today';
-  if (diff === 86400000) return 'Yesterday';
-  return date.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  if (diff === 0) return 'Heute';
+  if (diff === 86400000) return 'Gestern';
+  return date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 interface ChatViewProps {
@@ -316,7 +329,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           const filtered = prev.filter((m) => {
             if (!m._optimistic) return true;
             return !(m.author === msg.author &&
-              Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 10000);
+              Math.abs(normalizeTs(m.timestamp) - normalizeTs(msg.timestamp)) < 10000);
           });
           // Skip if already present (WS can re-deliver)
           if (filtered.some((m) => msgIdToHex(m.msg_id) === msgIdToHex(msg.msg_id))) return filtered;
@@ -374,7 +387,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       if (!lm._optimistic) return true;
       return !apiMsgs.some((am) =>
         am.author === lm.author &&
-        Math.abs(new Date(am.timestamp).getTime() - new Date(lm.timestamp).getTime()) < 10000,
+        Math.abs(normalizeTs(am.timestamp) - normalizeTs(lm.timestamp)) < 10000,
       );
     });
     // localMessages first so optimistic updates (delete, edit, react) take priority in dedup
@@ -385,7 +398,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       seen.add(id);
       return true;
     });
-    deduped.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    deduped.sort((a, b) => normalizeTs(a.timestamp) - normalizeTs(b.timestamp));
     return deduped;
   });
 
@@ -647,7 +660,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     isRegistered() &&
     msg.author === walletAddress() &&
     !msg.deleted &&
-    (Date.now() - new Date(msg.timestamp).getTime()) < EDIT_WINDOW_MS;
+    (Date.now() - normalizeTs(msg.timestamp)) < EDIT_WINDOW_MS;
 
   const canDelete = (msg: any) =>
     isRegistered() && msg.author === walletAddress() && !msg.deleted;
@@ -742,6 +755,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   };
 
   /** Update floating "scroll to bottom" button visibility on user scroll. */
+  // Floating date header — shows the date of the topmost visible message
+  const [floatingDate, setFloatingDate] = createSignal<string | null>(null);
+  let floatingDateTimer: ReturnType<typeof setTimeout> | null = null;
+
   const handleScroll = () => {
     if (!messagesRef) return;
     const { scrollTop, scrollHeight, clientHeight } = messagesRef;
@@ -749,6 +766,27 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const isNearBottom = distFromBottom < SCROLL_NEAR_BOTTOM_PX;
     setShowScrollBtn(!isNearBottom);
     if (isNearBottom) setNewMsgCount(0);
+
+    // Update floating date from topmost visible message row
+    const rows = messagesRef.querySelectorAll('.message-row[data-msg-id]');
+    let topDate: string | null = null;
+    for (const row of rows) {
+      const rect = (row as HTMLElement).getBoundingClientRect();
+      const containerTop = messagesRef.getBoundingClientRect().top;
+      if (rect.bottom > containerTop) {
+        const msgId = (row as HTMLElement).dataset.msgId;
+        if (msgId) {
+          const msg = msgById().get(msgId);
+          if (msg) topDate = getDateLabel(msg.timestamp);
+        }
+        break;
+      }
+    }
+    setFloatingDate(topDate);
+
+    // Auto-hide floating date after 2s of no scrolling
+    if (floatingDateTimer) clearTimeout(floatingDateTimer);
+    floatingDateTimer = setTimeout(() => setFloatingDate(null), 2000);
   };
 
   /** Auto-grow the chat textarea up to a max height. */
@@ -864,7 +902,12 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           </div>
         </div>
 
-        <div class="chat-messages-wrap">
+        <div class="chat-messages-wrap" style="position:relative">
+          <Show when={floatingDate()}>
+            <div class="chat-date-float">
+              <span class="date-separator-label">{floatingDate()}</span>
+            </div>
+          </Show>
           <div class="chat-messages" ref={messagesRef} onScroll={handleScroll}>
             <Show
               when={allMessages().length > 0}
@@ -889,12 +932,12 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                   const isContinuation = !showDateSep && !reply && prevMsg
                     && prevMsg.author === msg.author
                     && !prevMsg.deleted && !msg.deleted
-                    && (Math.abs(new Date(msg.timestamp).getTime() - new Date(prevMsg.timestamp).getTime()) < GROUP_WINDOW_MS);
+                    && (Math.abs(normalizeTs(msg.timestamp) - normalizeTs(prevMsg.timestamp)) < GROUP_WINDOW_MS);
 
                   // Show unread divider before the first message after last_read_ts
                   const readTs = lastReadTs();
-                  const msgTs = new Date(msg.timestamp).getTime();
-                  const prevMsgTs = prevMsg ? new Date(prevMsg.timestamp).getTime() : 0;
+                  const msgTs = normalizeTs(msg.timestamp);
+                  const prevMsgTs = prevMsg ? normalizeTs(prevMsg.timestamp) : 0;
                   const showUnreadDivider = readTs !== null
                     && msgTs > readTs
                     && (prevMsgTs <= readTs || !prevMsg)
