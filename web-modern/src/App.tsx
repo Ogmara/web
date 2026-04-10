@@ -4,7 +4,6 @@
 
 import { Component, Switch, Match, Show } from 'solid-js';
 import { Sidebar } from './components/Sidebar';
-import { Toolbar } from './components/Toolbar';
 import { mobileListOpen, showMobileList, showMobileDetail, isMobileViewport } from './lib/mobile-nav';
 import { isLoading, slowLoading } from './lib/network-activity';
 import { t } from './i18n/init';
@@ -48,15 +47,6 @@ export const App: Component = () => {
 
   return (
     <div class="app-layout">
-      <Toolbar
-        onToggleSidebar={() => {
-          // On mobile, toggle between list and detail. On desktop it's a no-op
-          // because both are always visible.
-          if (isMobileViewport()) {
-            if (mobileListOpen()) showMobileDetail(); else showMobileList();
-          }
-        }}
-      />
       {/* Global network-activity bar — always rendered (2px track) so it
           doesn't cause layout shifts when requests start/stop. The fill
           animation only runs while a request is in flight, and the
