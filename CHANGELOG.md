@@ -5,6 +5,42 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.0] - 2026-04-12
+
+### Added
+- **"Modern" design style** — opt-in 5th style selectable in Settings. Features:
+  - Tabbed sidebar (Chat / News / Messages) with pill-button tabs
+  - Burger menu in sidebar header (profile, wallet, settings, theme, create, disconnect)
+  - Bubble-style chat with avatars outside, own messages right-aligned with accent tint
+  - Inline timestamps (float right inside message text)
+  - Right-click context menu with expandable emoji reaction row
+  - Channel header with logo, name, member count, search + settings buttons
+  - DM conversation list in sidebar with avatar, name, preview, unread badge
+  - Mobile single-pane navigation with reactive viewport switching
+  - Back arrow on mobile detail views
+  - Uniform dark background across all areas
+- **Color scheme selector** — accent color dropdown in Settings
+  (Ogmara Blue, Amber, Teal, Violet, Coral, Neutral Gray). Works with all styles.
+- **Network activity bar** — animated 2px bar under toolbar, shows loading state
+  for L2 node requests. Warning label after 1.5s slow threshold.
+- **Mobile navigation** — reactive viewport signal, single-pane layout below 768px,
+  automatic switch between list/detail views on resize.
+- **Resizable sidebar** — drag handle on right edge (200–600px), width persisted
+  in localStorage.
+- **Floating date header** — appears on scroll showing current date, auto-hides
+  after 2 seconds.
+- **Scroll-to-bottom FAB** — floating button with unread message badge counter.
+- **Channel avatar upload** — upload, change, remove channel logo in settings.
+- **Channel member list** — full member list with avatars, display names,
+  verified badges, and role indicators.
+- **Timestamp normalization** — handles ISO strings, numeric strings, and unix
+  seconds/milliseconds transparently across all views.
+
+### Fixed
+- Authenticated channel list fetch so private channels appear when logged in.
+- Auto-scroll waits for images to load before final scroll position.
+- DM conversation auto-scroll on new messages and after sending.
+
 ## [0.27.2] - 2026-04-11
 
 ### Fixed

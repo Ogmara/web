@@ -43,6 +43,12 @@ export function getCurrentNodeUrl(): string {
 
 /** Discover available nodes with ping times, sorted by latency. */
 export async function getAvailableNodes(): Promise<NodeWithPing[]> {
+  // In dev mode, skip live discovery (direct fetch to upstream triggers CORS)
+  const isLocal = typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  if (isLocal) {
+    return [{ url: getCurrentNodeUrl(), ping: 0 }];
+  }
   const currentUrl = getCurrentNodeUrl();
   return discoverAndPingNodes(currentUrl);
 }

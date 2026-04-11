@@ -2,9 +2,13 @@
  * App — root component with hash-based routing and auth context.
  */
 
-import { Component, createSignal, Show, Switch, Match } from 'solid-js';
+import { Component, Show, Switch, Match } from 'solid-js';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
+import { mobileListOpen, showMobileList, showMobileDetail, isMobileViewport } from './lib/mobile-nav';
+import { isLoading, slowLoading } from './lib/network-activity';
+import { isModernStyle } from './lib/theme';
+import { t } from './i18n/init';
 import { ChatView } from './pages/ChatView';
 import { NewsView } from './pages/NewsView';
 import { BookmarksView } from './pages/BookmarksView';
@@ -24,11 +28,7 @@ import { FollowListView } from './pages/FollowListView';
 import { StatusBar } from './components/StatusBar';
 import { route } from './lib/router';
 
-const isMobile = () => window.innerWidth <= 768;
-
 export const App: Component = () => {
-  const [sidebarCollapsed, setSidebarCollapsed] = createSignal(isMobile());
-
   const channelId = () => {
     const r = route();
     if (r.view === 'chat' && r.params.channelId) {
@@ -37,16 +37,49 @@ export const App: Component = () => {
     return null;
   };
 
+  const bodyClass = () => {
+    if (!isMobileViewport()) return 'app-body';
+    return mobileListOpen() ? 'app-body mobile-list-open' : 'app-body mobile-detail-open';
+  };
+
   return (
     <div class="app-layout">
-      <Toolbar
-        onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed())}
-      />
-      <div class="app-body">
-        <Show when={!sidebarCollapsed()}>
-          <Sidebar onNavigate={() => { if (isMobile()) setSidebarCollapsed(true); }} />
+      <Show when={!isModernStyle()}>
+        <Toolbar
+          onToggleSidebar={() => {
+            if (isMobileViewport()) {
+              if (mobileListOpen()) showMobileDetail(); else showMobileList();
+            }
+          }}
+        />
+      </Show>
+      <div
+        class={`net-bar ${isLoading() ? 'active' : ''} ${slowLoading() ? 'slow' : ''}`}
+        role="status"
+        aria-live="polite"
+      >
+        <div class="net-bar-track">
+          <div class="net-bar-fill" />
+        </div>
+        <Show when={slowLoading()}>
+          <span class="net-bar-label">{t('status_connecting') || 'Connecting to node…'}</span>
         </Show>
+      </div>
+      <div class={bodyClass()}>
+        <Sidebar onNavigate={() => { if (isMobileViewport()) showMobileDetail(); }} />
         <main class="main-content">
+          {/* Global mobile back button — visible in Modern style on mobile detail view,
+              but NOT on views that have their own back button (chat, dm-conversation) */}
+          {/* Global mobile back — only for views without their own header/back button */}
+          <Show when={isModernStyle() && isMobileViewport() && !mobileListOpen()
+            && ['news', 'bookmarks', 'search', 'settings', 'wallet', 'notifications', 'compose', 'user', 'follow-list'].includes(route().view)}>
+            <div style="display:flex; align-items:center; padding:8px 12px; background:var(--color-bg-secondary); border-bottom:1px solid var(--color-border)">
+              <button style="width:38px; height:38px; border-radius:50%; color:var(--color-text-secondary); display:flex; align-items:center; justify-content:center; cursor:pointer"
+                onClick={() => showMobileList()}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
+              </button>
+            </div>
+          </Show>
           <Switch>
             <Match when={route().view === 'chat'}>
               <ChatView channelId={channelId()} />

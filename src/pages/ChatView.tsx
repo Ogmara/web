@@ -15,6 +15,8 @@ import { EmojiPicker } from '../components/EmojiPicker';
 import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
 import { getPayloadContent, getPayloadAttachments, decodePayload } from '../lib/payload';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
+import { showMobileList } from '../lib/mobile-nav';
+import { isModernStyle } from '../lib/theme';
 
 /** Convert a msg_id (hex string, byte array, or Uint8Array) to a consistent hex string. */
 function msgIdToHex(msgId: unknown): string {
@@ -38,23 +40,35 @@ function getReplyToHex(msg: any): string | null {
   return null;
 }
 
+/** Normalize timestamps — handles ISO strings, numeric strings, and unix seconds/ms. */
+function normalizeTs(timestamp: string | number): number {
+  if (typeof timestamp === 'string') {
+    const parsed = Date.parse(timestamp);
+    if (!isNaN(parsed)) return parsed;
+    const num = Number(timestamp);
+    if (!isNaN(num)) return num < 1e12 ? num * 1000 : num;
+    return 0;
+  }
+  return timestamp < 1e12 ? timestamp * 1000 : timestamp;
+}
+
 /** Format message time in user's local timezone. */
 function formatMessageTime(timestamp: string | number): string {
-  return new Date(timestamp).toLocaleTimeString(undefined, {
+  return new Date(normalizeTs(timestamp)).toLocaleTimeString(undefined, {
     hour: '2-digit', minute: '2-digit',
   });
 }
 
 /** Get a date label for message grouping. */
 function getDateLabel(timestamp: string | number): string {
-  const date = new Date(timestamp);
+  const date = new Date(normalizeTs(timestamp));
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const diff = today.getTime() - msgDay.getTime();
-  if (diff === 0) return 'Today';
-  if (diff === 86400000) return 'Yesterday';
-  return date.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  if (diff === 0) return t('today') || 'Today';
+  if (diff === 86400000) return t('yesterday') || 'Yesterday';
+  return date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 interface ChatViewProps {
@@ -74,14 +88,51 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [editingMsg, setEditingMsg] = createSignal<{ msgId: string; content: string } | null>(null);
   const [sendError, setSendError] = createSignal<string | null>(null);
   const [attachments, setAttachments] = createSignal<MediaAttachment[]>([]);
-  const EDIT_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
-  const GROUP_WINDOW_MS = 2 * 60 * 1000; // 2 minutes — combine consecutive messages
+  const EDIT_WINDOW_MS = 30 * 60 * 1000;
+  const GROUP_WINDOW_MS = 2 * 60 * 1000;
+  const SCROLL_NEAR_BOTTOM_PX = 150;
   let inputRef: HTMLTextAreaElement | undefined;
   let messagesRef: HTMLDivElement | undefined;
+  const [showScrollBtn, setShowScrollBtn] = createSignal(false);
+  const [newMsgCount, setNewMsgCount] = createSignal(0);
+  const [floatingDate, setFloatingDate] = createSignal<string | null>(null);
+  let floatingDateTimer: ReturnType<typeof setTimeout> | null = null;
+  const [ctxEmojiExpanded, setCtxEmojiExpanded] = createSignal(false);
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Close user context menu on any click
+  // Viewport clamping for context menu
+  const MENU_ESTIMATED_WIDTH = 200;
+  const MENU_ESTIMATED_HEIGHT = 360;
+  const MENU_EDGE_MARGIN = 8;
+  const openUserMenu = (clientX: number, clientY: number, address: string, msgId: string) => {
+    const maxX = window.innerWidth - MENU_ESTIMATED_WIDTH - MENU_EDGE_MARGIN;
+    const maxY = window.innerHeight - MENU_ESTIMATED_HEIGHT - MENU_EDGE_MARGIN;
+    setCtxEmojiExpanded(false);
+    setUserMenu({
+      x: Math.max(MENU_EDGE_MARGIN, Math.min(clientX, maxX)),
+      y: Math.max(MENU_EDGE_MARGIN, Math.min(clientY, maxY)),
+      address, msgId,
+    });
+  };
+
+  // Long-press for mobile context menu
+  const handleTouchStart = (e: TouchEvent, msg: any) => {
+    if (longPressTimer) clearTimeout(longPressTimer);
+    const touch = e.touches[0];
+    const msgHex = msgIdToHex(msg.msg_id);
+    longPressTimer = setTimeout(() => {
+      openUserMenu(touch.clientX, touch.clientY, msg.author, msgHex);
+    }, 500);
+  };
+  const cancelLongPress = () => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } };
+
+  // Close user context menu on click outside
+  let ctxMenuRef: HTMLDivElement | undefined;
   if (typeof document !== 'undefined') {
-    const closeUserMenu = () => setUserMenu(null);
+    const closeUserMenu = (e: MouseEvent) => {
+      if (ctxMenuRef && ctxMenuRef.contains(e.target as Node)) return;
+      setUserMenu(null);
+    };
     document.addEventListener('click', closeUserMenu);
     onCleanup(() => document.removeEventListener('click', closeUserMenu));
   }
@@ -134,9 +185,29 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     } catch { /* ignore */ }
   };
 
-  /** Scroll chat to the bottom. */
   const scrollToBottom = () => {
-    if (messagesRef) messagesRef.scrollTop = messagesRef.scrollHeight;
+    if (messagesRef) messagesRef.scrollTo({ top: messagesRef.scrollHeight, behavior: 'smooth' });
+  };
+
+  const handleScroll = () => {
+    if (!messagesRef) return;
+    const { scrollTop, scrollHeight, clientHeight } = messagesRef;
+    const distFromBottom = scrollHeight - scrollTop - clientHeight;
+    setShowScrollBtn(distFromBottom >= SCROLL_NEAR_BOTTOM_PX);
+    if (distFromBottom < SCROLL_NEAR_BOTTOM_PX) setNewMsgCount(0);
+    const rows = messagesRef.querySelectorAll('[data-msg-id]');
+    let topDate: string | null = null;
+    for (const row of rows) {
+      const rect = (row as HTMLElement).getBoundingClientRect();
+      if (rect.bottom > messagesRef.getBoundingClientRect().top) {
+        const msgId = (row as HTMLElement).dataset.msgId;
+        if (msgId) { const msg = msgById().get(msgId); if (msg) topDate = getDateLabel(msg.timestamp); }
+        break;
+      }
+    }
+    setFloatingDate(topDate);
+    if (floatingDateTimer) clearTimeout(floatingDateTimer);
+    floatingDateTimer = setTimeout(() => setFloatingDate(null), 2000);
   };
 
   let lastChannelId: number | null = null;
@@ -144,8 +215,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   let initialLoad = true;
   const [lastReadTs, setLastReadTs] = createSignal<number | null>(null);
   const [messages] = createResource(
-    () => props.channelId,
-    async (channelId) => {
+    () => ({ channelId: props.channelId, auth: authStatus() }),
+    async ({ channelId }) => {
       if (!channelId) return [];
       // Only clear local messages on channel switch
       if (channelId !== lastChannelId) {
@@ -167,8 +238,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   );
 
   const [pinnedMessages] = createResource(
-    () => props.channelId,
-    async (channelId) => {
+    () => ({ channelId: props.channelId, auth: authStatus() }),
+    async ({ channelId }) => {
       if (!channelId) return [];
       try {
         const client = getClient();
@@ -177,6 +248,15 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       } catch {
         return [];
       }
+    },
+  );
+
+  const [channelInfo] = createResource(
+    () => ({ channelId: props.channelId, auth: authStatus() }),
+    async ({ channelId }) => {
+      if (!channelId) return null;
+      try { return await getClient().getChannel(channelId); }
+      catch { return null; }
     },
   );
 
@@ -220,13 +300,20 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           const filtered = prev.filter((m) => {
             if (!m._optimistic) return true;
             return !(m.author === msg.author &&
-              Math.abs(new Date(m.timestamp).getTime() - new Date(msg.timestamp).getTime()) < 10000);
+              Math.abs(normalizeTs(m.timestamp) - normalizeTs(msg.timestamp)) < 10000);
           });
           // Skip if already present (WS can re-deliver)
           if (filtered.some((m) => msgIdToHex(m.msg_id) === msgIdToHex(msg.msg_id))) return filtered;
           const next = [...filtered, msg];
           return next.length > MAX_LOCAL_MESSAGES ? next.slice(-MAX_LOCAL_MESSAGES) : next;
         });
+        // Increment new-message badge if user is scrolled away
+        if (messagesRef && msg.author !== walletAddress()) {
+          const { scrollTop, scrollHeight, clientHeight } = messagesRef;
+          if (scrollHeight - scrollTop - clientHeight >= SCROLL_NEAR_BOTTOM_PX) {
+            setNewMsgCount((c) => c + 1);
+          }
+        }
         // Mark channel as read while viewing so unread badge doesn't appear
         if (authStatus() === 'ready') {
           getClient().markChannelRead(props.channelId!).catch(() => {});
@@ -269,7 +356,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       if (!lm._optimistic) return true;
       return !apiMsgs.some((am) =>
         am.author === lm.author &&
-        Math.abs(new Date(am.timestamp).getTime() - new Date(lm.timestamp).getTime()) < 10000,
+        Math.abs(normalizeTs(am.timestamp) - normalizeTs(lm.timestamp)) < 10000,
       );
     });
     // localMessages first so optimistic updates (delete, edit, react) take priority in dedup
@@ -280,7 +367,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       seen.add(id);
       return true;
     });
-    deduped.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    deduped.sort((a, b) => normalizeTs(a.timestamp) - normalizeTs(b.timestamp));
     return deduped;
   });
 
@@ -375,36 +462,49 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
   // Auto-scroll only when new messages arrive and user is near bottom
   createEffect(() => {
+    if (messages.loading) return;
     const msgs = allMessages();
     const count = msgs.length;
-    if (count > 0 && count !== prevMsgCount) {
-      const wasMore = count > prevMsgCount;
-      const isFirst = initialLoad;
-      prevMsgCount = count;
-      initialLoad = false;
-      if (!wasMore && !isFirst) return; // only scroll on new messages, not removals
-      if (isFirst) {
-        // Initial load: wait for SolidJS to render all <For> items into the DOM
-        setTimeout(() => {
-          if (!messagesRef) return;
-          const divider = messagesRef.querySelector('.unread-divider');
-          if (divider) {
-            divider.scrollIntoView({ block: 'start' });
-          } else {
-            scrollToBottom();
-          }
-        }, 150);
-      } else {
-        // Subsequent messages: quick RAF is sufficient since DOM is already populated
-        requestAnimationFrame(() => {
-          if (!messagesRef) return;
-          const { scrollTop, scrollHeight, clientHeight } = messagesRef;
-          const isNearBottom = scrollHeight - scrollTop - clientHeight < 150;
-          if (isNearBottom) scrollToBottom();
-        });
-      }
+    if (count === 0 || count === prevMsgCount) { prevMsgCount = count; return; }
+    const wasMore = count > prevMsgCount;
+    const isFirst = initialLoad;
+    prevMsgCount = count;
+    initialLoad = false;
+    if (!wasMore && !isFirst) return;
+
+    if (isFirst) {
+      const scrollToEnd = () => {
+        if (!messagesRef) return;
+        const divider = messagesRef.querySelector('.unread-divider') as HTMLElement | null;
+        if (divider) {
+          messagesRef.scrollTop = Math.max(0, divider.offsetTop - 8);
+        } else {
+          messagesRef.scrollTop = messagesRef.scrollHeight;
+        }
+      };
+      setTimeout(() => {
+        scrollToEnd();
+        if (messagesRef) {
+          const imgs = messagesRef.querySelectorAll('img');
+          let pending = 0;
+          imgs.forEach((img) => {
+            if (!img.complete) {
+              pending++;
+              img.addEventListener('load', () => { pending--; if (pending <= 0) scrollToEnd(); }, { once: true });
+              img.addEventListener('error', () => { pending--; if (pending <= 0) scrollToEnd(); }, { once: true });
+            }
+          });
+          setTimeout(scrollToEnd, 300);
+        }
+      }, 0);
     } else {
-      prevMsgCount = count;
+      setTimeout(() => {
+        if (!messagesRef) return;
+        const { scrollTop, scrollHeight, clientHeight } = messagesRef;
+        if (scrollHeight - scrollTop - clientHeight < SCROLL_NEAR_BOTTOM_PX) {
+          messagesRef.scrollTo({ top: messagesRef.scrollHeight, behavior: 'smooth' });
+        }
+      }, 0);
     }
   });
 
@@ -494,7 +594,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     isRegistered() &&
     msg.author === walletAddress() &&
     !msg.deleted &&
-    (Date.now() - new Date(msg.timestamp).getTime()) < EDIT_WINDOW_MS;
+    (Date.now() - normalizeTs(msg.timestamp)) < EDIT_WINDOW_MS;
 
   const canDelete = (msg: any) =>
     isRegistered() && msg.author === walletAddress() && !msg.deleted;
@@ -552,6 +652,12 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     }
   };
 
+  // Track own reactions for highlighting
+  const [ownReactions, setOwnReactions] = createSignal<Map<string, Set<string>>>(new Map());
+  const hasOwnReaction = (msgId: string, emoji: string): boolean => {
+    return ownReactions().get(msgId)?.has(emoji) ?? false;
+  };
+
   const handleReact = async (msg: any, emoji: string) => {
     if (!props.channelId || !walletAddress()) return;
     try {
@@ -569,6 +675,14 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         if (exists) return prev.map((m) => msgIdToHex(m.msg_id) === id ? updateReactions(m) : m);
         return [...prev, updateReactions(msg)];
       });
+      // Track own reaction for badge highlighting
+      setOwnReactions((prev) => {
+        const next = new Map(prev);
+        const set = new Set(next.get(id) || []);
+        set.add(emoji);
+        next.set(id, set);
+        return next;
+      });
     } catch (e) {
       console.warn('React to message failed:', e);
     }
@@ -581,23 +695,53 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         fallback={<div class="chat-empty"><p>{t('chat_no_channel')}</p></div>}
       >
         {/* Channel header bar */}
-        <div class="channel-bar">
-          <Show when={pinnedMessages() && pinnedMessages()!.length > 0}>
-            <span class="pinned-info">
-              <span class="pinned-icon">📌</span>
-              <span class="pinned-count">{pinnedMessages()!.length} {t('channel_pins')}</span>
-            </span>
-          </Show>
-          <button
-            class="channel-settings-btn"
-            onClick={() => navigate(`/chat/${props.channelId}/settings`)}
-            title={t('channel_settings')}
-          >
-            ⚙
-          </button>
-        </div>
+        <Show when={isModernStyle()} fallback={
+          <div class="channel-bar">
+            <Show when={pinnedMessages() && pinnedMessages()!.length > 0}>
+              <span class="pinned-info">
+                <span class="pinned-icon">📌</span>
+                <span class="pinned-count">{pinnedMessages()!.length} {t('channel_pins')}</span>
+              </span>
+            </Show>
+            <button class="channel-settings-btn" onClick={() => navigate(`/chat/${props.channelId}/settings`)} title={t('channel_settings')}>⚙</button>
+          </div>
+        }>
+          <div class="channel-bar">
+            <button class="channel-back-btn content-back-btn" onClick={() => showMobileList()}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
+            </button>
+            <div class="channel-bar-info" onClick={() => navigate(`/chat/${props.channelId}/settings`)}>
+              <div class="channel-bar-avatar">
+                <Show
+                  when={channelInfo()?.channel?.logo_cid}
+                  fallback={<span>{(channelInfo()?.channel?.display_name || 'C').slice(0, 1).toUpperCase()}</span>}
+                >
+                  <img class="channel-bar-avatar-img" src={getClient().getMediaUrl(channelInfo()!.channel!.logo_cid!)} alt="" />
+                </Show>
+              </div>
+              <div class="channel-bar-text">
+                <div class="channel-bar-title">{channelInfo()?.channel?.display_name || channelInfo()?.channel?.slug || `Channel #${props.channelId}`}</div>
+                <div class="channel-bar-meta">
+                  <span class="channel-bar-members">{t('chat_member_count', { count: channelInfo()?.member_count || '?' })}</span>
+                </div>
+              </div>
+            </div>
+            <div class="channel-bar-actions">
+              <button class="channel-action-btn" title={t('nav_search')}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+              <button class="channel-action-btn" onClick={() => navigate(`/chat/${props.channelId}/settings`)} title={t('channel_settings')}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+              </button>
+            </div>
+          </div>
+        </Show>
 
-        <div class="chat-messages" ref={messagesRef}>
+        <div class="chat-messages-wrap" style="position:relative; flex:1; display:flex; flex-direction:column; overflow:hidden">
+          <Show when={floatingDate()}>
+            <div class="chat-date-float">
+              <span class="date-separator-label">{floatingDate()}</span>
+            </div>
+          </Show>
+        <div class="chat-messages" ref={messagesRef} onScroll={handleScroll}>
           <Show
             when={allMessages().length > 0}
             fallback={<div class="chat-empty"><p>{t('chat_no_messages')}</p></div>}
@@ -611,109 +755,132 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                 const showDateSep = currentDate !== prevDate;
                 const reply = resolveReply(msg);
                 const prof = () => getProfile(msg.author);
-                // Group consecutive messages from the same author within 2 minutes
+                const isOwn = msg.author === walletAddress();
                 const isContinuation = !showDateSep && !reply && prevMsg
                   && prevMsg.author === msg.author
                   && !prevMsg.deleted && !msg.deleted
-                  && (Math.abs(new Date(msg.timestamp).getTime() - new Date(prevMsg.timestamp).getTime()) < GROUP_WINDOW_MS);
+                  && (Math.abs(normalizeTs(msg.timestamp) - normalizeTs(prevMsg.timestamp)) < GROUP_WINDOW_MS);
 
-                // Show unread divider before the first message after last_read_ts
                 const readTs = lastReadTs();
-                const msgTs = new Date(msg.timestamp).getTime();
-                const prevMsgTs = prevMsg ? new Date(prevMsg.timestamp).getTime() : 0;
-                const showUnreadDivider = readTs !== null
-                  && msgTs > readTs
-                  && (prevMsgTs <= readTs || !prevMsg)
-                  && msg.author !== walletAddress();
+                const msgTs = normalizeTs(msg.timestamp);
+                const prevMsgTs = prevMsg ? normalizeTs(prevMsg.timestamp) : 0;
+                const showUnreadDivider = readTs !== null && msgTs > readTs && (prevMsgTs <= readTs || !prevMsg) && !isOwn;
+                const msgHex = msgIdToHex(msg.msg_id);
 
                 return (
                   <>
                     <Show when={showUnreadDivider}>
-                      <div class="unread-divider">
-                        <span class="unread-divider-label">{t('chat_new_messages')}</span>
-                      </div>
+                      <div class="unread-divider"><span class="unread-divider-label">{t('chat_new_messages')}</span></div>
                     </Show>
                     <Show when={showDateSep}>
-                      <div class="date-separator">
-                        <span class="date-separator-label">{currentDate}</span>
+                      <div class="date-separator"><span class="date-separator-label">{currentDate}</span></div>
+                    </Show>
+                    <Show when={isModernStyle()} fallback={
+                      /* ---------- CLASSIC / OTHER STYLES ---------- */
+                      <div
+                        class={`message ${isOwn ? 'own' : ''} ${msg.deleted ? 'deleted' : ''} ${msg.muted ? 'muted' : ''} ${isContinuation ? 'continuation' : ''}`}
+                        data-msg-id={msgHex}
+                        onContextMenu={(e) => { e.preventDefault(); openUserMenu(e.clientX, e.clientY, msg.author, msgHex); }}
+                        onTouchStart={(e) => handleTouchStart(e, msg)} onTouchEnd={cancelLongPress} onTouchMove={cancelLongPress}
+                      >
+                        <Show when={reply && !msg.deleted}>
+                          <div class="reply-preview" onClick={() => scrollToMessage(reply!.msgId)}>
+                            <span class="reply-preview-author">{displayName(reply!.author)}</span>
+                            <span class="reply-preview-text">{reply!.content}</span>
+                          </div>
+                        </Show>
+                        <Show when={!isContinuation}>
+                          <div class="message-header">
+                            <Show when={prof()?.avatar_cid} fallback={
+                              <span class="msg-avatar-placeholder">{(prof()?.display_name || msg.author).slice(0, 2).toUpperCase()}</span>
+                            }>
+                              <img class="msg-avatar" src={getClient().getMediaUrl(prof()!.avatar_cid!)} alt="" />
+                            </Show>
+                            <span class="message-author" onClick={() => navigate(`/user/${msg.author}`)}>{displayName(msg.author)}</span>
+                            <Show when={prof()?.verified}><span class="msg-verified">✓</span></Show>
+                            <span class="message-time">{formatMessageTime(msg.timestamp)}<Show when={msg.edited}><span class="edited-indicator"> ({t('message_edited')})</span></Show></span>
+                          </div>
+                        </Show>
+                        <Show when={!msg.deleted} fallback={<div class="message-body message-deleted-text">{t('message_deleted')}</div>}>
+                          <Show when={!msg.muted || expandedMuted().has(msgHex)} fallback={
+                            <div class="message-body message-muted-text" onClick={() => setExpandedMuted(prev => { const next = new Set(prev); next.add(msgHex); return next; })}>{t('message_muted_show')}</div>
+                          }>
+                            <div class="message-body"><FormattedText content={getPayloadContent(msg.payload)} attachments={getPayloadAttachments(msg.payload)} /></div>
+                          </Show>
+                        </Show>
+                        <Show when={walletAddress() && !msg.deleted}>
+                          <div class="msg-react-hover">
+                            {['👍', '👎', '❤️', '🔥', '😂', '😮'].map((emoji) => (
+                              <button class="react-hover-btn" onClick={() => handleReact(msg, emoji)}>{emoji}</button>
+                            ))}
+                          </div>
+                        </Show>
+                        <Show when={msg.reactions && Object.keys(msg.reactions).length > 0}>
+                          <div class="message-reactions">
+                            {Object.entries(msg.reactions as Record<string, number>).map(([emoji, count]) => (
+                              <span class="reaction-badge">{emoji} {count}</span>
+                            ))}
+                          </div>
+                        </Show>
+                      </div>
+                    }>
+                      {/* ---------- MODERN STYLE ---------- */}
+                      <div
+                        class={`message-row ${isOwn ? 'own' : ''} ${msg.deleted ? 'deleted' : ''} ${msg.muted ? 'muted' : ''} ${isContinuation ? 'continuation' : ''}`}
+                        data-msg-id={msgHex}
+                        onContextMenu={(e) => { e.preventDefault(); openUserMenu(e.clientX, e.clientY, msg.author, msgHex); }}
+                        onTouchStart={(e) => handleTouchStart(e, msg)} onTouchEnd={cancelLongPress} onTouchMove={cancelLongPress}
+                      >
+                        <Show when={!isOwn}>
+                          <div class="message-avatar-col">
+                            <Show when={!isContinuation}>
+                              <Show when={prof()?.avatar_cid} fallback={
+                                <div class="msg-avatar-placeholder" onClick={() => navigate(`/user/${msg.author}`)}>{(prof()?.display_name || msg.author).slice(0, 2).toUpperCase()}</div>
+                              }>
+                                <img class="msg-avatar" src={getClient().getMediaUrl(prof()!.avatar_cid!)} alt="" onClick={() => navigate(`/user/${msg.author}`)} />
+                              </Show>
+                            </Show>
+                          </div>
+                        </Show>
+                        <div class={`message-bubble ${isOwn ? 'own' : ''} ${msg.deleted ? 'deleted' : ''}`}>
+                          <Show when={reply && !msg.deleted}>
+                            <div class="reply-preview" onClick={() => scrollToMessage(reply!.msgId)}>
+                              <span class="reply-preview-author">{displayName(reply!.author)}</span>
+                              <span class="reply-preview-text">{reply!.content}</span>
+                            </div>
+                          </Show>
+                          <Show when={!isContinuation && !isOwn}>
+                            <div class="message-header">
+                              <span class="message-author" onClick={() => navigate(`/user/${msg.author}`)}>{displayName(msg.author)}</span>
+                              <Show when={prof()?.verified}><span class="msg-verified">✓</span></Show>
+                            </div>
+                          </Show>
+                          <Show when={!msg.deleted} fallback={<div class="message-body message-deleted-text">{t('message_deleted')}</div>}>
+                            <Show when={!msg.muted || expandedMuted().has(msgHex)} fallback={
+                              <div class="message-body message-muted-text" onClick={() => setExpandedMuted(prev => { const next = new Set(prev); next.add(msgHex); return next; })}>{t('message_muted_show')}</div>
+                            }>
+                              <div class="message-body">
+                                <FormattedText content={getPayloadContent(msg.payload)} attachments={getPayloadAttachments(msg.payload)} />
+                                <span class="message-meta-inline">
+                                  <Show when={msg.edited}><span class="edited-indicator">{t('message_edited')}</span></Show>
+                                  <span class="message-time">{formatMessageTime(msg.timestamp)}</span>
+                                </span>
+                              </div>
+                            </Show>
+                          </Show>
+                          <Show when={msg.reactions && Object.keys(msg.reactions).length > 0}>
+                            <div class="message-reactions">
+                              {Object.entries(msg.reactions as Record<string, number>).map(([emoji, count]) => (
+                                <button class={`reaction-badge ${hasOwnReaction(msgHex, emoji) ? 'reaction-own' : ''}`}
+                                  onClick={() => walletAddress() && handleReact(msg, emoji)} disabled={!walletAddress()}>
+                                  <span class="reaction-emoji">{emoji}</span><span class="reaction-count">{count}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </Show>
+                        </div>
                       </div>
                     </Show>
-                    <div
-                      class={`message ${msg.author === walletAddress() ? 'own' : ''} ${msg.deleted ? 'deleted' : ''} ${msg.muted ? 'muted' : ''} ${isContinuation ? 'continuation' : ''}`}
-                      data-msg-id={msgIdToHex(msg.msg_id)}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        setUserMenu({ x: e.clientX, y: e.clientY, address: msg.author, msgId: msgIdToHex(msg.msg_id) });
-                      }}
-                    >
-                      <Show when={reply && !msg.deleted}>
-                        <div class="reply-preview" onClick={() => scrollToMessage(reply!.msgId)}>
-                          <span class="reply-preview-author">{displayName(reply!.author)}</span>
-                          <span class="reply-preview-text">{reply!.content}</span>
-                        </div>
-                      </Show>
-                      <Show when={!isContinuation}>
-                        <div class="message-header">
-                          <Show when={prof()?.avatar_cid}>
-                            <img
-                              class="msg-avatar"
-                              src={getClient().getMediaUrl(prof()!.avatar_cid!)}
-                              alt=""
-                            />
-                          </Show>
-                          <Show when={!prof()?.avatar_cid}>
-                            <span class="msg-avatar-placeholder">
-                              {(prof()?.display_name || msg.author).slice(0, 2).toUpperCase()}
-                            </span>
-                          </Show>
-                          <span
-                            class="message-author"
-                            onClick={() => navigate(`/user/${msg.author}`)}
-                          >
-                            {displayName(msg.author)}
-                          </span>
-                          <Show when={prof()?.verified}>
-                            <span class="msg-verified">✓</span>
-                          </Show>
-                          <span class="message-time">
-                            {formatMessageTime(msg.timestamp)}
-                            <Show when={msg.edited}>
-                              <span class="edited-indicator" title={msg.last_edited_at ? new Date(msg.last_edited_at).toLocaleString() : ''}> ({t('message_edited')})</span>
-                            </Show>
-                          </span>
-                        </div>
-                      </Show>
-                      <Show
-                        when={!msg.deleted}
-                        fallback={<div class="message-body message-deleted-text">{t('message_deleted')}</div>}
-                      >
-                        <Show
-                          when={!msg.muted || expandedMuted().has(msgIdToHex(msg.msg_id))}
-                          fallback={
-                            <div class="message-body message-muted-text" onClick={() => setExpandedMuted(prev => { const next = new Set(prev); next.add(msgIdToHex(msg.msg_id)); return next; })}>
-                              {t('message_muted_show')}
-                            </div>
-                          }
-                        >
-                          <div class="message-body"><FormattedText content={getPayloadContent(msg.payload)} attachments={getPayloadAttachments(msg.payload)} /></div>
-                        </Show>
-                      </Show>
-                      {/* Floating emoji bar on hover */}
-                      <Show when={walletAddress() && !msg.deleted}>
-                        <div class="msg-react-hover">
-                          {['👍', '👎', '❤️', '🔥', '😂', '😮'].map((emoji) => (
-                            <button class="react-hover-btn" onClick={() => handleReact(msg, emoji)}>{emoji}</button>
-                          ))}
-                        </div>
-                      </Show>
-                      <Show when={msg.reactions && Object.keys(msg.reactions).length > 0}>
-                        <div class="message-reactions">
-                          {Object.entries(msg.reactions as Record<string, number>).map(([emoji, count]) => (
-                            <span class="reaction-badge">{emoji} {count}</span>
-                          ))}
-                        </div>
-                      </Show>
-                    </div>
                   </>
                 );
               }}
@@ -758,121 +925,172 @@ export const ChatView: Component<ChatViewProps> = (props) => {
             />
           </div>
         </Show>
+          <Show when={showScrollBtn()}>
+            <button class="scroll-to-bottom-btn" onClick={() => { scrollToBottom(); setNewMsgCount(0); setShowScrollBtn(false); }}>
+              <Show when={newMsgCount() > 0}><span class="scroll-badge">{newMsgCount()}</span></Show>
+              <span class="scroll-arrow">↓</span>
+            </button>
+          </Show>
+        </div>
 
         {/* Input area */}
-        <div class="chat-input-area">
-          <div class="chat-input">
-            <textarea
-              ref={inputRef}
-              class="chat-textarea"
-              rows={3}
-              placeholder={authStatus() === 'ready' ? t('chat_placeholder') : t('auth_connect_prompt')}
-              value={messageInput()}
-              onInput={(e) => setMessageInput(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && (messageInput().trim() || attachments().length > 0)) {
+        <Show when={isModernStyle()} fallback={
+          <div class="chat-input-area">
+            <div class="chat-input">
+              <textarea
+                ref={inputRef}
+                class="chat-textarea"
+                rows={3}
+                placeholder={authStatus() === 'ready' ? t('chat_placeholder') : t('auth_connect_prompt')}
+                value={messageInput()}
+                onInput={(e) => setMessageInput(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && (messageInput().trim() || attachments().length > 0)) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                onPaste={(e) => {
+                  const items = e.clipboardData?.items;
+                  if (!items || !walletAddress()) return;
+                  const imageItem = Array.from(items).find((i) => i.type.startsWith('image/'));
+                  if (!imageItem) return;
                   e.preventDefault();
-                  handleSend();
-                }
-              }}
-              onPaste={(e) => {
-                const items = e.clipboardData?.items;
-                if (!items || !walletAddress()) return;
-                const imageItem = Array.from(items).find((i) => i.type.startsWith('image/'));
-                if (!imageItem) return;
-                // Must preventDefault synchronously before browser inserts text
-                e.preventDefault();
-                const file = imageItem.getAsFile();
-                if (!file) return;
-                // Upload asynchronously after preventing default
-                getClient().uploadMedia(file, `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`)
-                  .then((result) => {
-                    setAttachments((prev) => [...prev, {
-                      cid: result.cid,
-                      mime_type: file.type,
-                      size_bytes: file.size,
-                      filename: `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`,
-                      thumbnail_cid: result.thumbnail_cid,
-                    }]);
-                  }).catch(() => { /* upload failed */ });
-              }}
-              disabled={sending() || !walletAddress()}
-            />
-            <div class="chat-input-actions">
-              <div class="emoji-container">
-                <button
-                  class="emoji-toggle"
-                  onClick={() => walletAddress() && setShowEmoji(!showEmoji())}
-                  title="Emoji"
-                  disabled={!walletAddress()}
-                >
-                  😊
-                </button>
-                <Show when={showEmoji()}>
-                  <EmojiPicker
-                    onSelect={insertEmoji}
-                    onClose={() => setShowEmoji(false)}
-                  />
-                </Show>
+                  const file = imageItem.getAsFile();
+                  if (!file) return;
+                  getClient().uploadMedia(file, `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`)
+                    .then((result) => {
+                      setAttachments((prev) => [...prev, { cid: result.cid, mime_type: file.type, size_bytes: file.size, filename: `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`, thumbnail_cid: result.thumbnail_cid }]);
+                    }).catch(() => {});
+                }}
+                disabled={sending() || !walletAddress()}
+              />
+              <div class="chat-input-actions">
+                <div class="emoji-container">
+                  <button class="emoji-toggle" onClick={() => walletAddress() && setShowEmoji(!showEmoji())} title="Emoji" disabled={!walletAddress()}>😊</button>
+                  <Show when={showEmoji()}><EmojiPicker onSelect={insertEmoji} onClose={() => setShowEmoji(false)} /></Show>
+                </div>
+                <button class="send-btn" onClick={handleSend} disabled={sending() || (!messageInput().trim() && attachments().length === 0) || !walletAddress()}>{t('chat_send')}</button>
               </div>
+            </div>
+          </div>
+        }>
+          {/* Modern input: [emoji] [attach] [textarea] [send] */}
+          <div class="chat-input-area">
+            <div class="chat-input">
+              <div class="emoji-container">
+                <button class="input-icon-btn" onClick={() => walletAddress() && setShowEmoji(!showEmoji())} disabled={!walletAddress()}>😊</button>
+                <Show when={showEmoji()}><EmojiPicker onSelect={insertEmoji} onClose={() => setShowEmoji(false)} /></Show>
+              </div>
+              <button class="input-icon-btn" onClick={() => walletAddress() && document.querySelector<HTMLInputElement>('.modern-attach-input')?.click()} disabled={!walletAddress()}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
+              </button>
+              <input type="file" class="modern-attach-input" style="display:none" onChange={(e) => {
+                const file = e.currentTarget.files?.[0];
+                if (file && walletAddress()) {
+                  getClient().uploadMedia(file, file.name).then((result) => {
+                    setAttachments((p) => [...p, { cid: result.cid, mime_type: file.type || 'application/octet-stream', size_bytes: file.size, filename: file.name, thumbnail_cid: result.thumbnail_cid }]);
+                  }).catch(() => {});
+                }
+                e.currentTarget.value = '';
+              }} />
+              <textarea
+                ref={inputRef}
+                class="chat-textarea"
+                rows={1}
+                placeholder={authStatus() === 'ready' ? t('chat_placeholder') : t('auth_connect_prompt')}
+                value={messageInput()}
+                onInput={(e) => { setMessageInput(e.currentTarget.value); e.currentTarget.style.height = 'auto'; e.currentTarget.style.height = Math.min(e.currentTarget.scrollHeight, 160) + 'px'; }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && (messageInput().trim() || attachments().length > 0)) { e.preventDefault(); handleSend(); }
+                }}
+                onPaste={(e) => {
+                  const items = e.clipboardData?.items;
+                  if (!items || !walletAddress()) return;
+                  const imageItem = Array.from(items).find((i) => i.type.startsWith('image/'));
+                  if (!imageItem) return;
+                  e.preventDefault();
+                  const file = imageItem.getAsFile();
+                  if (!file) return;
+                  getClient().uploadMedia(file, `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`)
+                    .then((r) => { setAttachments((p) => [...p, { cid: r.cid, mime_type: file.type, size_bytes: file.size, filename: `paste.${file.type.split('/')[1] || 'png'}`, thumbnail_cid: r.thumbnail_cid }]); }).catch(() => {});
+                }}
+                disabled={sending() || !walletAddress()}
+              />
               <button
                 class="send-btn"
                 onClick={handleSend}
                 disabled={sending() || (!messageInput().trim() && attachments().length === 0) || !walletAddress()}
+                title={t('chat_send')}
               >
-                {t('chat_send')}
+                <svg class="send-btn-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" /></svg>
               </button>
             </div>
           </div>
-        </div>
+        </Show>
       </Show>
 
-      {/* User context menu for moderation */}
+      {/* User context menu */}
       <Show when={userMenu()}>
         <div
           class="user-context-menu"
           style={{ left: `${userMenu()!.x}px`, top: `${userMenu()!.y}px` }}
+          ref={ctxMenuRef}
         >
-          {/* Message actions — always available */}
-          <button class="ctx-item" onClick={() => handleUserAction('reply')}>
-            ↩ {t('chat_reply')}
-          </button>
+          {/* Emoji reactions — modern style shows expandable grid */}
+          <Show when={isModernStyle() && walletAddress() && !msgById().get(userMenu()!.msgId)?.deleted}>
+            {(() => {
+              const quickEmojis = ['❤️', '😂', '👍', '🙏', '🔥', '👎'];
+              const extraEmojis = ['😊','😍','🤔','😢','😤','🤯','🥳','👏','🤝','✌️','💪','👋','🧡','💛','💚','💙','💜','⭐','✨','💎','🎉','🎊'];
+              const reactTo = (emoji: string) => {
+                const m = msgById().get(userMenu()!.msgId);
+                if (m) handleReact(m, emoji);
+                setUserMenu(null);
+              };
+              return (
+                <div style="border-bottom:1px solid var(--color-border); margin-bottom:4px">
+                  <div style="display:flex; align-items:center; gap:2px; padding:4px 6px">
+                    {quickEmojis.map((emoji) => (
+                      <button style="font-size:20px; padding:4px 5px; border-radius:var(--radius-sm); cursor:pointer; line-height:1; transition:transform 0.1s" onClick={() => reactTo(emoji)}>{emoji}</button>
+                    ))}
+                    <button style="display:flex; align-items:center; justify-content:center; color:var(--color-text-secondary); margin-left:2px; padding:4px 5px; cursor:pointer"
+                      onClick={(e) => { e.stopPropagation(); setCtxEmojiExpanded(!ctxEmojiExpanded()); }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d={ctxEmojiExpanded() ? 'M18 15l-6-6-6 6' : 'M6 9l6 6 6-6'} />
+                      </svg>
+                    </button>
+                  </div>
+                  <Show when={ctxEmojiExpanded()}>
+                    <div style="display:flex; flex-wrap:wrap; gap:2px; padding:4px 6px; max-width:240px">
+                      {extraEmojis.map((emoji) => (
+                        <button style="font-size:20px; padding:4px 5px; border-radius:var(--radius-sm); cursor:pointer; line-height:1; transition:transform 0.1s" onClick={() => reactTo(emoji)}>{emoji}</button>
+                      ))}
+                    </div>
+                  </Show>
+                </div>
+              );
+            })()}
+          </Show>
+          <button class="ctx-item" onClick={() => handleUserAction('reply')}>↩ {t('chat_reply')}</button>
           <Show when={(() => { const m = msgById().get(userMenu()!.msgId); return m && canEdit(m); })()}>
-            <button class="ctx-item" onClick={() => handleUserAction('edit')}>
-              ✏ {t('chat_edit')}
-            </button>
+            <button class="ctx-item" onClick={() => handleUserAction('edit')}>✏ {t('chat_edit')}</button>
           </Show>
           <Show when={(() => { const m = msgById().get(userMenu()!.msgId); return m && canDelete(m); })()}>
-            <button class="ctx-item ctx-danger" onClick={() => handleUserAction('delete')}>
-              🗑 {t('chat_delete')}
-            </button>
+            <button class="ctx-item ctx-danger" onClick={() => handleUserAction('delete')}>🗑 {t('chat_delete')}</button>
           </Show>
           <div class="ctx-divider" />
-          {/* User actions */}
-          <button class="ctx-item" onClick={() => handleUserAction('profile')}>
-            👤 {t('channel_view_profile')}
-          </button>
+          <button class="ctx-item" onClick={() => handleUserAction('profile')}>👤 {t('channel_view_profile')}</button>
           <Show when={isMod()}>
-            <button class="ctx-item" onClick={() => handleUserAction('pin')}>
-              📌 {t('channel_pin_message')}
-            </button>
+            <button class="ctx-item" onClick={() => handleUserAction('pin')}>📌 {t('channel_pin_message')}</button>
           </Show>
           <Show when={walletAddress() && userMenu()!.address !== walletAddress()}>
-            <button class="ctx-item" onClick={() => handleUserAction('report')}>
-              🚩 {t('report_title')}
-            </button>
+            <button class="ctx-item" onClick={() => handleUserAction('report')}>🚩 {t('report_title')}</button>
           </Show>
           <Show when={isMod() && userMenu()!.address !== walletAddress()}>
             <div class="ctx-divider" />
-            <button class="ctx-item ctx-warn" onClick={() => handleUserAction('mute')}>
-              🔇 {t('channel_mute')}
-            </button>
-            <button class="ctx-item ctx-warn" onClick={() => handleUserAction('kick')}>
-              ⚡ {t('channel_kick')}
-            </button>
-            <button class="ctx-item ctx-danger" onClick={() => handleUserAction('ban')}>
-              ⛔ {t('channel_ban')}
-            </button>
+            <button class="ctx-item ctx-warn" onClick={() => handleUserAction('mute')}>🔇 {t('channel_mute')}</button>
+            <button class="ctx-item ctx-warn" onClick={() => handleUserAction('kick')}>⚡ {t('channel_kick')}</button>
+            <button class="ctx-item ctx-danger" onClick={() => handleUserAction('ban')}>⛔ {t('channel_ban')}</button>
           </Show>
         </div>
       </Show>
@@ -916,6 +1134,30 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           color: var(--color-text-secondary);
           white-space: nowrap;
           font-weight: 600;
+          background: var(--color-bg-tertiary);
+          padding: 3px 10px;
+          border-radius: var(--radius-full);
+          border: 1px solid var(--color-border);
+        }
+        .chat-date-float {
+          position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+          z-index: 5; pointer-events: none;
+        }
+        .chat-date-float .date-separator-label { pointer-events: auto; }
+        .scroll-to-bottom-btn {
+          position: absolute; bottom: var(--spacing-md); right: var(--spacing-md);
+          width: 44px; height: 44px; border-radius: var(--radius-full);
+          background: var(--color-bg-secondary); border: 1px solid var(--color-border);
+          color: var(--color-text-primary); display: flex; align-items: center; justify-content: center;
+          cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.25); z-index: 5;
+        }
+        .scroll-to-bottom-btn:hover { background: var(--color-bg-tertiary); }
+        .scroll-arrow { font-size: 18px; }
+        .scroll-badge {
+          position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px;
+          border-radius: var(--radius-full); background: var(--color-accent-primary);
+          color: var(--color-text-inverse); font-size: 11px; font-weight: 700;
+          display: flex; align-items: center; justify-content: center; padding: 0 5px;
         }
         .message {
           padding: var(--spacing-sm) var(--spacing-md);
