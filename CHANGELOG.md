@@ -5,6 +5,21 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.0] - 2026-04-11
+
+### Added
+- **Dev proxy for local development** — custom Vite plugin (`ogmaraDevProxy`)
+  forwards `/api/v1/*` requests to the upstream L2 node using Node's native
+  fetch, bypassing CORS and preserving Ed25519 signatures. Configurable via
+  `DEV_UPSTREAM_NODE` env var, defaults to `https://ogmara.org`.
+- **Localhost API routing** — SDK client now uses `window.location.origin` on
+  localhost so requests hit the dev proxy instead of the upstream directly.
+
+### Fixed
+- **Service Worker breaks dev server** — SW registration is now skipped on
+  localhost. Any previously registered SW is automatically unregistered to
+  prevent stale cache from intercepting HMR and module requests.
+
 ## [0.26.2] - 2026-04-11
 
 ### Security

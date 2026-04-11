@@ -7,11 +7,20 @@ import { getSetting, setSetting } from './settings';
 
 let client: OgmaraClient | null = null;
 
+/** In dev mode, route API calls through the Vite dev proxy to avoid CORS. */
+function resolveNodeUrl(): string {
+  const saved = getSetting('nodeUrl');
+  if (saved) return saved;
+  // On localhost the dev proxy forwards /api/v1/* to the upstream node
+  const isLocal = typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  return isLocal ? window.location.origin : DEFAULT_NODE_URL;
+}
+
 /** Get or create the shared API client. */
 export function getClient(): OgmaraClient {
   if (!client) {
-    const nodeUrl = getSetting('nodeUrl') || DEFAULT_NODE_URL;
-    client = new OgmaraClient({ nodeUrl });
+    client = new OgmaraClient({ nodeUrl: resolveNodeUrl() });
   }
   return client;
 }
