@@ -60,10 +60,15 @@ export default defineConfig(({ mode }) => ({
   },
   resolve: {
     alias: {
-      // Force the local v2.3.0 instead of global v1.7.5 in ~/node_modules
+      // Force the local v2.3.0 instead of global v1.7.5 in ~/node_modules.
+      // Must use exact path to prevent Vite from resolving the SDK symlink's
+      // imports up to ~/node_modules/@noble/ (stale v1.x with incompatible API).
       '@noble/ed25519': path.resolve(__dirname, 'node_modules/@noble/ed25519'),
       '@noble/hashes': path.resolve(__dirname, 'node_modules/@noble/hashes'),
     },
+    // Don't follow the SDK symlink when resolving its imports — use the web
+    // app's node_modules instead of the SDK's real path (which walks up to ~/).
+    preserveSymlinks: true,
   },
   build: {
     target: 'esnext',
