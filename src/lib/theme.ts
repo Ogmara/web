@@ -11,13 +11,27 @@
  * - minimal: Pill shapes, tight palette, content-first
  */
 
-export type Theme = 'light' | 'dark' | 'system';
-export type DesignStyle = 'classic' | 'glassmorphism' | 'elevated' | 'minimal';
+import { createSignal } from 'solid-js';
 
-export const DESIGN_STYLES: DesignStyle[] = ['glassmorphism', 'elevated', 'minimal', 'classic'];
+export type Theme = 'light' | 'dark' | 'system';
+export type DesignStyle = 'classic' | 'glassmorphism' | 'elevated' | 'minimal' | 'modern';
+
+export const DESIGN_STYLES: DesignStyle[] = ['glassmorphism', 'elevated', 'minimal', 'modern', 'classic'];
+
+export type ColorScheme = 'default' | 'amber' | 'teal' | 'violet' | 'coral' | 'neutral-gray';
+export const COLOR_SCHEMES: ColorScheme[] = ['default', 'amber', 'teal', 'violet', 'coral', 'neutral-gray'];
+export const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = {
+  default: 'Ogmara-Blau (Standard)',
+  amber: 'Amber',
+  teal: 'Teal',
+  violet: 'Violet',
+  coral: 'Coral',
+  'neutral-gray': 'Neutral Gray',
+};
 
 const STORAGE_KEY = 'ogmara.theme';
 const STYLE_KEY = 'ogmara.designStyle';
+const SCHEME_KEY = 'ogmara.colorScheme';
 
 /** Get the current design style (validated against known values). */
 export function getDesignStyle(): DesignStyle {
@@ -28,9 +42,16 @@ export function getDesignStyle(): DesignStyle {
   return 'glassmorphism';
 }
 
+/** Reactive signal for the current design style — components can use this
+ *  to conditionally render structural variants (e.g. modern sidebar). */
+const [designStyleSignal, setDesignStyleSignal] = createSignal<DesignStyle>(getDesignStyle());
+export function currentDesignStyle(): DesignStyle { return designStyleSignal(); }
+export function isModernStyle(): boolean { return designStyleSignal() === 'modern'; }
+
 /** Set the design style and apply it. */
 export function setDesignStyle(style: DesignStyle): void {
   localStorage.setItem(STYLE_KEY, style);
+  setDesignStyleSignal(style);
   applyDesignStyle(style);
 }
 
@@ -49,6 +70,7 @@ export function setTheme(theme: Theme): void {
 export function initTheme(): void {
   applyTheme(getTheme());
   applyDesignStyle(getDesignStyle());
+  applyColorScheme(getColorScheme());
 
   // Listen for system theme changes
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
@@ -71,5 +93,24 @@ function applyDesignStyle(style: DesignStyle): void {
     document.documentElement.removeAttribute('data-style');
   } else {
     document.documentElement.setAttribute('data-style', style);
+  }
+}
+
+export function getColorScheme(): ColorScheme {
+  const stored = localStorage.getItem(SCHEME_KEY);
+  if (stored && COLOR_SCHEMES.includes(stored as ColorScheme)) return stored as ColorScheme;
+  return 'default';
+}
+
+export function setColorScheme(scheme: ColorScheme): void {
+  localStorage.setItem(SCHEME_KEY, scheme);
+  applyColorScheme(scheme);
+}
+
+function applyColorScheme(scheme: ColorScheme): void {
+  if (scheme === 'default') {
+    document.documentElement.removeAttribute('data-scheme');
+  } else {
+    document.documentElement.setAttribute('data-scheme', scheme);
   }
 }

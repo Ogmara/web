@@ -7,6 +7,8 @@ import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, getSigner, l2Address, walletAddress } from '../lib/auth';
 import { navigate } from '../lib/router';
+import { showMobileList } from '../lib/mobile-nav';
+import { isModernStyle } from '../lib/theme';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent, getPayloadTitle, getPayloadAttachments, decodePayload } from '../lib/payload';
 import { sendTip, kleverAvailable, getExplorerUrl } from '../lib/klever';
