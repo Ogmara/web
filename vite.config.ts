@@ -9,7 +9,7 @@ import path from 'path';
  * verification on the L2 node.
  */
 function ogmaraDevProxy(): Plugin {
-  const upstream = process.env.DEV_UPSTREAM_NODE || 'https://ogmara.org';
+  const upstream = process.env.DEV_UPSTREAM_NODE || 'https://node.ogmara.org';
   return {
     name: 'ogmara-dev-proxy',
     configureServer(server) {
