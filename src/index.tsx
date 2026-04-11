@@ -9,8 +9,11 @@ import { detectKleverExtension, setContractAddress, setKleverNetwork, resolveNet
 import { detectK5, checkK5Callback } from './lib/k5';
 import { vaultGetSigner } from './lib/vault';
 import { getClient } from './lib/api';
+import { installNetworkActivityTracker } from './lib/network-activity';
 import './styles/global.css';
 import './styles/design-styles.css';
+
+installNetworkActivityTracker();
 
 // Initialize i18n before rendering
 initI18n();

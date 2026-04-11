@@ -1,6 +1,6 @@
 import { Component, createSignal, Show } from 'solid-js';
 import { t, setLanguage, currentLanguage, SUPPORTED_LANGUAGES } from '../i18n/init';
-import { getTheme, setTheme, getDesignStyle, setDesignStyle, DESIGN_STYLES, type Theme, type DesignStyle } from '../lib/theme';
+import { getTheme, setTheme, getDesignStyle, setDesignStyle, DESIGN_STYLES, type Theme, type DesignStyle, getColorScheme, setColorScheme, COLOR_SCHEMES, COLOR_SCHEME_LABELS, type ColorScheme } from '../lib/theme';
 import { getSetting, setSetting } from '../lib/settings';
 import { authStatus, walletAddress, walletSource } from '../lib/auth';
 import { navigate } from '../lib/router';
@@ -32,10 +32,16 @@ export const SettingsView: Component = () => {
   const [exportStatus, setExportStatus] = createSignal('');
 
   const [designStyle, setDesignStyleState] = createSignal<DesignStyle>(getDesignStyle());
+  const [colorScheme, setColorSchemeState] = createSignal<ColorScheme>(getColorScheme());
 
   const handleDesignStyleChange = (value: DesignStyle) => {
     setDesignStyleState(value);
     setDesignStyle(value);
+  };
+
+  const handleColorSchemeChange = (value: ColorScheme) => {
+    setColorSchemeState(value);
+    setColorScheme(value);
   };
 
   const handleThemeChange = (value: Theme) => {
@@ -80,7 +86,18 @@ export const SettingsView: Component = () => {
             </label>
           ))}
         </div>
-        <h3 style="margin-top: var(--spacing-md)">{t('settings_design_style') || 'Design Style'}</h3>
+        <h3 style="margin-top: var(--spacing-md)">{t('settings_color_scheme') || 'Akzentfarbe'}</h3>
+        <select
+          class="settings-select"
+          value={colorScheme()}
+          onChange={(e) => handleColorSchemeChange(e.currentTarget.value as ColorScheme)}
+        >
+          {COLOR_SCHEMES.map((s) => (
+            <option value={s}>{COLOR_SCHEME_LABELS[s]}</option>
+          ))}
+        </select>
+
+        <h3 style="margin-top: var(--spacing-md)">{t('settings_design_style') || 'Design-Stil'}</h3>
         <div class="settings-style-grid">
           {DESIGN_STYLES.map((style) => (
             <button
