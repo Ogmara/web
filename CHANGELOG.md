@@ -5,6 +5,16 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.2] - 2026-04-11
+
+### Fixed
+- **All auth signatures rejected (401) on mainnet** — the SDK symlink caused
+  Vite to resolve `@noble/ed25519` from `~/node_modules/` (stale v1.7.5)
+  instead of the project-local v2.3.0. Noble v1.x produces incompatible
+  Ed25519 signatures. Added `preserveSymlinks: true` to Vite config so the
+  SDK's imports resolve from the symlink location (web/node_modules/) not
+  the target (sdk-js/ → ~/node_modules/).
+
 ## [0.27.1] - 2026-04-11
 
 ### Fixed
