@@ -2,7 +2,7 @@
  * Ogmara PWA Service Worker — network-first for HTML, cache-first for hashed assets.
  */
 
-const CACHE_NAME = 'ogmara-v1';
+const CACHE_NAME = 'ogmara-v2';
 const APP_SHELL = ['/app/'];
 
 self.addEventListener('install', (event) => {
@@ -23,6 +23,10 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+
+  // Only handle same-origin requests — never intercept cross-origin fetches
+  // (e.g. Klever Extension calling node.klever.org, api.klever.org)
+  if (url.origin !== self.location.origin) return;
 
   // Never cache API calls or WebSocket upgrades
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/ws')) {
