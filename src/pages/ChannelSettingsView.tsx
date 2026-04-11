@@ -11,7 +11,7 @@ import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { walletAddress } from '../lib/auth';
 import { navigate, goBack } from '../lib/router';
-import { resolveProfile } from '../lib/profile';
+import { resolveProfile, type CachedProfile } from '../lib/profile';
 import { getPayloadContent } from '../lib/payload';
 import { FormattedText } from '../components/FormattedText';
 
@@ -39,6 +39,36 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
       catch { return null; }
     },
   );
+
+  // Resolve profile (display name + avatar) for each member address.
+  // The map is populated asynchronously as individual profile lookups
+  // complete, so the UI re-renders row-by-row without blocking.
+  const [memberProfiles, setMemberProfiles] = createSignal<Map<string, CachedProfile>>(new Map());
+  createEffect(() => {
+    const list = members()?.members;
+    if (!list) return;
+    for (const m of list) {
+      if (memberProfiles().has(m.address)) continue;
+      resolveProfile(m.address).then((p) => {
+        setMemberProfiles((prev) => {
+          const next = new Map(prev);
+          next.set(m.address, p);
+          return next;
+        });
+      }).catch(() => { /* best-effort */ });
+    }
+  });
+  const getMemberProfile = (addr: string): CachedProfile | undefined => memberProfiles().get(addr);
+  const memberDisplayName = (addr: string): string => {
+    const p = getMemberProfile(addr);
+    if (p?.display_name) return p.display_name;
+    return `${addr.slice(0, 8)}...${addr.slice(-4)}`;
+  };
+  const memberInitial = (addr: string): string => {
+    const p = getMemberProfile(addr);
+    if (p?.display_name) return p.display_name.slice(0, 2).toUpperCase();
+    return addr.slice(4, 6).toUpperCase();
+  };
 
   // Bans
   const [bans, { refetch: refetchBans }] = createResource(
@@ -98,6 +128,58 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
       setInfoMsg(e?.message || 'Failed');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // --- Logo / avatar upload ---
+  const [logoUploading, setLogoUploading] = createSignal(false);
+  const [logoMsg, setLogoMsg] = createSignal('');
+  let logoFileInput: HTMLInputElement | undefined;
+
+  const handleLogoUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setLogoMsg('Nur Bilder erlaubt');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setLogoMsg('Bild zu groß (max 5 MB)');
+      return;
+    }
+    setLogoUploading(true);
+    setLogoMsg('');
+    try {
+      const client = getClient();
+      const uploaded = await client.uploadMedia(file, file.name);
+      await client.updateChannel({
+        channelId: channelIdNum(),
+        logoCid: uploaded.cid,
+      });
+      setLogoMsg('Avatar gespeichert');
+      refetchDetail();
+      // Notify the rest of the app so the sidebar chat-row refetches
+      window.dispatchEvent(new Event('ogmara:channels-changed'));
+    } catch (e: any) {
+      setLogoMsg(e?.message || 'Upload fehlgeschlagen');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleLogoRemove = async () => {
+    setLogoUploading(true);
+    setLogoMsg('');
+    try {
+      await getClient().updateChannel({
+        channelId: channelIdNum(),
+        logoCid: '', // empty string = clear
+      });
+      setLogoMsg('Avatar entfernt');
+      refetchDetail();
+      window.dispatchEvent(new Event('ogmara:channels-changed'));
+    } catch (e: any) {
+      setLogoMsg(e?.message || 'Fehler beim Entfernen');
+    } finally {
+      setLogoUploading(false);
     }
   };
 
@@ -190,6 +272,61 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
         </button>
       </div>
 
+      {/* Channel avatar (logo) — only for moderators/owner */}
+      <Show when={isMod()}>
+        <div class="ch-section">
+          <h3>{t('channel_avatar_label') || 'Kanal-Avatar'}</h3>
+          <div class="ch-avatar-row">
+            <div class="ch-avatar-preview">
+              <Show
+                when={detail()?.channel.logo_cid}
+                fallback={
+                  <span class="ch-avatar-initial">
+                    {(detail()?.channel.display_name || detail()?.channel.slug || '#').slice(0, 1).toUpperCase()}
+                  </span>
+                }
+              >
+                <img
+                  class="ch-avatar-img"
+                  src={getClient().getMediaUrl(detail()!.channel.logo_cid!)}
+                  alt=""
+                />
+              </Show>
+            </div>
+            <div class="ch-avatar-actions">
+              <input
+                ref={logoFileInput}
+                type="file"
+                accept="image/*"
+                style="display: none"
+                onChange={(e) => {
+                  const file = e.currentTarget.files?.[0];
+                  if (file) handleLogoUpload(file);
+                  e.currentTarget.value = '';
+                }}
+              />
+              <button
+                class="ch-save-btn"
+                onClick={() => logoFileInput?.click()}
+                disabled={logoUploading()}
+              >
+                {logoUploading()
+                  ? (t('loading') || 'Wird geladen…')
+                  : (detail()?.channel.logo_cid ? (t('channel_avatar_change') || 'Ändern') : (t('channel_avatar_upload') || 'Hochladen'))}
+              </button>
+              <Show when={detail()?.channel.logo_cid && !logoUploading()}>
+                <button class="ch-remove-btn" onClick={handleLogoRemove}>
+                  {t('channel_avatar_remove') || 'Entfernen'}
+                </button>
+              </Show>
+            </div>
+          </div>
+          <Show when={logoMsg()}>
+            <span class="ch-info-msg">{logoMsg()}</span>
+          </Show>
+        </div>
+      </Show>
+
       {/* Edit info (only for moderators/owner) */}
       <Show when={isMod()}>
         <div class="ch-section">
@@ -214,6 +351,82 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
           <button class="ch-save-btn" onClick={handleSaveInfo} disabled={saving()}>
             {saving() ? t('loading') : t('channel_save')}
           </button>
+        </div>
+      </Show>
+
+      {/* Members — visible to everyone, shows full list with roles */}
+      <Show when={members()?.members}>
+        <div class="ch-section">
+          <h3>
+            {t('channel_members')}
+            <span class="ch-count"> ({members()!.members.length})</span>
+          </h3>
+          <Show
+            when={members()!.members.length > 0}
+            fallback={<p class="ch-empty">{t('channel_no_members') || 'Keine Mitglieder'}</p>}
+          >
+            <div class="ch-member-list">
+              <For each={members()!.members}>
+                {(member) => {
+                  const prof = () => getMemberProfile(member.address);
+                  return (
+                    <div
+                      class="ch-member-row"
+                      onClick={() => navigate(`/user/${member.address}`)}
+                    >
+                      <div class="ch-member-avatar">
+                        <Show
+                          when={prof()?.avatar_cid}
+                          fallback={<span>{memberInitial(member.address)}</span>}
+                        >
+                          <img
+                            class="ch-member-avatar-img"
+                            src={getClient().getMediaUrl(prof()!.avatar_cid!)}
+                            alt=""
+                          />
+                        </Show>
+                      </div>
+                      <div class="ch-member-body">
+                        <div class="ch-member-name-row">
+                          <span class="ch-member-name">{memberDisplayName(member.address)}</span>
+                          <Show when={prof()?.verified}>
+                            <span class="ch-member-verified" title="Verifiziert">✓</span>
+                          </Show>
+                        </div>
+                        <Show
+                          when={prof()?.display_name}
+                          fallback={
+                            <Show when={member.role !== 'member'}>
+                              <div class="ch-member-role">
+                                {member.role === 'creator' ? (t('channel_owner') || 'Ersteller') : (t('channel_moderator') || 'Moderator')}
+                              </div>
+                            </Show>
+                          }
+                        >
+                          {/* If we have a display name, show truncated address + role below */}
+                          <div class="ch-member-subtitle">
+                            <span class="ch-member-addr-small">{truncAddr(member.address)}</span>
+                            <Show when={member.role !== 'member'}>
+                              <span class="ch-member-sep">·</span>
+                              <span class="ch-member-role">
+                                {member.role === 'creator' ? (t('channel_owner') || 'Ersteller') : (t('channel_moderator') || 'Moderator')}
+                              </span>
+                            </Show>
+                          </div>
+                        </Show>
+                      </div>
+                      <Show when={member.role === 'creator'}>
+                        <span class="ch-member-badge ch-member-badge-owner">👑</span>
+                      </Show>
+                      <Show when={member.role === 'moderator'}>
+                        <span class="ch-member-badge">⚙</span>
+                      </Show>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
+          </Show>
         </div>
       </Show>
 
@@ -379,6 +592,136 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
         .ch-remove-btn:hover { background: rgba(255,68,68,0.1); }
         .ch-add-row { display: flex; gap: var(--spacing-sm); margin-top: var(--spacing-sm); }
         .ch-add-row .ch-input { flex: 1; margin-bottom: 0; }
+
+        .ch-avatar-row {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-md);
+          margin-bottom: var(--spacing-sm);
+        }
+        .ch-avatar-preview {
+          width: 72px;
+          height: 72px;
+          border-radius: var(--radius-full);
+          background: linear-gradient(135deg, var(--color-accent-primary), var(--color-accent-secondary));
+          color: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 28px;
+          font-weight: 700;
+          user-select: none;
+          overflow: hidden;
+          flex-shrink: 0;
+        }
+        .ch-avatar-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        .ch-avatar-actions {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-sm);
+          flex-wrap: wrap;
+        }
+        .ch-count {
+          font-size: var(--font-size-sm);
+          color: var(--color-text-secondary);
+          font-weight: 500;
+        }
+        .ch-member-list {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .ch-member-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 8px 10px;
+          border-radius: var(--radius-md);
+          cursor: pointer;
+          transition: background 0.15s;
+        }
+        .ch-member-row:hover { background: var(--color-bg-tertiary); }
+        .ch-member-avatar {
+          width: 40px;
+          height: 40px;
+          border-radius: var(--radius-full);
+          background: linear-gradient(135deg, var(--color-accent-primary), var(--color-accent-secondary));
+          color: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 13px;
+          font-weight: 700;
+          flex-shrink: 0;
+          user-select: none;
+          overflow: hidden;
+        }
+        .ch-member-avatar-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        .ch-member-body {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .ch-member-name-row {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          min-width: 0;
+        }
+        .ch-member-name {
+          font-size: var(--font-size-md);
+          font-weight: 600;
+          color: var(--color-text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .ch-member-verified {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 14px;
+          height: 14px;
+          border-radius: var(--radius-full);
+          background: var(--color-accent-primary);
+          color: #fff;
+          font-size: 9px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+        .ch-member-subtitle {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          font-size: var(--font-size-xs);
+          color: var(--color-text-secondary);
+        }
+        .ch-member-addr-small {
+          font-family: monospace;
+          font-size: 11px;
+        }
+        .ch-member-sep { opacity: 0.5; }
+        .ch-member-role {
+          font-size: var(--font-size-xs);
+          color: var(--color-accent-primary);
+        }
+        .ch-member-badge {
+          font-size: 16px;
+          flex-shrink: 0;
+        }
+        .ch-member-badge-owner { color: #f5c518; }
         .ch-pin-preview {
           flex: 1;
           font-size: var(--font-size-sm);

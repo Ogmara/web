@@ -69,6 +69,7 @@ export const StatusBar: Component = () => {
         </span>
       </Show>
       <NodeSelector />
+      <span class="status-brand">ogmara</span>
       <span class="status-version">v{__APP_VERSION__}</span>
 
       {/* Node info dialog */}
@@ -185,7 +186,15 @@ export const StatusBar: Component = () => {
           background: var(--color-success);
           color: #1a1a1a;
         }
-        .status-version { margin-left: auto; opacity: 0.5; }
+        .status-brand {
+          margin-left: auto;
+          font-size: 11px;
+          font-weight: 500;
+          color: var(--color-text-tertiary, var(--color-text-secondary));
+          letter-spacing: 0.03em;
+          text-transform: lowercase;
+        }
+        .status-version { opacity: 0.5; }
 
         .node-info-overlay {
           position: fixed;
