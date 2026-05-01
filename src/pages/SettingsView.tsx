@@ -1,6 +1,6 @@
 import { Component, createSignal, Show } from 'solid-js';
 import { t, setLanguage, currentLanguage, SUPPORTED_LANGUAGES } from '../i18n/init';
-import { getTheme, setTheme, getDesignStyle, setDesignStyle, DESIGN_STYLES, type Theme, type DesignStyle, getColorScheme, setColorScheme, COLOR_SCHEMES, COLOR_SCHEME_LABELS, type ColorScheme } from '../lib/theme';
+import { getTheme, setTheme, getDesignStyle, setDesignStyle, DESIGN_STYLES, type Theme, type DesignStyle, getColorScheme, setColorScheme, COLOR_SCHEMES, type ColorScheme } from '../lib/theme';
 import { getSetting, setSetting } from '../lib/settings';
 import { authStatus, walletAddress, walletSource } from '../lib/auth';
 import { navigate } from '../lib/router';
@@ -86,18 +86,18 @@ export const SettingsView: Component = () => {
             </label>
           ))}
         </div>
-        <h3 style="margin-top: var(--spacing-md)">{t('settings_color_scheme') || 'Akzentfarbe'}</h3>
+        <h3 style="margin-top: var(--spacing-md)">{t('settings_color_scheme')}</h3>
         <select
           class="settings-select"
           value={colorScheme()}
           onChange={(e) => handleColorSchemeChange(e.currentTarget.value as ColorScheme)}
         >
           {COLOR_SCHEMES.map((s) => (
-            <option value={s}>{COLOR_SCHEME_LABELS[s]}</option>
+            <option value={s}>{t(`color_scheme_${s.replace('-', '_')}`)}</option>
           ))}
         </select>
 
-        <h3 style="margin-top: var(--spacing-md)">{t('settings_design_style') || 'Design-Stil'}</h3>
+        <h3 style="margin-top: var(--spacing-md)">{t('settings_design_style')}</h3>
         <div class="settings-style-grid">
           {DESIGN_STYLES.map((style) => (
             <button
@@ -370,7 +370,7 @@ export const SettingsView: Component = () => {
         .settings-sync-row { display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-sm); }
         .settings-status { font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-top: var(--spacing-xs); }
 
-        .settings-style-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--spacing-sm); margin-bottom: var(--spacing-md); }
+        .settings-style-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--spacing-sm); margin-bottom: var(--spacing-md); }
         .style-card {
           display: flex; flex-direction: column; align-items: center; gap: var(--spacing-xs);
           padding: var(--spacing-sm); border-radius: var(--radius-md);
@@ -405,6 +405,11 @@ export const SettingsView: Component = () => {
 
         .style-preview-classic .sp-bubble-peer { border-radius: 3px; border: 1px solid rgba(255,255,255,0.06); }
         .style-preview-classic .sp-bubble-own { border-radius: 3px; border: 1px solid rgba(162,155,254,0.2); }
+
+        .style-preview-modern { background: #0E1621; }
+        .style-preview-modern .sp-sidebar { background: #182533; border-right-color: #1F2C3A; }
+        .style-preview-modern .sp-bubble-peer { background: #182533; border-radius: 8px; }
+        .style-preview-modern .sp-bubble-own { background: #2B5278; border-radius: 8px; }
       `}</style>
     </div>
   );
