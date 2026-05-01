@@ -299,5 +299,20 @@
   "chat_member_count": "{{count}} members",
   "channel_avatar_change": "Change",
   "channel_avatar_remove": "Remove",
-  "channel_avatar_upload": "Upload"
+  "channel_avatar_upload": "Upload",
+  "channel_logo_only_images": "Only images allowed",
+  "channel_logo_too_large": "Image too large (max 5 MB)",
+  "channel_logo_saved": "Avatar saved",
+  "channel_logo_upload_failed": "Upload failed",
+  "channel_logo_removed": "Avatar removed",
+  "channel_logo_remove_failed": "Failed to remove",
+  "channel_no_members": "No members",
+  "channel_moderator": "Moderator",
+  "channel_verified": "Verified",
+  "color_scheme_default": "Ogmara Blue (default)",
+  "color_scheme_amber": "Amber",
+  "color_scheme_teal": "Teal",
+  "color_scheme_violet": "Violet",
+  "color_scheme_coral": "Coral",
+  "color_scheme_neutral_gray": "Neutral Gray"
 }

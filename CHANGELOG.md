@@ -5,7 +5,7 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.28.0] - 2026-04-12
+## [0.28.0] - 2026-05-01
 
 ### Added
 - **"Modern" design style** — opt-in 5th style selectable in Settings. Features:
@@ -19,8 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Mobile single-pane navigation with reactive viewport switching
   - Back arrow on mobile detail views
   - Uniform dark background across all areas
+  - Dedicated `chat-view.css` with bubble/reply/reaction/scroll-FAB/unread-divider
+    styling — scoped under `[data-style="modern"]` via CSS native nesting so it
+    has zero effect on Classic / Glassmorphism / Elevated / Minimal.
 - **Color scheme selector** — accent color dropdown in Settings
   (Ogmara Blue, Amber, Teal, Violet, Coral, Neutral Gray). Works with all styles.
+  Synced across devices via the existing settings-sync flow.
 - **Network activity bar** — animated 2px bar under toolbar, shows loading state
   for L2 node requests. Warning label after 1.5s slow threshold.
 - **Mobile navigation** — reactive viewport signal, single-pane layout below 768px,
@@ -35,11 +39,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verified badges, and role indicators.
 - **Timestamp normalization** — handles ISO strings, numeric strings, and unix
   seconds/milliseconds transparently across all views.
+- **Bare `/chat` route restores the last visited channel** — opening `#/chat`
+  with no channel ID falls back to `lastChannel` from settings if available.
+- **Context-menu second-pass viewport clamp** — the right-click menu re-measures
+  its actual size after mount and nudges back into the viewport if the static
+  pre-clamp underestimated (e.g. all moderator actions visible on a small window).
+
+### Changed
+- **Modern is the new default design style for new users.** Existing users keep
+  whatever style they had selected — only fresh installs (no `ogmara.designStyle`
+  in localStorage) pick up the new default. Settings list reordered so Modern
+  appears first.
+- **All user-facing strings now go through i18n** — replaced hardcoded German
+  fallbacks in `theme.ts`, `ChannelSettingsView.tsx`, and `SettingsView.tsx`
+  with `t()` calls. Adds `color_scheme_*`, `channel_logo_*`, `channel_no_members`,
+  `channel_moderator`, `channel_verified` keys to all 7 locales.
+- **`chat_member_count` translation** — added to es, ja, pt, ru, zh
+  (was previously only in en/de).
+- **Settings-style grid uses `auto-fit`** — replaces fixed `repeat(4, 1fr)`
+  so the new 5-style grid no longer wraps with an orphan tile.
+- **Settings sync now covers `theme`, `designStyle`, and `colorScheme`** as
+  raw-string keys, fixing a pre-existing JSON round-trip bug for `theme`.
 
 ### Fixed
+- **`package.json` version** now matches the CHANGELOG entry (was 0.27.2).
+- **Modern style no longer overrides `--font-size-*` tokens** — only colors,
+  radii and shadows differ between styles per project convention.
+- **Modern style preview thumbnail** added to Settings (was empty).
 - Authenticated channel list fetch so private channels appear when logged in.
 - Auto-scroll waits for images to load before final scroll position.
 - DM conversation auto-scroll on new messages and after sending.
+
+### Removed
+- Dead imports (`showMobileList`, `isModernStyle`) in `ChannelJoinView.tsx`
+  and `NewsView.tsx`.
 
 ## [0.27.2] - 2026-04-11
 

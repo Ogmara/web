@@ -12,6 +12,7 @@ import { getClient } from './lib/api';
 import { installNetworkActivityTracker } from './lib/network-activity';
 import './styles/global.css';
 import './styles/design-styles.css';
+import './styles/chat-view.css';
 
 installNetworkActivityTracker();
 

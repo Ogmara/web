@@ -295,5 +295,21 @@
   "channel_avatar_label": "Avatar do canal",
   "channel_avatar_change": "Alterar",
   "channel_avatar_remove": "Remover",
-  "channel_avatar_upload": "Enviar"
+  "channel_avatar_upload": "Enviar",
+  "chat_member_count": "{{count}} membros",
+  "channel_logo_only_images": "Apenas imagens permitidas",
+  "channel_logo_too_large": "Imagem muito grande (máx 5 MB)",
+  "channel_logo_saved": "Avatar salvo",
+  "channel_logo_upload_failed": "Falha no envio",
+  "channel_logo_removed": "Avatar removido",
+  "channel_logo_remove_failed": "Falha ao remover",
+  "channel_no_members": "Sem membros",
+  "channel_moderator": "Moderador",
+  "channel_verified": "Verificado",
+  "color_scheme_default": "Azul Ogmara (padrão)",
+  "color_scheme_amber": "Âmbar",
+  "color_scheme_teal": "Verde-azulado",
+  "color_scheme_violet": "Violeta",
+  "color_scheme_coral": "Coral",
+  "color_scheme_neutral_gray": "Cinza neutro"
 }

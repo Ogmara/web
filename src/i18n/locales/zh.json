@@ -295,5 +295,21 @@
   "channel_avatar_label": "频道头像",
   "channel_avatar_change": "更改",
   "channel_avatar_remove": "删除",
-  "channel_avatar_upload": "上传"
+  "channel_avatar_upload": "上传",
+  "chat_member_count": "{{count}} 位成员",
+  "channel_logo_only_images": "仅允许图片",
+  "channel_logo_too_large": "图片过大 (最大 5 MB)",
+  "channel_logo_saved": "头像已保存",
+  "channel_logo_upload_failed": "上传失败",
+  "channel_logo_removed": "头像已删除",
+  "channel_logo_remove_failed": "删除失败",
+  "channel_no_members": "无成员",
+  "channel_moderator": "版主",
+  "channel_verified": "已验证",
+  "color_scheme_default": "Ogmara 蓝 (默认)",
+  "color_scheme_amber": "琥珀色",
+  "color_scheme_teal": "青色",
+  "color_scheme_violet": "紫罗兰",
+  "color_scheme_coral": "珊瑚色",
+  "color_scheme_neutral_gray": "中性灰"
 }
