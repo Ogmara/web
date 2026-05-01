@@ -21,6 +21,7 @@
  */
 
 import { createSignal } from 'solid-js';
+import { getSetting } from './settings';
 
 export type ViewName =
   | 'chat'
@@ -73,6 +74,13 @@ function parseHash(hash: string): Route {
       }
       if (second) {
         return { view: 'chat', params: { channelId: second }, query };
+      }
+      // No channelId in URL — restore last visited channel if available
+      {
+        const last = getSetting('lastChannel');
+        if (last) {
+          return { view: 'chat', params: { channelId: String(last) }, query };
+        }
       }
       return { view: 'chat', params: {}, query };
 

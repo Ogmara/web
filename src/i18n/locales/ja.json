@@ -295,5 +295,21 @@
   "channel_avatar_label": "チャンネルアバター",
   "channel_avatar_change": "変更",
   "channel_avatar_remove": "削除",
-  "channel_avatar_upload": "アップロード"
+  "channel_avatar_upload": "アップロード",
+  "chat_member_count": "{{count}} メンバー",
+  "channel_logo_only_images": "画像のみ許可されています",
+  "channel_logo_too_large": "画像が大きすぎます (最大 5 MB)",
+  "channel_logo_saved": "アバターを保存しました",
+  "channel_logo_upload_failed": "アップロードに失敗しました",
+  "channel_logo_removed": "アバターを削除しました",
+  "channel_logo_remove_failed": "削除に失敗しました",
+  "channel_no_members": "メンバーなし",
+  "channel_moderator": "モデレーター",
+  "channel_verified": "認証済み",
+  "color_scheme_default": "Ogmara ブルー (デフォルト)",
+  "color_scheme_amber": "アンバー",
+  "color_scheme_teal": "ティール",
+  "color_scheme_violet": "バイオレット",
+  "color_scheme_coral": "コーラル",
+  "color_scheme_neutral_gray": "ニュートラルグレー"
 }

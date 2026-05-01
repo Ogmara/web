@@ -1035,7 +1035,22 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         <div
           class="user-context-menu"
           style={{ left: `${userMenu()!.x}px`, top: `${userMenu()!.y}px` }}
-          ref={ctxMenuRef}
+          ref={(el) => {
+            ctxMenuRef = el;
+            // Re-measure once mounted: the openUserMenu() pre-clamp uses an
+            // estimated size; if the menu is taller (e.g. all moderator
+            // actions visible), nudge it back into the viewport.
+            if (!el) return;
+            requestAnimationFrame(() => {
+              const rect = el.getBoundingClientRect();
+              if (rect.bottom > window.innerHeight - MENU_EDGE_MARGIN) {
+                el.style.top = `${Math.max(MENU_EDGE_MARGIN, window.innerHeight - rect.height - MENU_EDGE_MARGIN)}px`;
+              }
+              if (rect.right > window.innerWidth - MENU_EDGE_MARGIN) {
+                el.style.left = `${Math.max(MENU_EDGE_MARGIN, window.innerWidth - rect.width - MENU_EDGE_MARGIN)}px`;
+              }
+            });
+          }}
         >
           {/* Emoji reactions — modern style shows expandable grid */}
           <Show when={isModernStyle() && walletAddress() && !msgById().get(userMenu()!.msgId)?.deleted}>
