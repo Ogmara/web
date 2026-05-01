@@ -138,11 +138,11 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
 
   const handleLogoUpload = async (file: File) => {
     if (!file.type.startsWith('image/')) {
-      setLogoMsg('Nur Bilder erlaubt');
+      setLogoMsg(t('channel_logo_only_images'));
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setLogoMsg('Bild zu groß (max 5 MB)');
+      setLogoMsg(t('channel_logo_too_large'));
       return;
     }
     setLogoUploading(true);
@@ -154,12 +154,12 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
         channelId: channelIdNum(),
         logoCid: uploaded.cid,
       });
-      setLogoMsg('Avatar gespeichert');
+      setLogoMsg(t('channel_logo_saved'));
       refetchDetail();
       // Notify the rest of the app so the sidebar chat-row refetches
       window.dispatchEvent(new Event('ogmara:channels-changed'));
     } catch (e: any) {
-      setLogoMsg(e?.message || 'Upload fehlgeschlagen');
+      setLogoMsg(e?.message || t('channel_logo_upload_failed'));
     } finally {
       setLogoUploading(false);
     }
@@ -173,11 +173,11 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
         channelId: channelIdNum(),
         logoCid: '', // empty string = clear
       });
-      setLogoMsg('Avatar entfernt');
+      setLogoMsg(t('channel_logo_removed'));
       refetchDetail();
       window.dispatchEvent(new Event('ogmara:channels-changed'));
     } catch (e: any) {
-      setLogoMsg(e?.message || 'Fehler beim Entfernen');
+      setLogoMsg(e?.message || t('channel_logo_remove_failed'));
     } finally {
       setLogoUploading(false);
     }
@@ -275,7 +275,7 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
       {/* Channel avatar (logo) — only for moderators/owner */}
       <Show when={isMod()}>
         <div class="ch-section">
-          <h3>{t('channel_avatar_label') || 'Kanal-Avatar'}</h3>
+          <h3>{t('channel_avatar_label')}</h3>
           <div class="ch-avatar-row">
             <div class="ch-avatar-preview">
               <Show
@@ -311,12 +311,12 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
                 disabled={logoUploading()}
               >
                 {logoUploading()
-                  ? (t('loading') || 'Wird geladen…')
-                  : (detail()?.channel.logo_cid ? (t('channel_avatar_change') || 'Ändern') : (t('channel_avatar_upload') || 'Hochladen'))}
+                  ? t('loading')
+                  : (detail()?.channel.logo_cid ? t('channel_avatar_change') : t('channel_avatar_upload'))}
               </button>
               <Show when={detail()?.channel.logo_cid && !logoUploading()}>
                 <button class="ch-remove-btn" onClick={handleLogoRemove}>
-                  {t('channel_avatar_remove') || 'Entfernen'}
+                  {t('channel_avatar_remove')}
                 </button>
               </Show>
             </div>
@@ -363,7 +363,7 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
           </h3>
           <Show
             when={members()!.members.length > 0}
-            fallback={<p class="ch-empty">{t('channel_no_members') || 'Keine Mitglieder'}</p>}
+            fallback={<p class="ch-empty">{t('channel_no_members')}</p>}
           >
             <div class="ch-member-list">
               <For each={members()!.members}>
@@ -390,7 +390,7 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
                         <div class="ch-member-name-row">
                           <span class="ch-member-name">{memberDisplayName(member.address)}</span>
                           <Show when={prof()?.verified}>
-                            <span class="ch-member-verified" title="Verifiziert">✓</span>
+                            <span class="ch-member-verified" title={t('channel_verified')}>✓</span>
                           </Show>
                         </div>
                         <Show
@@ -398,7 +398,7 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
                           fallback={
                             <Show when={member.role !== 'member'}>
                               <div class="ch-member-role">
-                                {member.role === 'creator' ? (t('channel_owner') || 'Ersteller') : (t('channel_moderator') || 'Moderator')}
+                                {member.role === 'creator' ? t('channel_owner') : t('channel_moderator')}
                               </div>
                             </Show>
                           }
@@ -409,7 +409,7 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
                             <Show when={member.role !== 'member'}>
                               <span class="ch-member-sep">·</span>
                               <span class="ch-member-role">
-                                {member.role === 'creator' ? (t('channel_owner') || 'Ersteller') : (t('channel_moderator') || 'Moderator')}
+                                {member.role === 'creator' ? t('channel_owner') : t('channel_moderator')}
                               </span>
                             </Show>
                           </div>

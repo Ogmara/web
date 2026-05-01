@@ -16,30 +16,23 @@ import { createSignal } from 'solid-js';
 export type Theme = 'light' | 'dark' | 'system';
 export type DesignStyle = 'classic' | 'glassmorphism' | 'elevated' | 'minimal' | 'modern';
 
-export const DESIGN_STYLES: DesignStyle[] = ['glassmorphism', 'elevated', 'minimal', 'modern', 'classic'];
+export const DESIGN_STYLES: DesignStyle[] = ['modern', 'glassmorphism', 'elevated', 'minimal', 'classic'];
 
 export type ColorScheme = 'default' | 'amber' | 'teal' | 'violet' | 'coral' | 'neutral-gray';
 export const COLOR_SCHEMES: ColorScheme[] = ['default', 'amber', 'teal', 'violet', 'coral', 'neutral-gray'];
-export const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = {
-  default: 'Ogmara-Blau (Standard)',
-  amber: 'Amber',
-  teal: 'Teal',
-  violet: 'Violet',
-  coral: 'Coral',
-  'neutral-gray': 'Neutral Gray',
-};
 
 const STORAGE_KEY = 'ogmara.theme';
 const STYLE_KEY = 'ogmara.designStyle';
 const SCHEME_KEY = 'ogmara.colorScheme';
 
-/** Get the current design style (validated against known values). */
+/** Get the current design style (validated against known values).
+ *  Default for new users is `modern`. Existing users keep their saved choice. */
 export function getDesignStyle(): DesignStyle {
   const stored = localStorage.getItem(STYLE_KEY);
   if (stored && DESIGN_STYLES.includes(stored as DesignStyle)) {
     return stored as DesignStyle;
   }
-  return 'glassmorphism';
+  return 'modern';
 }
 
 /** Reactive signal for the current design style — components can use this

@@ -11,8 +11,6 @@ import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, walletAddress } from '../lib/auth';
 import { navigate } from '../lib/router';
-import { showMobileList } from '../lib/mobile-nav';
-import { isModernStyle } from '../lib/theme';
 import { addJoinedChannel } from '../components/Sidebar';
 
 interface ChannelJoinProps {

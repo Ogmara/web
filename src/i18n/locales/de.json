@@ -296,5 +296,20 @@
   "chat_member_count": "{{count}} Mitglieder",
   "channel_avatar_change": "Ändern",
   "channel_avatar_remove": "Entfernen",
-  "channel_avatar_upload": "Hochladen"
+  "channel_avatar_upload": "Hochladen",
+  "channel_logo_only_images": "Nur Bilder erlaubt",
+  "channel_logo_too_large": "Bild zu groß (max 5 MB)",
+  "channel_logo_saved": "Avatar gespeichert",
+  "channel_logo_upload_failed": "Upload fehlgeschlagen",
+  "channel_logo_removed": "Avatar entfernt",
+  "channel_logo_remove_failed": "Fehler beim Entfernen",
+  "channel_no_members": "Keine Mitglieder",
+  "channel_moderator": "Moderator",
+  "channel_verified": "Verifiziert",
+  "color_scheme_default": "Ogmara-Blau (Standard)",
+  "color_scheme_amber": "Bernstein",
+  "color_scheme_teal": "Türkis",
+  "color_scheme_violet": "Violett",
+  "color_scheme_coral": "Koralle",
+  "color_scheme_neutral_gray": "Neutralgrau"
 }

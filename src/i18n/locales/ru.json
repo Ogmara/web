@@ -295,5 +295,21 @@
   "channel_avatar_label": "Аватар канала",
   "channel_avatar_change": "Изменить",
   "channel_avatar_remove": "Удалить",
-  "channel_avatar_upload": "Загрузить"
+  "channel_avatar_upload": "Загрузить",
+  "chat_member_count": "{{count}} участников",
+  "channel_logo_only_images": "Разрешены только изображения",
+  "channel_logo_too_large": "Изображение слишком большое (макс 5 МБ)",
+  "channel_logo_saved": "Аватар сохранён",
+  "channel_logo_upload_failed": "Не удалось загрузить",
+  "channel_logo_removed": "Аватар удалён",
+  "channel_logo_remove_failed": "Не удалось удалить",
+  "channel_no_members": "Нет участников",
+  "channel_moderator": "Модератор",
+  "channel_verified": "Подтверждён",
+  "color_scheme_default": "Ogmara синий (по умолчанию)",
+  "color_scheme_amber": "Янтарный",
+  "color_scheme_teal": "Бирюзовый",
+  "color_scheme_violet": "Фиолетовый",
+  "color_scheme_coral": "Коралловый",
+  "color_scheme_neutral_gray": "Нейтральный серый"
 }
