@@ -26,6 +26,8 @@ export interface Settings {
   deviceRegistered: string;
   /** Push gateway URL. Empty = auto-derive from nodeUrl (same host, port 41722). */
   pushGatewayUrl: string;
+  /** Default tab to land on when opening the app with no explicit hash route. */
+  defaultLandingView: 'chat' | 'news';
 }
 
 const defaults: Settings = {
@@ -48,6 +50,7 @@ const defaults: Settings = {
   nodeUrl: '',
   deviceRegistered: '',
   pushGatewayUrl: '',
+  defaultLandingView: 'chat',
 };
 
 /** Load a setting from localStorage with fallback to default. */

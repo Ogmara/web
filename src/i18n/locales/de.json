@@ -48,8 +48,6 @@
   "settings_compact": "Kompaktes Layout",
   "settings_design_style": "Design-Stil",
   "settings_style_glassmorphism": "Glasmorphismus",
-  "settings_style_elevated": "Erhaben",
-  "settings_style_minimal": "Minimal",
   "settings_style_classic": "Klassisch",
   "settings_media": "Medien",
   "settings_media_always": "Bilder und Videos direkt anzeigen",
@@ -317,5 +315,8 @@
   "device_link_action": "Gerät verknüpfen",
   "device_link_retrying": "Verknüpfen…",
   "device_link_open_wallet": "Wallet öffnen",
-  "device_link_failed": "Verknüpfung fehlgeschlagen. Öffne die Klever Extension und versuche es erneut, oder delegiere manuell über die Wallet-Seite."
+  "device_link_failed": "Verknüpfung fehlgeschlagen. Öffne die Klever Extension und versuche es erneut, oder delegiere manuell über die Wallet-Seite.",
+  "settings_default_landing": "Startansicht",
+  "settings_default_landing_chat": "Chat",
+  "settings_default_landing_news": "News"
 }

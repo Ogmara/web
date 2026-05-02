@@ -28,6 +28,13 @@ if (getSetting('compactLayout')) {
   document.documentElement.classList.add('compact');
 }
 
+// Apply user's default landing view if no specific route is in the URL
+const initialHash = window.location.hash;
+if (!initialHash || initialHash === '#' || initialHash === '#/') {
+  const defaultView = getSetting('defaultLandingView');
+  window.location.hash = defaultView === 'chat' ? '/chat' : '/news';
+}
+
 // Detect wallet integrations
 detectKleverExtension();
 detectK5();
