@@ -94,8 +94,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - DM conversation auto-scroll on new messages and after sending.
 
 ### Removed
+- **"Minimal" and "Elevated" design styles** — visually similar to the others
+  and not worth the maintenance cost. Existing users on those styles fall
+  through to the default (Modern) automatically because `getDesignStyle()`
+  validates against `DESIGN_STYLES` before returning. CSS dropped ~380 lines
+  (~7 kB minified). Surviving styles: Modern (default), Glassmorphism,
+  Classic.
 - Dead imports (`showMobileList`, `isModernStyle`) in `ChannelJoinView.tsx`
   and `NewsView.tsx`.
+
+### Added (this iteration)
+- **Default landing view setting** in Settings: choose Chat or News as the
+  initial screen when opening the app with no specific URL hash. Defaults
+  to Chat. Translated for all 7 locales.
+- **Stale nodeUrl migration** — clients that still have the pre-SDK-0.13.1
+  default `https://ogmara.org` (the marketing site, not a node) saved in
+  localStorage now get auto-reset to the current default on next launch.
+  Symptom was the StatusBar showing `ogmara.org` instead of `node.ogmara.org`
+  in dev sessions seeded from old settings.
 
 ## [0.27.2] - 2026-04-11
 

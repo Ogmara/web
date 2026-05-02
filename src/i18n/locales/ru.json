@@ -40,8 +40,6 @@
   "settings_compact": "Компактный вид",
   "settings_design_style": "Стиль дизайна",
   "settings_style_glassmorphism": "Стекломорфизм",
-  "settings_style_elevated": "Объёмный",
-  "settings_style_minimal": "Минимализм",
   "settings_style_classic": "Классика",
   "settings_media": "Медиа",
   "settings_media_always": "Показывать изображения и видео встроенно",
@@ -317,5 +315,8 @@
   "device_link_action": "Привязать устройство",
   "device_link_retrying": "Привязка…",
   "device_link_open_wallet": "Открыть кошелёк",
-  "device_link_failed": "Не удалось привязать устройство. Откройте расширение Klever и повторите попытку или делегируйте вручную на странице кошелька."
+  "device_link_failed": "Не удалось привязать устройство. Откройте расширение Klever и повторите попытку или делегируйте вручную на странице кошелька.",
+  "settings_default_landing": "Начальный экран",
+  "settings_default_landing_chat": "Чат",
+  "settings_default_landing_news": "Новости"
 }

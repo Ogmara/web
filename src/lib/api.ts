@@ -7,8 +7,34 @@ import { getSetting, setSetting } from './settings';
 
 let client: OgmaraClient | null = null;
 
+/**
+ * URLs that point at the website (or other non-node hosts) but were ever
+ * written into the saved nodeUrl. Pre-SDK 0.13.1 the DEFAULT_NODE_URL was
+ * `https://ogmara.org` (the marketing site, not a node); existing browsers
+ * still carry that value in localStorage. Any saved nodeUrl matching one
+ * of these gets reset on the next read so the client doesn't keep hitting
+ * a non-node host.
+ */
+const STALE_NODE_URLS = new Set([
+  'https://ogmara.org',
+  'https://ogmara.org/',
+  'http://ogmara.org',
+  'http://ogmara.org/',
+]);
+
+/** Discard saved nodeUrl values that point at known non-node hosts. */
+function migrateStaleNodeUrl(): void {
+  const saved = getSetting('nodeUrl');
+  if (saved && STALE_NODE_URLS.has(saved)) {
+    // eslint-disable-next-line no-console
+    console.info('[api] Resetting stale nodeUrl', saved, '→ default');
+    setSetting('nodeUrl', '');
+  }
+}
+
 /** In dev mode, route API calls through the Vite dev proxy to avoid CORS. */
 function resolveNodeUrl(): string {
+  migrateStaleNodeUrl();
   const saved = getSetting('nodeUrl');
   if (saved) return saved;
   // On localhost the dev proxy forwards /api/v1/* to the upstream node
@@ -38,6 +64,7 @@ export function switchNode(nodeUrl: string): void {
 
 /** Get the current node URL. */
 export function getCurrentNodeUrl(): string {
+  migrateStaleNodeUrl();
   return getSetting('nodeUrl') || DEFAULT_NODE_URL;
 }
 
