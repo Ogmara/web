@@ -702,6 +702,10 @@
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  /* Selected chat-row background — darkened accent so secondary text stays
+     readable. Adapts to every color scheme via color-mix. */
+  --color-chat-active-bg: color-mix(in srgb, var(--color-accent-primary) 38%, var(--color-bg-secondary));
 }
 
 /* Full-width layout */
