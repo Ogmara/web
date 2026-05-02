@@ -71,6 +71,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   raw-string keys, fixing a pre-existing JSON round-trip bug for `theme`.
 
 ### Fixed
+- **News tab landed on a previously-open detail post**, not the feed. The
+  modern sidebar tracked the last route per tab and stickied the URL even
+  when it was a `news-detail` or `compose` view. Now the tracker only
+  sticks on the bare `/news` list — clicking the News tab always returns
+  to the feed.
+- **"Back to feed" from a news post** went to the last visited chat, not
+  the feed, because `goBack()` falls through to browser history. Replaced
+  with an explicit `navigate('/news')` so the label matches the action.
 - **Selected channel row in modern sidebar** used the fully-saturated accent
   color, making the channel description (rendered in `--color-text-secondary`)
   almost unreadable. Replaced with a new `--color-chat-active-bg` token —
