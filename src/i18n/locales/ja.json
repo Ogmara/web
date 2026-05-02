@@ -311,5 +311,11 @@
   "color_scheme_teal": "ティール",
   "color_scheme_violet": "バイオレット",
   "color_scheme_coral": "コーラル",
-  "color_scheme_neutral_gray": "ニュートラルグレー"
+  "color_scheme_neutral_gray": "ニュートラルグレー",
+  "device_link_title": "デバイスがウォレットに紐付けられていません",
+  "device_link_body": "プライベートチャンネル、DM、通知、チャンネル管理操作は、このデバイスがオンチェーンでウォレットに委任されるまで機能しません。",
+  "device_link_action": "デバイスを紐付け",
+  "device_link_retrying": "紐付け中…",
+  "device_link_open_wallet": "ウォレットを開く",
+  "device_link_failed": "デバイスを紐付けできませんでした。Klever 拡張機能を開いて再試行するか、ウォレットページから手動で委任してください。"
 }

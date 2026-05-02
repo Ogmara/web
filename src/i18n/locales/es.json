@@ -311,5 +311,11 @@
   "color_scheme_teal": "Verde azulado",
   "color_scheme_violet": "Violeta",
   "color_scheme_coral": "Coral",
-  "color_scheme_neutral_gray": "Gris neutral"
+  "color_scheme_neutral_gray": "Gris neutral",
+  "device_link_title": "Dispositivo no vinculado a tu billetera",
+  "device_link_body": "Los canales privados, MD, notificaciones y acciones de administración no funcionarán hasta que este dispositivo se delegue on-chain a tu billetera.",
+  "device_link_action": "Vincular dispositivo",
+  "device_link_retrying": "Vinculando…",
+  "device_link_open_wallet": "Abrir billetera",
+  "device_link_failed": "No se pudo vincular el dispositivo. Abre la extensión Klever e intenta de nuevo, o delega manualmente desde la billetera."
 }

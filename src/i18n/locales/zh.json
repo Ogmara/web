@@ -311,5 +311,11 @@
   "color_scheme_teal": "青色",
   "color_scheme_violet": "紫罗兰",
   "color_scheme_coral": "珊瑚色",
-  "color_scheme_neutral_gray": "中性灰"
+  "color_scheme_neutral_gray": "中性灰",
+  "device_link_title": "设备未与您的钱包关联",
+  "device_link_body": "私人频道、私信、通知和频道管理操作将无法使用，直到此设备在链上委托给您的钱包。",
+  "device_link_action": "关联设备",
+  "device_link_retrying": "关联中…",
+  "device_link_open_wallet": "打开钱包",
+  "device_link_failed": "无法关联此设备。请打开 Klever 扩展并重试，或在钱包页面手动委托。"
 }
