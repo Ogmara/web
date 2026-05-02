@@ -71,6 +71,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   raw-string keys, fixing a pre-existing JSON round-trip bug for `theme`.
 
 ### Fixed
+- **Selected channel row in modern sidebar** used the fully-saturated accent
+  color, making the channel description (rendered in `--color-text-secondary`)
+  almost unreadable. Replaced with a new `--color-chat-active-bg` token —
+  `color-mix(in srgb, var(--color-accent-primary) 38%, var(--color-bg-secondary))`
+  — so the selection remains visually prominent but text contrast holds across
+  all 6 color schemes.
 - **`package.json` version** now matches the CHANGELOG entry (was 0.27.2).
 - **Modern style no longer overrides `--font-size-*` tokens** — only colors,
   radii and shadows differ between styles per project convention.

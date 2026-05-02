@@ -582,7 +582,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
               const isActive = () => currentChannelId() === channel.channel_id;
               return (
                 <button
-                  style={`display:flex; align-items:center; gap:10px; padding:10px 12px; width:100%; text-align:left; cursor:pointer; transition:background 0.1s; background:${isActive() ? 'var(--color-accent-primary)' : 'transparent'}`}
+                  style={`display:flex; align-items:center; gap:10px; padding:10px 12px; width:100%; text-align:left; cursor:pointer; transition:background 0.1s; background:${isActive() ? 'var(--color-chat-active-bg)' : 'transparent'}`}
                   onClick={() => go(`/chat/${channel.channel_id}`)}
                   onContextMenu={(e) => handleContextMenu(e, channel.channel_id, channel.creator)}
                 >
