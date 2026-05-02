@@ -311,5 +311,11 @@
   "color_scheme_teal": "Türkis",
   "color_scheme_violet": "Violett",
   "color_scheme_coral": "Koralle",
-  "color_scheme_neutral_gray": "Neutralgrau"
+  "color_scheme_neutral_gray": "Neutralgrau",
+  "device_link_title": "Gerät ist nicht mit deiner Wallet verknüpft",
+  "device_link_body": "Private Kanäle, DMs, Benachrichtigungen und Kanal-Admin-Funktionen funktionieren erst, wenn dieses Gerät on-chain an deine Wallet delegiert wurde.",
+  "device_link_action": "Gerät verknüpfen",
+  "device_link_retrying": "Verknüpfen…",
+  "device_link_open_wallet": "Wallet öffnen",
+  "device_link_failed": "Verknüpfung fehlgeschlagen. Öffne die Klever Extension und versuche es erneut, oder delegiere manuell über die Wallet-Seite."
 }
