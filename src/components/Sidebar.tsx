@@ -167,11 +167,15 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
   let lastFeedRoute = '/news';
   let lastDmRoute = '/dm';
 
-  // Track current route changes to update last-per-tab
+  // Track current route changes to update last-per-tab.
+  // Only stick on the LIST views (`/news`, `/dm`) — clicking the tab should
+  // always return to the feed/list, not to a previously-open detail or
+  // compose screen. (For chat we do stick on the channel because each
+  // channel is its own context the user wants to resume.)
   createEffect(() => {
     const r = route();
     if (r.view === 'chat' && r.params.channelId) lastChatRoute = `/chat/${r.params.channelId}`;
-    if (r.view === 'news' || r.view === 'news-detail' || r.view === 'compose') lastFeedRoute = window.location.hash.replace('#', '') || '/news';
+    if (r.view === 'news') lastFeedRoute = '/news';
     if (r.view === 'dm-conversation' && r.params.address) lastDmRoute = `/dm/${r.params.address}`;
   });
 
