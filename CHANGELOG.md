@@ -5,6 +5,15 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.1] - 2026-05-02
+
+### Security
+- **Bumped `postcss` to ≥ 8.5.10 via overrides** — addresses CVE-2026-41305
+  (Dependabot alert #3, medium severity: XSS via unescaped `</style>` in CSS
+  stringify output). PostCSS is a transitive build-time dep via Vite; the
+  vulnerable code path requires parsing user-submitted CSS, which Ogmara
+  doesn't do. Bumped anyway so the security tab is clean.
+
 ## [0.28.0] - 2026-05-01
 
 ### Added
