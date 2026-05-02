@@ -73,6 +73,7 @@ export async function initAuth(): Promise<void> {
           // Re-register device if cache key was lost (e.g. localStorage cleared)
           ensureDeviceRegistered(signer, savedAddress, deviceAddr);
           checkRegistrationStatus();
+          verifyDeviceMapping();
         } else if (savedSource === 'k5-delegation' && savedAddress) {
           const deviceAddr = signer.deviceAddress;
           setL2Address(deviceAddr);
@@ -82,6 +83,7 @@ export async function initAuth(): Promise<void> {
           setAuthStatus('ready');
           ensureDeviceRegistered(signer, savedAddress, deviceAddr);
           checkRegistrationStatus();
+          verifyDeviceMapping();
         } else if (savedSource === 'builtin' && savedAddress) {
           // Built-in wallet mode: signer IS the wallet, uses klv1...
           setL2Address(address);
@@ -252,6 +254,7 @@ export async function connectKleverExtension(extensionAddress: string): Promise<
   setSetting('walletAddress', extensionAddress);
   setAuthStatus('ready');
   checkRegistrationStatus();
+  verifyDeviceMapping();
 }
 
 /**
@@ -425,6 +428,7 @@ export async function connectK5Delegation(k5WalletAddress: string): Promise<void
   setSetting('walletAddress', k5WalletAddress);
   setAuthStatus('ready');
   checkRegistrationStatus();
+  verifyDeviceMapping();
 }
 
 /** Disconnect wallet and wipe vault. */
@@ -466,5 +470,89 @@ export async function checkRegistrationStatus(): Promise<void> {
   } catch {
     // User not found on node or network error — assume unverified
     setIsRegistered(false);
+  }
+}
+
+/**
+ * Re-attempt device → wallet registration on the L2 node.
+ *
+ * Used by the device-mapping banner: clears the deviceRegistered cache,
+ * re-runs `registerDeviceOnNode` with the current extension session, then
+ * re-verifies. The user must have an active Klever Extension popup
+ * available (we'll prompt for a signature). Returns true on success.
+ */
+export async function relinkDevice(): Promise<boolean> {
+  const source = walletSource();
+  const wallet = walletAddress();
+  const signer = vaultGetSigner();
+  if (source !== 'klever-extension' || !wallet || !signer) return false;
+  // Bust the cache so registerDeviceOnNode actually runs
+  setSetting('deviceRegistered', '');
+  signer.walletAddress = wallet;
+  try {
+    await registerDeviceOnNode(signer, wallet);
+    setSetting('deviceRegistered', `${wallet}:${signer.deviceAddress}`);
+    setDeviceMappingFailed(false);
+    setDeviceMappingError(null);
+    await verifyDeviceMapping();
+    return !deviceMappingFailed();
+  } catch (e: any) {
+    setDeviceMappingFailed(true);
+    setDeviceMappingError(e?.message || String(e));
+    return false;
+  }
+}
+
+/**
+ * Verify that the L2 node has the current device → wallet mapping live.
+ *
+ * Authenticates as the device key and calls `GET /api/v1/devices`. The node's
+ * auth middleware resolves the signing device address through DEVICES CF and
+ * returns the resolved wallet plus the device list. If the resolution returns
+ * our connected wallet AND our device is in the list, the mapping is live.
+ *
+ * If not (registration call silently failed, node lost the mapping, cache
+ * lied) we mark `deviceMappingFailed` so the UI can surface a banner. Without
+ * this check, the user appears authenticated but every read/write is keyed to
+ * the orphan device address — invisible private channels, missing DMs, every
+ * advanced action rejected with "on-chain registration required".
+ *
+ * Only meaningful for `klever-extension` and `k5-delegation` modes; built-in
+ * wallets sign as themselves and never need a mapping.
+ */
+export async function verifyDeviceMapping(): Promise<void> {
+  const source = walletSource();
+  if (source !== 'klever-extension' && source !== 'k5-delegation') {
+    setDeviceMappingFailed(false);
+    setDeviceMappingError(null);
+    return;
+  }
+  const expectedWallet = walletAddress();
+  const expectedDevice = l2Address();
+  if (!expectedWallet || !expectedDevice) return;
+  try {
+    const resp = await getClient().listDevices();
+    const walletMatches = resp.wallet_address === expectedWallet;
+    const deviceListed = resp.devices.some((d) => d.device_address === expectedDevice);
+    if (walletMatches && deviceListed) {
+      setDeviceMappingFailed(false);
+      setDeviceMappingError(null);
+    } else {
+      setDeviceMappingFailed(true);
+      setDeviceMappingError(
+        walletMatches
+          ? 'Device key not in wallet device list'
+          : 'Node resolved a different wallet for this device key',
+      );
+    }
+  } catch (e: any) {
+    // Network errors don't necessarily mean broken mapping — only flip the
+    // flag for a clear "unauthorized" signal. Other errors leave existing
+    // state untouched.
+    const msg = e?.message || String(e);
+    if (msg.includes('401') || msg.includes('403')) {
+      setDeviceMappingFailed(true);
+      setDeviceMappingError(msg);
+    }
   }
 }

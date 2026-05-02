@@ -314,5 +314,11 @@
   "color_scheme_teal": "Teal",
   "color_scheme_violet": "Violet",
   "color_scheme_coral": "Coral",
-  "color_scheme_neutral_gray": "Neutral Gray"
+  "color_scheme_neutral_gray": "Neutral Gray",
+  "device_link_title": "Device not linked to your wallet",
+  "device_link_body": "Private channels, DMs, notifications and channel admin actions won't work until this device is delegated to your wallet on-chain.",
+  "device_link_action": "Link this device",
+  "device_link_retrying": "Linking…",
+  "device_link_open_wallet": "Open Wallet",
+  "device_link_failed": "Could not link this device. Open your Klever Extension and try again, or use the Wallet page to delegate manually."
 }
