@@ -48,8 +48,6 @@
   "settings_compact": "Layout compacto",
   "settings_design_style": "Estilo de design",
   "settings_style_glassmorphism": "Glasmorfismo",
-  "settings_style_elevated": "Elevado",
-  "settings_style_minimal": "Minimal",
   "settings_style_classic": "Clássico",
   "settings_media": "Mídia",
   "settings_media_always": "Mostrar imagens e vídeos inline",
@@ -317,5 +315,8 @@
   "device_link_action": "Vincular dispositivo",
   "device_link_retrying": "Vinculando…",
   "device_link_open_wallet": "Abrir carteira",
-  "device_link_failed": "Não foi possível vincular o dispositivo. Abra a extensão Klever e tente novamente, ou delegue manualmente pela página da carteira."
+  "device_link_failed": "Não foi possível vincular o dispositivo. Abra a extensão Klever e tente novamente, ou delegue manualmente pela página da carteira.",
+  "settings_default_landing": "Tela inicial",
+  "settings_default_landing_chat": "Chat",
+  "settings_default_landing_news": "Notícias"
 }

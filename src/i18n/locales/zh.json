@@ -48,8 +48,6 @@
   "settings_compact": "紧凑布局",
   "settings_design_style": "设计风格",
   "settings_style_glassmorphism": "玻璃拟态",
-  "settings_style_elevated": "立体卡片",
-  "settings_style_minimal": "极简",
   "settings_style_classic": "经典",
   "settings_media": "媒体",
   "settings_media_always": "直接显示图片和视频",
@@ -317,5 +315,8 @@
   "device_link_action": "关联设备",
   "device_link_retrying": "关联中…",
   "device_link_open_wallet": "打开钱包",
-  "device_link_failed": "无法关联此设备。请打开 Klever 扩展并重试，或在钱包页面手动委托。"
+  "device_link_failed": "无法关联此设备。请打开 Klever 扩展并重试，或在钱包页面手动委托。",
+  "settings_default_landing": "默认首页",
+  "settings_default_landing_chat": "聊天",
+  "settings_default_landing_news": "新闻"
 }

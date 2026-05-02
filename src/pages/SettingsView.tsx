@@ -33,6 +33,7 @@ export const SettingsView: Component = () => {
 
   const [designStyle, setDesignStyleState] = createSignal<DesignStyle>(getDesignStyle());
   const [colorScheme, setColorSchemeState] = createSignal<ColorScheme>(getColorScheme());
+  const [defaultLandingView, setDefaultLandingViewState] = createSignal<'chat' | 'news'>(getSetting('defaultLandingView'));
 
   const handleDesignStyleChange = (value: DesignStyle) => {
     setDesignStyleState(value);
@@ -114,6 +115,25 @@ export const SettingsView: Component = () => {
               </div>
               <span class="style-card-label">{t(`settings_style_${style}`) || style.charAt(0).toUpperCase() + style.slice(1)}</span>
             </button>
+          ))}
+        </div>
+
+        <h3 style="margin-top: var(--spacing-md)">{t('settings_default_landing')}</h3>
+        <div class="settings-radio-group">
+          {(['chat', 'news'] as const).map((value) => (
+            <label class="settings-radio">
+              <input
+                type="radio"
+                name="defaultLandingView"
+                value={value}
+                checked={defaultLandingView() === value}
+                onChange={() => {
+                  setDefaultLandingViewState(value);
+                  setSetting('defaultLandingView', value);
+                }}
+              />
+              {t(`settings_default_landing_${value}`)}
+            </label>
           ))}
         </div>
 
@@ -396,12 +416,6 @@ export const SettingsView: Component = () => {
         .style-preview-glassmorphism .sp-sidebar { background: rgba(255,255,255,0.06); border-right-color: rgba(255,255,255,0.1); }
         .style-preview-glassmorphism .sp-bubble-peer { background: rgba(255,255,255,0.06); border-radius: 6px; }
         .style-preview-glassmorphism .sp-bubble-own { background: rgba(162,155,254,0.2); border-radius: 6px; }
-
-        .style-preview-elevated .sp-bubble-peer { box-shadow: 0 1px 3px rgba(0,0,0,0.3); border-radius: 6px; }
-        .style-preview-elevated .sp-bubble-own { box-shadow: 0 1px 4px rgba(0,0,0,0.4); border-radius: 6px; }
-
-        .style-preview-minimal .sp-bubble-peer { border-radius: 2px 6px 6px 6px; background: #1e1e2a; }
-        .style-preview-minimal .sp-bubble-own { border-radius: 6px 2px 6px 6px; background: #2a2550; }
 
         .style-preview-classic .sp-bubble-peer { border-radius: 3px; border: 1px solid rgba(255,255,255,0.06); }
         .style-preview-classic .sp-bubble-own { border-radius: 3px; border: 1px solid rgba(162,155,254,0.2); }

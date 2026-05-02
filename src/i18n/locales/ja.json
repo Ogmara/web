@@ -48,8 +48,6 @@
   "settings_compact": "コンパクトレイアウト",
   "settings_design_style": "デザインスタイル",
   "settings_style_glassmorphism": "グラスモーフィズム",
-  "settings_style_elevated": "エレベーテッド",
-  "settings_style_minimal": "ミニマル",
   "settings_style_classic": "クラシック",
   "settings_media": "メディア",
   "settings_media_always": "画像と動画をインラインで表示",
@@ -317,5 +315,8 @@
   "device_link_action": "デバイスを紐付け",
   "device_link_retrying": "紐付け中…",
   "device_link_open_wallet": "ウォレットを開く",
-  "device_link_failed": "デバイスを紐付けできませんでした。Klever 拡張機能を開いて再試行するか、ウォレットページから手動で委任してください。"
+  "device_link_failed": "デバイスを紐付けできませんでした。Klever 拡張機能を開いて再試行するか、ウォレットページから手動で委任してください。",
+  "settings_default_landing": "デフォルト表示",
+  "settings_default_landing_chat": "チャット",
+  "settings_default_landing_news": "ニュース"
 }
