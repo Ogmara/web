@@ -26,6 +26,7 @@ import { ChannelJoinView } from './pages/ChannelJoinView';
 import { NotificationsView } from './pages/NotificationsView';
 import { FollowListView } from './pages/FollowListView';
 import { StatusBar } from './components/StatusBar';
+import { DeviceMappingBanner } from './components/DeviceMappingBanner';
 import { route } from './lib/router';
 
 export const App: Component = () => {
@@ -65,6 +66,7 @@ export const App: Component = () => {
           <span class="net-bar-label">{t('status_connecting') || 'Connecting to node…'}</span>
         </Show>
       </div>
+      <DeviceMappingBanner />
       <div class={bodyClass()}>
         <Sidebar onNavigate={() => { if (isMobileViewport()) showMobileDetail(); }} />
         <main class="main-content">

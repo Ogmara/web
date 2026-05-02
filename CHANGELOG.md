@@ -44,6 +44,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Context-menu second-pass viewport clamp** — the right-click menu re-measures
   its actual size after mount and nudges back into the viewport if the static
   pre-clamp underestimated (e.g. all moderator actions visible on a small window).
+- **Device-mapping verification + banner** — after each Klever-extension auth
+  success we now query `GET /api/v1/devices` and confirm the L2 node has a live
+  device → wallet mapping for the current session. If the resolver returns the
+  wrong wallet or our device isn't in the list, a warning banner appears across
+  the top of the app explaining that private channels, DMs, notifications and
+  channel-admin actions won't work, with a one-click "Link this device" button
+  that re-runs the on-node device registration through the extension. Closes a
+  silent-degradation failure mode where a session looked authenticated but every
+  request resolved to an orphan `ogd1...` identity.
 
 ### Changed
 - **Modern is the new default design style for new users.** Existing users keep
