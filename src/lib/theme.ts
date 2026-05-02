@@ -5,18 +5,17 @@
  *
  * Design styles control the visual language (shapes, shadows, effects) independently
  * from the color theme (light/dark). Available styles:
- * - classic: Original flat design
+ * - modern: Telegram-inspired bubble layout, the default
  * - glassmorphism: Frosted glass panels, gradient background, glow accents
- * - elevated: Layered shadows, bold radius, clear depth hierarchy
- * - minimal: Pill shapes, tight palette, content-first
+ * - classic: Original flat design
  */
 
 import { createSignal } from 'solid-js';
 
 export type Theme = 'light' | 'dark' | 'system';
-export type DesignStyle = 'classic' | 'glassmorphism' | 'elevated' | 'minimal' | 'modern';
+export type DesignStyle = 'classic' | 'glassmorphism' | 'modern';
 
-export const DESIGN_STYLES: DesignStyle[] = ['modern', 'glassmorphism', 'elevated', 'minimal', 'classic'];
+export const DESIGN_STYLES: DesignStyle[] = ['modern', 'glassmorphism', 'classic'];
 
 export type ColorScheme = 'default' | 'amber' | 'teal' | 'violet' | 'coral' | 'neutral-gray';
 export const COLOR_SCHEMES: ColorScheme[] = ['default', 'amber', 'teal', 'violet', 'coral', 'neutral-gray'];
