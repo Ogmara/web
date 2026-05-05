@@ -542,6 +542,23 @@
 .send-error-close { opacity: 0.7; flex-shrink: 0; }
 .send-error-banner:hover .send-error-close { opacity: 1; }
 
+/* ---------- Broadcast (read-only) channel banner ---------- */
+/* Replaces the composer for non-creator/non-mod members in ReadPublic
+   channels (protocol spec §3.6). Reactions remain enabled per-message. */
+.broadcast-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--color-bg-tertiary);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  user-select: none;
+}
+.broadcast-banner-icon { font-size: var(--font-size-lg); flex-shrink: 0; }
+.broadcast-banner-text { flex: 1; min-width: 0; }
+
 /* ---------- Edit / Reply indicators above the input ---------- */
 
 .edit-indicator {

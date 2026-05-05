@@ -98,6 +98,21 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
   const isOwner = () => detail()?.channel?.creator === walletAddress();
   const isMod = () => myRole() === 'moderator' || isOwner();
 
+  // Whether the current viewer holds a specific moderator capability flag.
+  // The owner has all capabilities implicitly. Moderators only have the
+  // capabilities granted at AddModerator time. Use this for gating UI that
+  // would 403 if the L2 node sees the action without the matching capability
+  // (e.g. ChannelUpdate requires `can_edit_info`).
+  type ModCap = 'can_mute' | 'can_kick' | 'can_ban' | 'can_pin' | 'can_edit_info' | 'can_delete_msgs';
+  const hasModCap = (cap: ModCap) => {
+    if (isOwner()) return true;
+    const me = walletAddress();
+    const m = members()?.members?.find((m) => m.address === me);
+    const perms = m?.permissions as Record<ModCap, boolean> | undefined;
+    return Boolean(perms?.[cap]);
+  };
+  const canEditInfo = () => hasModCap('can_edit_info');
+
   // --- Edit info ---
   const [editName, setEditName] = createSignal('');
   const [editDesc, setEditDesc] = createSignal('');
@@ -180,6 +195,45 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
       setLogoMsg(e?.message || t('channel_logo_remove_failed'));
     } finally {
       setLogoUploading(false);
+    }
+  };
+
+  // --- Posting mode toggle (Public ⇄ ReadPublic) ---
+  // Lets the creator / mods (with can_edit_info) flip a channel between
+  // open chat and broadcast mode at runtime. Hidden for Private channels —
+  // the L2 node rejects flips to/from Private (protocol spec §3.6).
+  const [postingModeSaving, setPostingModeSaving] = createSignal(false);
+  const [postingModeMsg, setPostingModeMsg] = createSignal('');
+  // Default `null` (not 0) so the toggle stays hidden until the API response
+  // actually loads. Defaulting to 0 (Public) would briefly show the toggle on
+  // a Private channel during the first render after navigation, leading to a
+  // 403 if the user clicks before the channel loads.
+  const channelType = (): number | null => {
+    const t = detail()?.channel?.channel_type;
+    return typeof t === 'number' ? t : null;
+  };
+  const isPrivateChannel = () => channelType() === 2;
+  const isReadPublicChannel = () => channelType() === 1;
+  const channelTypeKnown = () => channelType() !== null;
+  const handleTogglePostingMode = async () => {
+    if (isPrivateChannel()) return; // sanity guard; UI hides the toggle anyway
+    setPostingModeSaving(true);
+    setPostingModeMsg('');
+    try {
+      // Flip Public (0) ⇄ ReadPublic (1). The L2 node rejects any other
+      // target at validation, so only these two values reach the wire.
+      const nextType = isReadPublicChannel() ? 0 : 1;
+      await getClient().updateChannel({
+        channelId: channelIdNum(),
+        channelType: nextType,
+      });
+      setPostingModeMsg(t('channel_posting_mode_saved'));
+      refetchDetail();
+      window.dispatchEvent(new Event('ogmara:channels-changed'));
+    } catch (e: any) {
+      setPostingModeMsg(e?.message || t('channel_posting_mode_failed'));
+    } finally {
+      setPostingModeSaving(false);
     }
   };
 
@@ -351,6 +405,33 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
           <button class="ch-save-btn" onClick={handleSaveInfo} disabled={saving()}>
             {saving() ? t('loading') : t('channel_save')}
           </button>
+        </div>
+      </Show>
+
+      {/* Posting mode toggle — owner OR mods with can_edit_info, never Private,
+          and only after the channel record has actually loaded. */}
+      <Show when={canEditInfo() && channelTypeKnown() && !isPrivateChannel()}>
+        <div class="ch-section">
+          <h3>{t('channel_posting_mode_label')}</h3>
+          <p class="ch-posting-mode-desc">
+            {isReadPublicChannel()
+              ? t('channel_posting_mode_readonly_desc')
+              : t('channel_posting_mode_public_desc')}
+          </p>
+          <button
+            class="ch-save-btn"
+            onClick={handleTogglePostingMode}
+            disabled={postingModeSaving()}
+          >
+            {postingModeSaving()
+              ? t('loading')
+              : isReadPublicChannel()
+                ? t('channel_posting_mode_make_public')
+                : t('channel_posting_mode_make_readonly')}
+          </button>
+          <Show when={postingModeMsg()}>
+            <span class="ch-info-msg">{postingModeMsg()}</span>
+          </Show>
         </div>
       </Show>
 

@@ -8,6 +8,7 @@ import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { authStatus, getSigner, walletAddress, isRegistered } from '../lib/auth';
 import { onWsEvent, wsSubscribeChannels, wsUnsubscribeChannels } from '../lib/ws';
+import { canPost, CHANNEL_TYPE_READ_PUBLIC } from '@ogmara/sdk';
 import { navigate } from '../lib/router';
 import { setSetting } from '../lib/settings';
 import { FormattedText } from '../components/FormattedText';
@@ -272,6 +273,23 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   });
 
   const isMod = () => myRole() === 'moderator' || myRole() === 'creator';
+
+  // Whether the current viewer may post in this channel under the runtime
+  // posting policy (protocol spec §3.6). False in `ReadPublic` (broadcast)
+  // channels for non-creator/non-mod members. Reactions stay enabled
+  // independently — they're rendered per-message, not in the composer.
+  const canPostHere = () => {
+    const ch = channelInfo()?.channel;
+    const me = walletAddress();
+    if (!ch || !me) return true; // before-load: don't flash the banner
+    return canPost(
+      { channel_type: ch.channel_type, creator: ch.creator },
+      me,
+      isMod(),
+    );
+  };
+  const isBroadcastChannel = () =>
+    (channelInfo()?.channel?.channel_type ?? 0) === CHANNEL_TYPE_READ_PUBLIC;
 
   const MAX_LOCAL_MESSAGES = 200;
 
@@ -895,8 +913,18 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           </div>
         </Show>
 
+        {/* Broadcast (read-only) channel banner — shown to non-creator/non-mod
+            members when channel_type is ReadPublic. Replaces the composer
+            stack. Reactions on existing messages remain functional. */}
+        <Show when={!canPostHere() && isBroadcastChannel()}>
+          <div class="broadcast-banner" role="status" aria-live="polite">
+            <span class="broadcast-banner-icon" aria-hidden="true">📢</span>
+            <span class="broadcast-banner-text">{t('chat_broadcast_only')}</span>
+          </div>
+        </Show>
+
         {/* Edit mode indicator */}
-        <Show when={editingMsg()}>
+        <Show when={canPostHere() && editingMsg()}>
           <div class="edit-indicator">
             <span class="edit-indicator-label">✏ {t('chat_edit_mode')}</span>
             <button class="edit-cancel" onClick={cancelEdit}>{t('chat_edit_cancel')}</button>
@@ -904,7 +932,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         </Show>
 
         {/* Reply indicator */}
-        <Show when={replyTo() && !editingMsg()}>
+        <Show when={canPostHere() && replyTo() && !editingMsg()}>
           <div class="reply-indicator">
             <div class="reply-indicator-content">
               <span class="reply-indicator-author">{displayName(replyTo()!.author)}</span>
@@ -915,7 +943,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         </Show>
 
         {/* Media attachments */}
-        <Show when={walletAddress() && !editingMsg()}>
+        <Show when={canPostHere() && walletAddress() && !editingMsg()}>
           <div class="chat-media-bar">
             <MediaUpload
               attachments={attachments()}
@@ -933,7 +961,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           </Show>
         </div>
 
-        {/* Input area */}
+        {/* Input area — hidden in broadcast (ReadPublic) channels for non-mod members */}
+        <Show when={canPostHere()}>
         <Show when={isModernStyle()} fallback={
           <div class="chat-input-area">
             <div class="chat-input">
@@ -1027,6 +1056,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
               </button>
             </div>
           </div>
+        </Show>
         </Show>
       </Show>
 
