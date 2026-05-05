@@ -5,6 +5,43 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.0] - 2026-05-05
+
+### Added
+- **Read-only / broadcast channel UI (paired with `l2-node` v0.31.0 and
+  `@ogmara/sdk` v0.14.0).** When a channel's runtime `channel_type` is
+  `ReadPublic` (1), `ChatView` now hides the entire composer stack
+  (input, attachments, edit/reply indicators) for non-creator/non-mod
+  viewers and replaces it with a `📢` broadcast banner explaining that
+  only moderators can post here. Reactions remain enabled per-message.
+  Creators and moderators see the normal composer.
+- **Posting-mode toggle** in `ChannelSettingsView` (creator + mods with
+  `can_edit_info`, never visible for Private channels). Flips the channel
+  between `Public` (open chat) and `ReadPublic` (broadcast) at runtime by
+  publishing a `ChannelUpdate` envelope with the new `channelType` field.
+  Local change propagates via the existing `ogmara:channels-changed`
+  event so the sidebar and other open views refresh immediately.
+- **Broadcast indicator in `Sidebar`.** `ReadPublic` channels now show a
+  📢 icon in both the joined-channel list and the search-result rows,
+  alongside the existing 🔒 indicator for Private channels. The
+  description fallback line uses a new `sidebar_broadcast_channel` label
+  when the channel has no description set.
+- **9 new i18n keys** in all 7 locales (en, de, es, pt, ja, zh, ru) —
+  `chat_broadcast_only`, `channel_posting_mode_label`,
+  `channel_posting_mode_public_desc`,
+  `channel_posting_mode_readonly_desc`,
+  `channel_posting_mode_make_public`,
+  `channel_posting_mode_make_readonly`,
+  `channel_posting_mode_saved`, `channel_posting_mode_failed`,
+  `sidebar_broadcast_channel`.
+
+### Notes
+- Posting policy is enforced server-side at the L2 node — the UI gate is
+  a UX affordance only. A non-mod that bypasses the local UI hits 403
+  (`broadcast_channel_post_denied`) from the API.
+- Bumped `@ogmara/sdk` peer to v0.14.0 (file: dependency, no lock change
+  needed).
+
 ## [0.28.1] - 2026-05-02
 
 ### Security

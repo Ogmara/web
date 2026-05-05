@@ -603,12 +603,19 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
                             <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
                           </svg>
                         </Show>
+                        <Show when={channel.channel_type === 1}>
+                          <span style="margin-right:4px; vertical-align:-1px" title={t('sidebar_broadcast_channel')}>📢</span>
+                        </Show>
                         {channel.display_name || channel.slug}
                       </span>
                     </div>
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px">
                       <span style="font-size:var(--font-size-xs); color:var(--color-text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis">
-                        {channel.description || (channel.channel_type === 2 ? t('sidebar_private_channel') : t('sidebar_public_channel'))}
+                        {channel.description || (channel.channel_type === 2
+                          ? t('sidebar_private_channel')
+                          : channel.channel_type === 1
+                            ? t('sidebar_broadcast_channel')
+                            : t('sidebar_public_channel'))}
                       </span>
                       <Show when={unread() > 0}>
                         <span style="min-width:20px; height:20px; border-radius:9999px; background:var(--color-accent-primary); color:var(--color-text-inverse); font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; padding:0 5px; flex-shrink:0; margin-left:4px">
@@ -753,7 +760,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
                     onClick={() => go(`/chat/${channel.channel_id}`)}
                     onContextMenu={(e) => handleContextMenu(e, channel.channel_id, channel.creator)}
                   >
-                    <span class="channel-hash">{channel.channel_type === 2 ? '🔒' : '#'}</span>
+                    <span class="channel-hash">{channel.channel_type === 2 ? '🔒' : channel.channel_type === 1 ? '📢' : '#'}</span>
                     <span class="channel-name">{channel.display_name || channel.slug}</span>
                     <Show when={(unreadCounts()[String(channel.channel_id)] ?? 0) > 0}>
                       <span class="unread-badge">{unreadCounts()[String(channel.channel_id)]}</span>
