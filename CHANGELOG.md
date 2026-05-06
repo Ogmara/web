@@ -5,6 +5,55 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.0] - 2026-05-06
+
+### Added
+- **`@`-mention autocomplete popover** — Telegram-style picker that
+  opens when the cursor enters a fresh `@<prefix>` token in any wired
+  composer. Pairs with `l2-node` v0.32.0+ and `@ogmara/sdk` v0.15.0+.
+  Component: `src/components/MentionPopover.tsx`.
+  - Trigger: `@` at start of input or after whitespace; closes when
+    the prefix contains whitespace or another `@`.
+  - Debounced 150ms server search via `client.searchUsers(prefix, 20)`.
+  - In-memory 30s cache per prefix so re-typing is instant.
+  - Keyboard nav: ↑/↓ to move, Enter or Tab to select, Esc to close.
+  - On select: replaces `@<prefix>` with `@<DisplayName>` (or short
+    address if no name) and pushes the resolved `klv1...` into the
+    composer's `pendingMentions` set.
+  - Renders verified checkmark for on-chain registered users.
+- **Wired into `ChatView` chat composer** (Modern + Legacy textareas
+  share the same `inputRef`, so a single popover serves both).
+  `pendingMentions` is merged with raw `@klv1...` tokens still parsed
+  from the message text — power users who paste full addresses keep
+  working alongside autocomplete users.
+- **Wired into `NewsDetailView` comment composer** with the same
+  pattern. Merged mentions are passed to `client.postComment(...,
+  { mentions })`.
+- **3 new i18n keys** in all 7 locales (en, de, es, pt, ja, zh, ru):
+  `mention_no_results`, `mention_popover_label`, `user_verified`.
+
+### Fixed
+- **Sidebar minimum width** bumped from 200px → 280px in
+  `components/Sidebar.tsx`. At 200px the Modern header (`burger +
+  search input + bell`) was so cramped that the right pane appeared
+  to overlap the sidebar's search bar. 280px matches Telegram
+  desktop's minimum and keeps every header control fully visible.
+  Existing users with `ogmara.sidebarWidth=200` saved auto-bump to
+  280 on next load via the existing `Math.max(SIDEBAR_MIN_W, …)`
+  guard — no migration needed.
+
+### Notes
+- DM and `ComposeView` (news posts) composers are NOT yet wired —
+  `DirectMessage` payloads are end-to-end encrypted and don't carry
+  a plaintext mentions field, and `NewsPostPayload` doesn't have a
+  `mentions` field at all per protocol spec §3.5. Those would
+  require a wire-format extension first; deferred to a future
+  release.
+- The popover positions itself anchored to the textarea's top-left,
+  rendering above the input via CSS transform (no per-character caret
+  tracking — the typical Telegram/Discord pattern that works well
+  enough without a hidden mirror element).
+
 ## [0.29.0] - 2026-05-05
 
 ### Added

@@ -327,5 +327,8 @@
   "device_link_failed": "No se pudo vincular el dispositivo. Abre la extensión Klever e intenta de nuevo, o delega manualmente desde la billetera.",
   "settings_default_landing": "Vista inicial",
   "settings_default_landing_chat": "Chat",
-  "settings_default_landing_news": "Noticias"
+  "settings_default_landing_news": "Noticias",
+  "mention_no_results": "Sin coincidencias",
+  "mention_popover_label": "Sugerencias de mención",
+  "user_verified": "Verificado en cadena"
 }
