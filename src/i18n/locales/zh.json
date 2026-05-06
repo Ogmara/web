@@ -327,5 +327,8 @@
   "device_link_failed": "无法关联此设备。请打开 Klever 扩展并重试，或在钱包页面手动委托。",
   "settings_default_landing": "默认首页",
   "settings_default_landing_chat": "聊天",
-  "settings_default_landing_news": "新闻"
+  "settings_default_landing_news": "新闻",
+  "mention_no_results": "无匹配用户",
+  "mention_popover_label": "提及建议",
+  "user_verified": "链上已验证"
 }
