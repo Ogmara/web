@@ -5,6 +5,21 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.2] - 2026-05-07
+
+### Fixed
+- **Search results omitted users** — `SearchView` only queried
+  `listNews()` and `listChannels()`. Even though `client.searchUsers()`
+  was added in v0.30.1, the search page never adopted it, so typing a
+  display-name prefix returned posts and channels but never users.
+  Now fetches users in parallel via `client.searchUsers(query, 20)`
+  (skipped for `#hashtag` queries — display-name prefix isn't
+  meaningful there). Renders a new "Users" results section above
+  channels with avatar, display name, verified checkmark, and
+  truncated address; clicking navigates to the user profile page.
+  Pairs with `l2-node` v0.32.0+; older nodes return 404 and the
+  user section silently stays empty.
+
 ## [0.30.1] - 2026-05-07
 
 ### Fixed
