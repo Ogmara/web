@@ -5,6 +5,32 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.1] - 2026-05-07
+
+### Fixed
+- **`@`-mention popover never opened** — the v0.30.0 `MentionPopover`
+  used `textareaRef: HTMLTextAreaElement | undefined` and was passed
+  a plain `let inputRef` from the composer. SolidJS refs are assigned
+  to plain locals AFTER mount, but plain `let` variables aren't
+  reactive — so the popover's `createEffect` saw `undefined` on first
+  run and never re-bound when the textarea actually mounted. Result:
+  the input/keydown listeners were never attached, popover stayed
+  silent on `@` typed.
+
+  Fix: converted `textareaRef` to a SolidJS accessor
+  (`() => HTMLTextAreaElement | undefined`). `ChatView` and
+  `NewsDetailView` now use `const [inputRef, setInputRef] =
+  createSignal<HTMLTextAreaElement>()` with `ref={(el) => setInputRef(el)}`,
+  and pass the accessor (`textareaRef={inputRef}`) so the popover's
+  effect subscribes to the signal and re-binds once the element
+  mounts. All other call sites updated to invoke as `inputRef()`.
+- **Sidebar minimum width** bumped 280 → 320. 280px was still tight
+  enough that the search input compressed below usable width and the
+  right pane felt crowded. 320px is Telegram desktop's actual minimum
+  and gives every header control room to breathe. Existing users with
+  saved widths below 320 auto-bump on next load via the existing
+  `Math.max(SIDEBAR_MIN_W, …)` guard.
+
 ## [0.30.0] - 2026-05-06
 
 ### Added
