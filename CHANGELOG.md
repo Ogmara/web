@@ -5,6 +5,45 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.31.1] - 2026-05-11
+
+### Fixed
+- **Modern sidebar: right-click context menu missing.** The two `<Show>`
+  blocks rendering the channel menu (mark-read / settings / leave /
+  delete) and the member menu (profile / kick / ban / promote / demote)
+  lived inside the *classic* fallback `<aside>` in `Sidebar.tsx`, so the
+  Modern style wired up the `onContextMenu` handler but no menu UI ever
+  mounted — leaving Modern users with no way to leave or delete a
+  channel, or to moderate members. Extracted both `<Show>` blocks into a
+  `sharedContextMenus()` helper rendered at the top level of the
+  component, so both styles get them. Functions and signals it closes
+  over (`contextMenu`, `memberMenu`, `handleMemberAction`,
+  `handleMarkRead`, `isModOrOwner`, `isOwner`, `walletAddress`) are all
+  in the component scope, unchanged.
+- **Optimistic messages render as empty bubbles in public channels.**
+  `tryDecodeBase64Payload` in `payload.ts` ran `atob()` on plain text;
+  any string using only base64-valid characters (e.g. `"Hello"`)
+  succeeds with garbage bytes, the subsequent msgpack decode then fails
+  into `{ content: '' }`, and the caller's `?.content ?? payload`
+  returned the empty string (because `??` only triggers on
+  null/undefined). Users saw a bubble with only a timestamp until they
+  left and re-entered the channel and the API refetch delivered the
+  real binary payload. **Fixed** by returning `null` from
+  `tryDecodeBase64Payload` when the decode yields no recognizable
+  payload fields (no content/title/media_cid/attachments), so callers
+  fall back to treating the string as the literal content. Confirmed
+  no impact on legitimate payloads (every chat message has `content`
+  per `sdk-js/src/envelope.ts:chatMessagePayload`).
+- **Edit message via right-click silently failed.** A side effect of
+  the empty-bubble bug above: `startEdit` prefilled the composer with
+  `getPayloadContent(payload)` which returned `''`; clicking Send hit
+  `handleEdit`'s `if (!newContent) return` and bailed without any
+  user-facing signal. The payload fix above resolves the root cause.
+  As a defense-in-depth measure, `handleEdit`'s `catch` now writes to
+  the existing `sendError` banner (and `console.error`) instead of just
+  `console.warn`, matching the `handleSend` error pattern so future
+  edit failures aren't invisible.
+
 ## [0.31.0] - 2026-05-07
 
 ### Changed
