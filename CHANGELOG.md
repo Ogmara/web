@@ -5,6 +5,24 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.2] - 2026-05-13
+
+### Fixed
+- **Empty sidebar after fresh browser / cleared cookies + cache.** The
+  joined-channel filter is stored in localStorage as
+  `ogmara_joined_channels` and gates which channels appear in the
+  sidebar list. The first-time migration only seeded the default
+  `ogmara` channel — networks without that channel ended up with a
+  permanently empty sidebar even though the API returned a full
+  catalog of channels the user could access. Direct navigation
+  (`/chat/<id>`) still worked because routing isn't gated by the
+  filter; that mismatch is what made the bug obvious. Fix: on the
+  very first migration after install / storage clear, seed the
+  joined set with every channel the API returns (private ones are
+  already pre-filtered to members; public ones form the visible
+  catalog). Subsequent syncs continue to only auto-add private
+  channels, and the user can still explicitly leave channels.
+
 ## [0.32.1] - 2026-05-12
 
 ### Changed
