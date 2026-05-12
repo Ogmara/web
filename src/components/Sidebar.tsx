@@ -244,6 +244,10 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     onCleanup(() => document.removeEventListener('click', closeContextMenu));
   }
   const [unreadCounts, setUnreadCounts] = createSignal<Record<string, number>>({});
+  // Per-channel count of unread messages that @-mention the viewer. Used to
+  // show an `@` indicator next to the unread badge so users see *where* they
+  // were pinged at a glance. Older nodes don't return this — treat as empty.
+  const [mentionCounts, setMentionCounts] = createSignal<Record<string, number>>({});
   const [dmUnreadTotal, setDmUnreadTotal] = createSignal(0);
   const [notifUnread, setNotifUnread] = createSignal(0);
 
@@ -453,6 +457,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         refetchChannels(),
       ]);
       setUnreadCounts(unread.unread ?? {});
+      setMentionCounts(unread.mentions ?? {});
       const dmCounts = dmUnread.unread ?? {};
       setDmUnreadTotal(Object.values(dmCounts).reduce((a: number, b: number) => a + b, 0));
       setNotifUnread((notifResp as any).notifications?.length ?? 0);
@@ -591,6 +596,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           <For each={filteredChannels()}>
             {(channel) => {
               const unread = () => unreadCounts()[String(channel.channel_id)] ?? 0;
+              const mentioned = () => (mentionCounts()[String(channel.channel_id)] ?? 0) > 0;
               const isActive = () => currentChannelId() === channel.channel_id;
               return (
                 <button
@@ -625,6 +631,12 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
                             ? t('sidebar_broadcast_channel')
                             : t('sidebar_public_channel'))}
                       </span>
+                      <Show when={mentioned()}>
+                        <span class="mention-badge" title={t('sidebar_mentioned_here')}
+                          style="min-width:20px; height:20px; border-radius:9999px; background:var(--color-warning, #f59e0b); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; padding:0 5px; flex-shrink:0; margin-left:4px">
+                          @
+                        </span>
+                      </Show>
                       <Show when={unread() > 0}>
                         <span style="min-width:20px; height:20px; border-radius:9999px; background:var(--color-accent-primary); color:var(--color-text-inverse); font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; padding:0 5px; flex-shrink:0; margin-left:4px">
                           {unread()}
@@ -909,6 +921,9 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
                   >
                     <span class="channel-hash">{channel.channel_type === 2 ? '🔒' : channel.channel_type === 1 ? '📢' : '#'}</span>
                     <span class="channel-name">{channel.display_name || channel.slug}</span>
+                    <Show when={(mentionCounts()[String(channel.channel_id)] ?? 0) > 0}>
+                      <span class="mention-badge" title={t('sidebar_mentioned_here')}>@</span>
+                    </Show>
                     <Show when={(unreadCounts()[String(channel.channel_id)] ?? 0) > 0}>
                       <span class="unread-badge">{unreadCounts()[String(channel.channel_id)]}</span>
                     </Show>
@@ -1124,6 +1139,20 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           min-width: 18px;
           text-align: center;
         }
+        .mention-badge {
+          margin-left: auto;
+          background: var(--color-warning, #f59e0b);
+          color: #fff;
+          font-size: 10px;
+          font-weight: 700;
+          padding: 1px 6px;
+          border-radius: var(--radius-full);
+          min-width: 18px;
+          text-align: center;
+        }
+        /* When both badges are present, drop the margin-left:auto on the
+           second so they sit side-by-side, with only the first hugging the right. */
+        .mention-badge + .unread-badge { margin-left: var(--spacing-xs); }
         .sidebar-loading {
           padding: var(--spacing-sm) var(--spacing-lg);
           font-size: var(--font-size-sm);
