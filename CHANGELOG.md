@@ -5,6 +5,24 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.1] - 2026-05-12
+
+### Changed
+- **More visible mention highlight.** v0.32.0's mention bubble tint was
+  too close to the regular bubble background to read at a glance. Bumped
+  the Modern bubble's accent mix from 14% → 28%, added a thicker accent
+  border (65% mix vs 40%), a 3-px left stripe via `::before`, and a soft
+  outer glow shadow so the bubble pops without overwhelming the chat
+  flow. Classic mode's stripe was kept (just slightly stronger tint).
+- **Inline `@username` mentions colorized.** `FormattedText` now matches
+  `@klv1<bech32>` and `@<DisplayName>` tokens in message content
+  alongside hashtags, rendering each as an accent-tinted pill. `@klv1…`
+  pills are clickable and navigate to the user profile; display-name
+  pills are visual-only because the resolved address isn't available
+  from the text alone (it's stored separately in `payload.mentions[]`).
+  Picks up automatically inside chat messages, news posts, and
+  comments — anywhere `FormattedText` is used.
+
 ## [0.32.0] - 2026-05-12
 
 ### Added
