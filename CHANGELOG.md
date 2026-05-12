@@ -5,6 +5,50 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.0] - 2026-05-12
+
+### Added
+- **Highlighted message bubbles for @-mentions.** Chat messages whose
+  payload `mentions[]` contains the viewer's wallet address now render
+  with an accent-tinted background and an accent left-border in
+  Classic style, plus an outlined accent fill in Modern. A hover
+  tooltip (`You were mentioned`) labels the highlight for clarity.
+  Skips own messages, deleted/muted messages, and unauthenticated
+  views. Works in both light and dark themes via `color-mix()` over
+  existing CSS theme tokens.
+- **Sidebar `@` indicator on channels with unread mentions.** The
+  channel list (both Classic and Modern) now shows a small amber
+  `@` badge next to the existing unread count for any channel that
+  contains at least one unread message in which the viewer was
+  @-mentioned. Surfaces *where* you were pinged without opening each
+  channel. Counts come from `getUnreadCounts().mentions` (l2-node
+  ≥ v0.33.0); older nodes simply show no indicator.
+- **Share links for news posts and chat messages.**
+  - News post **Share button** in the detail-view action bar (next
+    to Bookmark/Tip) and a small 🔗 share icon on each news feed
+    card. Copies `https://ogmara.org/app/#/news/<msg_id>` to clipboard.
+  - Chat message **"Copy link to message"** entry in the right-click
+    / long-press context menu. Copies
+    `https://ogmara.org/app/#/chat/<channel_id>?msg=<msg_id>`.
+  - **Deep-link consumer in `ChatView`.** When a chat URL carries
+    `?msg=<hex>`, the view scrolls to and momentarily highlights the
+    target message after load. If the message is older than the
+    initial page, the view auto-paginates older history up to 3
+    times before falling back to a "Message not found" toast.
+  - Share base is hardcoded to `https://ogmara.org/app` so recipients
+    always land on a working URL regardless of where the sharer runs
+    the client (web / desktop / self-hosted).
+  - Clipboard helper has a `document.execCommand('copy')` fallback
+    for insecure-context / older-browser scenarios.
+
+### Changed
+- `lib/payload.ts` exposes a new `getPayloadMentions(payload)` helper
+  shared by ChatView's mention-highlight check.
+- `i18n` keys added to all 7 locales (EN / DE / ES / PT / JA / ZH / RU):
+  `share`, `share_news_link`, `share_message_link`, `share_link_copied`,
+  `share_link_failed`, `share_link_unavailable`, `chat_mention_you`,
+  `sidebar_mentioned_here`.
+
 ## [0.31.2] - 2026-05-11
 
 ### Fixed
