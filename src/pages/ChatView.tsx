@@ -1681,20 +1681,40 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           100% { background: transparent; }
         }
 
-        /* @-mention highlight: subtle accent-tinted bubble + left border.
-           Uses existing theme accent so it works in both light and dark. */
+        /* @-mention highlight: when a message @-mentions the viewer, render
+           the bubble with a clearly different fill, an accent stripe on the
+           left, and a soft outer glow so it's obvious at a glance. Uses
+           existing theme accent tokens so it works in both light and dark. */
         .message.mentioned {
-          background: color-mix(in srgb, var(--color-accent-primary) 12%, transparent);
+          background: color-mix(in srgb, var(--color-accent-primary) 16%, transparent);
           border-left: 3px solid var(--color-accent-primary);
           padding-left: calc(var(--spacing-md) - 3px);
           border-radius: var(--radius-sm);
         }
         .message-bubble.mentioned {
-          background: color-mix(in srgb, var(--color-accent-primary) 14%, var(--color-bg-secondary));
-          border: 1px solid color-mix(in srgb, var(--color-accent-primary) 40%, transparent);
+          /* Stronger tint than non-mention bubbles, plus a thicker accent
+             border. The pseudo-element below paints a left stripe so the
+             highlight is unmistakable even when the bubble sits flush with
+             the avatar column. */
+          position: relative;
+          background: color-mix(in srgb, var(--color-accent-primary) 28%, var(--color-bg-secondary));
+          border: 1px solid color-mix(in srgb, var(--color-accent-primary) 65%, transparent);
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-primary) 35%, transparent),
+                      0 2px 12px color-mix(in srgb, var(--color-accent-primary) 18%, transparent);
+        }
+        .message-bubble.mentioned::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 0;
+          bottom: 0;
+          width: 3px;
+          background: var(--color-accent-primary);
+          border-top-left-radius: inherit;
+          border-bottom-left-radius: inherit;
         }
         .message-bubble.mentioned.own {
-          background: color-mix(in srgb, var(--color-accent-primary) 22%, var(--color-accent-secondary, var(--color-accent-primary)));
+          background: color-mix(in srgb, var(--color-accent-primary) 35%, var(--color-accent-secondary, var(--color-accent-primary)));
         }
 
         /* Transient bottom-of-screen toast for share-link copy feedback. */
