@@ -5,6 +5,63 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.0] - 2026-05-15
+
+### Fixed
+- **Videos on news posts + comments now play inline.** Both `NewsView`
+  (feed cards) and `NewsDetailView` (detail page + comments) previously
+  rendered every non-image attachment as a download link, so video
+  uploads showed up as a paperclip even though the browser would have
+  played them fine. Added an explicit `video/*` branch that emits an
+  `<video controls preload="metadata">` element with the same sizing
+  treatment as inline images. Browsers ship native H.264/AAC, so this
+  works without any of the GStreamer codec dance the desktop build has
+  to deal with.
+- **News edit no longer loses title, tags, or attachments.** The compose
+  page now preloads `title`, `content`, `tags`, **and `attachments`**
+  from the existing post when entering edit mode, keeps the MediaUpload
+  widget visible (previously hidden in edit mode), and forwards the
+  attachment list to `editNews`. Pairs with the L2 v0.37 projection
+  fix that no longer flattens edited posts to a content string.
+- **Emoji picker is now available on the news compose page.** Mirrors
+  the picker already present on chat + DMs — opens via a 😊 button
+  next to the content textarea and inserts at the current caret
+  position.
+- **Save button stays disabled when the post-to-edit fails to load.**
+  Previously, hitting Save after a failed fetch would overwrite the
+  original post with empty title/tags/content. The form now keeps
+  Save disabled until the existing post loads cleanly, and surfaces
+  a visible error if the fetch fails.
+- **Optimistic chat/DM messages with attachments render immediately.**
+  Both `ChatView.handleSend` and `DmConversationView.handleSend`
+  previously dropped the attached image/video into the bubble as a
+  plain-string payload, which made `getPayloadAttachments` return `[]`
+  and the file vanish until the WebSocket echo arrived. They now
+  encode a real msgpack payload via `buildOptimisticChatPayload` so
+  the bubble looks identical before and after the server roundtrip.
+- **Optimistic chat-edit preserves attachments + mentions visually.**
+  `ChatView.handleEdit` now uses `rewriteContentInPayload` to swap
+  just the `content` field inside the existing msgpack payload, so
+  attachments, mentions, and `reply_to` survive the local update
+  until the server echo lands. Pre-fix the entire payload was
+  replaced with the new content string, which made attached media
+  disappear from the bubble at the moment of save.
+
+### Added
+- **`src/lib/sanitize.ts`.** Centralizes `stripBidi()` for untrusted
+  text reaching JSX (chiefly attachment filenames). Future audits can
+  grep for the import to confirm every boundary is gated.
+- **`safeAttachmentName(att)`, `buildOptimisticChatPayload(...)`, and
+  `rewriteContentInPayload(...)` in `src/lib/payload.ts`.** Mirrors the
+  desktop helpers — keeps the two apps' rendering and optimistic-update
+  paths consistent.
+
+### Security
+- All attachment filenames now flow through `safeAttachmentName()`
+  before reaching JSX or the browser's `download=` attribute. A
+  hostile uploader can no longer slip a U+202E into a filename to
+  visually swap the extension shown in the message bubble.
+
 ## [0.32.2] - 2026-05-13
 
 ### Fixed

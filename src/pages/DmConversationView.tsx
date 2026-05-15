@@ -12,7 +12,7 @@ import { showMobileList } from '../lib/mobile-nav';
 import { isModernStyle } from '../lib/theme';
 import { FormattedText } from '../components/FormattedText';
 import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
-import { getPayloadContent, getPayloadAttachments } from '../lib/payload';
+import { getPayloadContent, getPayloadAttachments, buildOptimisticChatPayload } from '../lib/payload';
 import { EmojiPicker } from '../components/EmojiPicker';
 import { buildDirectMessage } from '@ogmara/sdk';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
@@ -144,12 +144,18 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
       setMessageInput('');
       setAttachments([]);
 
-      // Optimistic: show sent message immediately
+      // Optimistic: show sent message immediately. Wrap as msgpack so any
+      // attachments preview in the bubble right away — a plain string
+      // payload would cause `getPayloadAttachments` to return [] and the
+      // image/video would only appear after the server echo arrived.
       setLocalMessages((prev) => [...prev, {
         msg_id: `local-${Date.now()}`,
         author: walletAddress(),
         timestamp: Date.now(),
-        payload: text,
+        payload: buildOptimisticChatPayload({
+          content: text,
+          attachments: atts,
+        }),
       }]);
 
       setTimeout(() => {
