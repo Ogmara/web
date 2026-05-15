@@ -8,6 +8,7 @@
 import { Component, createSignal, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
+import { safeAttachmentName } from '../lib/payload';
 
 /** Attachment data returned after successful upload. */
 export interface MediaAttachment {
@@ -98,14 +99,14 @@ export const MediaUpload: Component<{
                   <img
                     class="media-thumb"
                     src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)}
-                    alt={att.filename || ''}
+                    alt={safeAttachmentName(att)}
                     loading="lazy"
                   />
                 </Show>
                 <Show when={!isImage(att.mime_type)}>
                   <span class="media-file-icon">📎</span>
                 </Show>
-                <span class="media-filename">{att.filename || att.cid.slice(0, 12)}</span>
+                <span class="media-filename">{safeAttachmentName(att)}</span>
                 <button
                   class="media-remove"
                   onClick={() => props.onRemove(i())}

@@ -11,6 +11,7 @@ import { parseMessageContent, type TextSegment, type Attachment } from '@ogmara/
 import { getClient } from '../lib/api';
 import { navigate } from '../lib/router';
 import { getSetting } from '../lib/settings';
+import { safeAttachmentName } from '../lib/payload';
 
 interface Props {
   content: string;
@@ -156,6 +157,7 @@ export const FormattedText: Component<Props> = (props) => {
               const mediaUrl = getClient().getMediaUrl(att.cid);
               const autoload = getSetting('mediaAutoload') !== 'never';
 
+              const safeName = safeAttachmentName(att);
               if (isImage && autoload) {
                 return (
                   <a href={mediaUrl} target="_blank" rel="noopener noreferrer">
@@ -163,7 +165,7 @@ export const FormattedText: Component<Props> = (props) => {
                       src={att.thumbnail_cid
                         ? getClient().getMediaUrl(att.thumbnail_cid)
                         : mediaUrl}
-                      alt={att.filename || 'image'}
+                      alt={safeName}
                       class="msg-image"
                       loading="lazy"
                     />
@@ -178,7 +180,7 @@ export const FormattedText: Component<Props> = (props) => {
                     preload="metadata"
                     src={mediaUrl}
                   >
-                    <a href={mediaUrl} target="_blank" rel="noopener noreferrer">{att.filename || 'video'}</a>
+                    <a href={mediaUrl} target="_blank" rel="noopener noreferrer">{safeName}</a>
                   </video>
                 );
               }
@@ -191,7 +193,7 @@ export const FormattedText: Component<Props> = (props) => {
                   rel="noopener noreferrer"
                   class="msg-file"
                 >
-                  {icon} {att.filename || att.cid.slice(0, 12) + '...'}
+                  {icon} {safeName}
                 </a>
               );
             }}

@@ -12,7 +12,7 @@ import { getClient } from '../lib/api';
 import { authStatus, getSigner, l2Address, walletAddress, isRegistered } from '../lib/auth';
 import { navigate, routeParam } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
-import { getPayloadContent, getPayloadTitle, getPayloadAttachments, decodePayload } from '../lib/payload';
+import { getPayloadContent, getPayloadTitle, getPayloadAttachments, decodePayload, safeAttachmentName } from '../lib/payload';
 import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
 import { MentionPopover } from '../components/MentionPopover';
 import { sendTip, kleverAvailable, getExplorerUrl } from '../lib/klever';
@@ -67,20 +67,30 @@ const CommentCard: Component<{ comment: any; onReply: (msgId: string, author: st
       <Show when={getPayloadAttachments(props.comment.payload).length > 0}>
         <div class="comment-attachments">
           <For each={getPayloadAttachments(props.comment.payload)}>
-            {(att) => (
-              <Show
-                when={att.mime_type.startsWith('image/')}
-                fallback={
-                  <a class="detail-file-link" href={getClient().getMediaUrl(att.cid)} target="_blank" rel="noopener noreferrer">
-                    📎 {att.filename || att.cid.slice(0, 12)}
+            {(att) => {
+              const isImage = att.mime_type.startsWith('image/');
+              const isVideo = att.mime_type.startsWith('video/');
+              const mediaUrl = getClient().getMediaUrl(att.cid);
+              if (isImage) {
+                return (
+                  <a href={mediaUrl} target="_blank" rel="noopener noreferrer">
+                    <img class="comment-attachment-img" src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)} alt={safeAttachmentName(att)} loading="lazy" />
                   </a>
-                }
-              >
-                <a href={getClient().getMediaUrl(att.cid)} target="_blank" rel="noopener noreferrer">
-                  <img class="comment-attachment-img" src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)} alt={att.filename || ''} loading="lazy" />
+                );
+              }
+              if (isVideo) {
+                return (
+                  <video class="comment-attachment-video" controls preload="metadata" src={mediaUrl}>
+                    <a href={mediaUrl} target="_blank" rel="noopener noreferrer">{safeAttachmentName(att)}</a>
+                  </video>
+                );
+              }
+              return (
+                <a class="detail-file-link" href={mediaUrl} target="_blank" rel="noopener noreferrer">
+                  📎 {safeAttachmentName(att)}
                 </a>
-              </Show>
-            )}
+              );
+            }}
           </For>
         </div>
       </Show>
@@ -387,20 +397,30 @@ export const NewsDetailView: Component = () => {
           <Show when={getPayloadAttachments(postData()!.post.payload).length > 0}>
             <div class="detail-attachments">
               <For each={getPayloadAttachments(postData()!.post.payload)}>
-                {(att) => (
-                  <Show
-                    when={att.mime_type.startsWith('image/')}
-                    fallback={
-                      <a class="detail-file-link" href={getClient().getMediaUrl(att.cid)} target="_blank" rel="noopener noreferrer">
-                        📎 {att.filename || att.cid.slice(0, 12)}
+                {(att) => {
+                  const isImage = att.mime_type.startsWith('image/');
+                  const isVideo = att.mime_type.startsWith('video/');
+                  const mediaUrl = getClient().getMediaUrl(att.cid);
+                  if (isImage) {
+                    return (
+                      <a href={mediaUrl} target="_blank" rel="noopener noreferrer">
+                        <img class="detail-attachment-img" src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)} alt={safeAttachmentName(att)} loading="lazy" />
                       </a>
-                    }
-                  >
-                    <a href={getClient().getMediaUrl(att.cid)} target="_blank" rel="noopener noreferrer">
-                      <img class="detail-attachment-img" src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)} alt={att.filename || ''} loading="lazy" />
+                    );
+                  }
+                  if (isVideo) {
+                    return (
+                      <video class="detail-attachment-video" controls preload="metadata" src={mediaUrl}>
+                        <a href={mediaUrl} target="_blank" rel="noopener noreferrer">{safeAttachmentName(att)}</a>
+                      </video>
+                    );
+                  }
+                  return (
+                    <a class="detail-file-link" href={mediaUrl} target="_blank" rel="noopener noreferrer">
+                      📎 {safeAttachmentName(att)}
                     </a>
-                  </Show>
-                )}
+                  );
+                }}
               </For>
             </div>
           </Show>
@@ -755,6 +775,18 @@ export const NewsDetailView: Component = () => {
           cursor: pointer;
         }
         .comment-attachment-img:hover { opacity: 0.9; }
+        .detail-attachment-video {
+          max-width: 100%;
+          max-height: 500px;
+          border-radius: var(--radius-md);
+          background: #000;
+        }
+        .comment-attachment-video {
+          max-width: 100%;
+          max-height: 300px;
+          border-radius: var(--radius-md);
+          background: #000;
+        }
         .detail-file-link {
           display: inline-flex;
           align-items: center;

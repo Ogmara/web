@@ -15,7 +15,7 @@ import { setSetting } from '../lib/settings';
 import { FormattedText } from '../components/FormattedText';
 import { EmojiPicker } from '../components/EmojiPicker';
 import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
-import { getPayloadContent, getPayloadAttachments, getPayloadMentions, decodePayload } from '../lib/payload';
+import { getPayloadContent, getPayloadAttachments, getPayloadMentions, decodePayload, buildOptimisticChatPayload, rewriteContentInPayload } from '../lib/payload';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
 import { showMobileList } from '../lib/mobile-nav';
 import { isModernStyle } from '../lib/theme';
@@ -789,13 +789,24 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       }
       await client.sendMessage(props.channelId, text, options);
 
-      // Optimistic: add message locally for instant display
+      // Optimistic: add message locally for instant display.
+      // Build a real msgpack payload (matching the wire format the L2 node
+      // echoes back) so attachments/mentions/reply_to render in the
+      // bubble immediately — a plain string payload would make
+      // `getPayloadAttachments` return [], hiding any image/video the
+      // user just attached until the WebSocket update arrived.
       const addr = walletAddress() || '';
+      const optimisticPayload = buildOptimisticChatPayload({
+        content: text,
+        attachments: atts,
+        mentions: options.mentions,
+        replyTo: replyTo()?.msgId ?? null,
+      });
       setLocalMessages((prev) => [...prev, {
         msg_id: `local-${Date.now()}`,
         author: addr,
         timestamp: Date.now(),
-        payload: text, // string payloads are handled by getPayloadContent
+        payload: optimisticPayload,
         _optimistic: true,
       }]);
 
@@ -879,14 +890,37 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     try {
       const client = getClient();
       await client.editMessage(props.channelId, edit.msgId, newContent);
-      // Optimistic update — add/update in localMessages so it wins in dedup
+      // Optimistic update — add/update in localMessages so it wins in dedup.
+      // Rewrite content INSIDE the existing msgpack payload (instead of
+      // replacing with a plain string) so attachments / mentions /
+      // reply_to survive visually until the server echo arrives.
       setLocalMessages((prev) => {
-        const updates = { payload: newContent, edited: true, last_edited_at: Date.now() };
+        const computeNextPayload = (orig: any): Uint8Array | string => {
+          const rewritten = rewriteContentInPayload(orig?.payload, newContent);
+          if (rewritten) return rewritten;
+          // Pure optimistic-only (no msgpack to preserve) → string is fine,
+          // it round-trips through getPayloadContent.
+          return newContent;
+        };
         const exists = prev.some((m) => msgIdToHex(m.msg_id) === edit.msgId);
-        if (exists) return prev.map((m) => msgIdToHex(m.msg_id) === edit.msgId ? { ...m, ...updates } : m);
-        // Find original message in allMessages to clone
+        if (exists) {
+          return prev.map((m) =>
+            msgIdToHex(m.msg_id) === edit.msgId
+              ? { ...m, payload: computeNextPayload(m), edited: true, last_edited_at: Date.now() }
+              : m,
+          );
+        }
         const original = allMessages().find((m) => msgIdToHex(m.msg_id) === edit.msgId);
-        return original ? [...prev, { ...original, ...updates }] : prev;
+        if (!original) return prev;
+        return [
+          ...prev,
+          {
+            ...original,
+            payload: computeNextPayload(original),
+            edited: true,
+            last_edited_at: Date.now(),
+          },
+        ];
       });
       setEditingMsg(null);
       setMessageInput('');
