@@ -28,6 +28,15 @@ export interface Settings {
   pushGatewayUrl: string;
   /** Default tab to land on when opening the app with no explicit hash route. */
   defaultLandingView: 'chat' | 'news';
+  /**
+   * Which feed mode the news view defaults to when opened without an
+   * explicit `?feed=` query param. Auto-saved every time the user
+   * switches via the sidebar pills, so their last choice IS the
+   * default on next launch. `following` is only meaningful when a
+   * wallet is connected — the news view falls back to a value-prop
+   * card when the user isn't authenticated.
+   */
+  defaultFeed: 'global' | 'following';
 }
 
 const defaults: Settings = {
@@ -51,6 +60,7 @@ const defaults: Settings = {
   deviceRegistered: '',
   pushGatewayUrl: '',
   defaultLandingView: 'chat',
+  defaultFeed: 'global',
 };
 
 /** Load a setting from localStorage with fallback to default. */

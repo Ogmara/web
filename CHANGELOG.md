@@ -5,6 +5,49 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.34.0] - 2026-05-17
+
+Brings the Global / Following feed picker from desktop v1.21.0 to web
+so the two clients stay feature-parity. Wires the long-existing
+`client.getFeed()` SDK method (auth-required, returns posts from
+followed users) to a UI for the first time on the PWA.
+
+### Added
+- **Global / Following pills in the sidebar's Feed tab.**
+  [src/components/Sidebar.tsx](src/components/Sidebar.tsx) replaces
+  the placeholder card with two click-targets. The active pill follows
+  the live URL query (`#/news?feed=global` vs `#/news?feed=following`)
+  so opening a post detail and coming back keeps the right pill lit.
+  Tab switches preserve the feed mode via `lastFeedRoute`.
+- **`defaultFeed: 'global' | 'following'` setting.**
+  [src/lib/settings.ts](src/lib/settings.ts) persists the user's last
+  chosen mode in localStorage. NewsView writes it via a
+  `createEffect` whenever the resolved mode changes, so a power user
+  who always wants Following on launch gets that automatically — no
+  settings UI required.
+- **NewsView reads the feed mode reactively.**
+  [src/pages/NewsView.tsx](src/pages/NewsView.tsx) computes
+  `feedMode` from `queryParam('feed')` falling back to the saved
+  default, then keys a `createResource` off it so switching pills
+  triggers an immediate refetch. The header title swaps between
+  **News Feed** and **Following** accordingly.
+- **Anon value-prop card when an unauthenticated user clicks
+  Following.** Instead of hiding the option (which removes a teaching
+  moment for new visitors) or silently returning an empty list, we
+  show a centered card with three bullets explaining why a wallet
+  matters on Ogmara (own your identity, curate your feed, portable
+  across web/desktop/mobile) plus a single **Connect wallet** CTA
+  routing to `/wallet`. The Following pill itself is rendered with
+  reduced opacity + a 🔒 affix so the gating is obvious before the
+  click.
+- **12 new i18n keys × 7 languages.** `news_feed_global`,
+  `news_feed_global_desc`, `news_feed_following`,
+  `news_feed_following_desc`, `news_feed_following_locked_hint`,
+  `news_feed_following_empty`, plus the five
+  `news_following_anon_*` strings for the value-prop card. All seven
+  supported locales (en, de, es, pt, ja, zh, ru) carry hand-localized
+  copy — no machine-translated strings.
+
 ## [0.33.0] - 2026-05-15
 
 ### Fixed
