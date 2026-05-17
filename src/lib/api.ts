@@ -2,7 +2,7 @@
  * Ogmara SDK integration — shared client instance.
  */
 
-import { OgmaraClient, DEFAULT_NODE_URL, discoverAndPingNodes, type NodeWithPing } from '@ogmara/sdk';
+import { OgmaraClient, DEFAULT_NODE_URL, discoverAndPingNodes, pingNode, type NodeWithPing } from '@ogmara/sdk';
 import { getSetting, setSetting } from './settings';
 
 let client: OgmaraClient | null = null;
@@ -56,10 +56,44 @@ export function resetClient(): void {
   client = null;
 }
 
-/** Switch to a different node URL. */
+/** Get the user's persisted list of known node URLs (manually added).
+ *  Merged with the default + discovered list by `getAvailableNodes`. */
+export function getKnownNodes(): string[] {
+  return getSetting('knownNodes') ?? [];
+}
+
+/** Append a URL to the known-nodes list if not already there. */
+export function addKnownNode(url: string): void {
+  const existing = getKnownNodes();
+  if (!existing.includes(url)) {
+    setSetting('knownNodes', [...existing, url]);
+  }
+}
+
+/** Remove a URL from the known-nodes list (✕ button in picker). */
+export function removeKnownNode(url: string): void {
+  const existing = getKnownNodes();
+  setSetting('knownNodes', existing.filter((u) => u !== url));
+}
+
+/**
+ * Switch to a different node URL.
+ *
+ * Persists the URL, remembers it in `knownNodes`, resets the HTTP
+ * client AND the WebSocket so push events follow the new node — the
+ * cached WS subscription would otherwise keep streaming from the old
+ * one and mask the switch from the user.
+ */
 export function switchNode(nodeUrl: string): void {
   setSetting('nodeUrl', nodeUrl);
+  addKnownNode(nodeUrl);
   resetClient();
+  // Reset WS so push events follow the new node. Lazy import to break
+  // the api.ts ↔ ws.ts circular dependency.
+  import('./ws').then(({ closeWs, initWs }) => {
+    closeWs();
+    initWs();
+  }).catch(() => { /* ws module optional at boot */ });
 }
 
 /** Get the current node URL. */
@@ -68,7 +102,27 @@ export function getCurrentNodeUrl(): string {
   return getSetting('nodeUrl') || DEFAULT_NODE_URL;
 }
 
-/** Discover available nodes with ping times, sorted by latency. */
+/** Discover available nodes with ping times, sorted by latency.
+ *
+ * Web client does NOT pass `allowPrivateHosts` — the SDK's SSRF
+ * block stays on because a hosted page making requests to private
+ * IPs IS a real attack surface (DNS rebinding, browser-side SSRF).
+ * Desktop is local code so it opts in; web does not.
+ *
+ * The returned list is the UNION of three sources, deduplicated by
+ * URL hostname and with the current node winning any tie:
+ *
+ * 1. `discoverAndPingNodes` — pings current node + any peers it
+ *    advertises in `/api/v1/network/nodes`.
+ * 2. `DEFAULT_NODE_URL` — SDK hardcoded fallback. Always pingable.
+ * 3. `knownNodes` — every URL the user has successfully switched
+ *    to in the past. Solves the "switched to a new node and the
+ *    previous one disappeared from the dropdown" UX trap.
+ *
+ * Hostname-level dedup hides duplicate entries when a node's
+ * `public_url` is misconfigured (advertises itself under a wrong
+ * scheme/port). Current URL always wins; otherwise lowest ping wins.
+ */
 export async function getAvailableNodes(): Promise<NodeWithPing[]> {
   // In dev mode, skip live discovery (direct fetch to upstream triggers CORS)
   const isLocal = typeof window !== 'undefined' &&
@@ -77,5 +131,35 @@ export async function getAvailableNodes(): Promise<NodeWithPing[]> {
     return [{ url: getCurrentNodeUrl(), ping: 0 }];
   }
   const currentUrl = getCurrentNodeUrl();
-  return discoverAndPingNodes(currentUrl);
+  const discovered = await discoverAndPingNodes(currentUrl);
+
+  const discoveredUrls = new Set(discovered.map((n) => n.url));
+  const extras: string[] = [];
+  if (!discoveredUrls.has(DEFAULT_NODE_URL) && DEFAULT_NODE_URL !== currentUrl) {
+    extras.push(DEFAULT_NODE_URL);
+  }
+  for (const url of getKnownNodes()) {
+    if (!discoveredUrls.has(url) && url !== DEFAULT_NODE_URL && url !== currentUrl) {
+      extras.push(url);
+    }
+  }
+  const extraPings = await Promise.all(
+    extras.map(async (url) => ({ url, ping: await pingNode(url) })),
+  );
+
+  // Hostname-level dedup — drop duplicate rows when a node's
+  // `public_url` is misconfigured. Current URL always wins; otherwise
+  // pick the lowest ping.
+  const merged = [...discovered, ...extraPings];
+  const byHost = new Map<string, typeof merged[number]>();
+  for (const n of merged) {
+    let host: string;
+    try { host = new URL(n.url).hostname; } catch { host = n.url; }
+    const existing = byHost.get(host);
+    if (!existing) { byHost.set(host, n); continue; }
+    if (n.url === currentUrl) { byHost.set(host, n); continue; }
+    if (existing.url === currentUrl) { continue; }
+    if (n.ping < existing.ping) byHost.set(host, n);
+  }
+  return [...byHost.values()];
 }
