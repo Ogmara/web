@@ -36,6 +36,7 @@
   "news_following_anon_bullet_2": "アイデンティティを完全に所有 — ウォレットがすべての投稿・コメント・リアクションに署名します。",
   "news_following_anon_bullet_3": "どこでも利用可能：同じウォレットでウェブ・デスクトップ・モバイルを再登録なしで使えます。",
   "news_following_anon_cta": "ウォレットを接続",
+  "node_remove_known": "リストから削除",
   "news_comments": "コメント",
   "news_like": "いいね",
   "news_dislike": "よくない",

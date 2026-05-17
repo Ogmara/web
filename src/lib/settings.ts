@@ -37,6 +37,17 @@ export interface Settings {
    * card when the user isn't authenticated.
    */
   defaultFeed: 'global' | 'following';
+  /**
+   * User-known L2 node URLs the picker should always remember.
+   *
+   * Auto-populated every time the user successfully `switchNode`s to a
+   * new URL. Persists across switches so a user who picks a new node
+   * still sees their previous one in the dropdown — the new node's
+   * `/api/v1/network/nodes` doesn't necessarily advertise the old
+   * back. The default node URL is implicitly included by the picker;
+   * only manually-added URLs end up in this array.
+   */
+  knownNodes: string[];
 }
 
 const defaults: Settings = {
@@ -61,6 +72,7 @@ const defaults: Settings = {
   pushGatewayUrl: '',
   defaultLandingView: 'chat',
   defaultFeed: 'global',
+  knownNodes: [],
 };
 
 /** Load a setting from localStorage with fallback to default. */

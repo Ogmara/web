@@ -5,6 +5,68 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.0] - 2026-05-17
+
+Mirrors the desktop v1.22.0 node-picker fixes to web for parity.
+The SDK's SSRF block stays on (web is hosted; LAN/private hosts
+remain a real attack surface here, unlike desktop) but every other
+UX bug uncovered during the first cross-node test on testnet is
+also fixed in the PWA.
+
+### Added
+- **Persisted `knownNodes` list** in localStorage. Every successful
+  `switchNode` (picker, manual-add field) appends the URL. Solves
+  "switched to a new node and the previous node disappeared from
+  the dropdown" — the new node's peer registry doesn't necessarily
+  advertise the old back, so we keep our own breadcrumb.
+- **Per-row ✕ remove button** in the picker for entries the user
+  manually added. The default node and the currently-selected node
+  never get a remove control (default re-appears from
+  `getAvailableNodes`; current is what's in use).
+- **Hostname-level dedup** in `getAvailableNodes`. When a node's
+  `public_url` is misconfigured (advertises itself under a wrong
+  scheme/port), the duplicate row is suppressed: current URL wins,
+  otherwise lowest ping wins.
+- **`node_remove_known` localization key** across all 7 supported
+  locales.
+
+### Fixed
+- **Picker refreshes on OPEN, not on close.** [src/components/NodeSelector.tsx](src/components/NodeSelector.tsx)
+  previously called `handleRefresh()` after `setOpen(!open())`, which
+  reads the already-flipped signal — so refresh ran on the CLOSE
+  transition. Manually-added nodes only appeared on the second open.
+- **`tryAddManual` surfaces the actual fetch error.** The previous
+  code collapsed every failure class (CORS, mixed-content, DNS,
+  invalid URL, schema mismatch) into a silent "nothing happened"
+  drop. The picker now reports the specific reason with hints for
+  CORS / mixed-content cases.
+- **WebSocket subscription resets on `switchNode`.** [src/lib/api.ts](src/lib/api.ts)
+  was only resetting the HTTP client; the WS kept streaming push
+  events from the old node, which masked switches under the hood.
+
+## [0.34.1] - 2026-05-17
+
+Extends the v0.34.0 feed picker to the Classic and Glassmorphism
+design styles. The previous release only updated the Modern sidebar's
+tabbed feed-tab content, leaving the legacy sidebar (used by Classic
+and Glassmorphism) with the old single "📰 News" button — so users
+on those design styles couldn't reach the Following feed at all.
+
+### Added
+- **Feed-mode pills in the Classic / Glassmorphism sidebar.**
+  [src/components/Sidebar.tsx](src/components/Sidebar.tsx) replaces
+  the single `📰 News` nav-item with two adjacent `sidebar-nav-item`
+  rows — `🌐 Global` and `👥 Following` — rendered in the legacy
+  design style's compact visual language. Wires to the same
+  `?feed=...` URL query + auto-saved `defaultFeed` setting as the
+  Modern pills, and shows the muted-with-padlock state for the
+  Following row when the user has no wallet connected.
+- **`currentFeedMode()` hoisted to component scope.** Both
+  rendering paths (Modern tabbed sidebar, Classic/Glassmorphism
+  nav-item sidebar) now read the active feed mode through the same
+  helper — guarantees the two designs can never drift on "which
+  pill should be lit" logic.
+
 ## [0.34.0] - 2026-05-17
 
 Brings the Global / Following feed picker from desktop v1.21.0 to web

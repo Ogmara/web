@@ -7,15 +7,17 @@
 
 import { Component, createResource, createSignal, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
-import { getCurrentNodeUrl, getAvailableNodes, switchNode } from '../lib/api';
+import { getCurrentNodeUrl, getAvailableNodes, switchNode, removeKnownNode, getKnownNodes } from '../lib/api';
 import type { NodeWithPing } from '@ogmara/sdk';
-import { pingNode } from '@ogmara/sdk';
+import { validateNodeUrl, DEFAULT_NODE_URL } from '@ogmara/sdk';
 import { AnchorBadge } from './AnchorBadge';
 
 export const NodeSelector: Component = () => {
   const [open, setOpen] = createSignal(false);
   const [currentUrl, setCurrentUrl] = createSignal(getCurrentNodeUrl());
   const [manualUrl, setManualUrl] = createSignal('');
+  const [addError, setAddError] = createSignal('');
+  const [adding, setAdding] = createSignal(false);
 
   const [nodes, { refetch }] = createResource(async () => {
     return getAvailableNodes();
@@ -29,6 +31,67 @@ export const NodeSelector: Component = () => {
 
   const handleRefresh = () => {
     refetch();
+  };
+
+  /** Try to add a manually-entered URL with full error reporting.
+   *  Web does NOT pass `allowPrivateHosts` — SSRF guard stays on
+   *  because a hosted web page making requests to private IPs is a
+   *  real attack surface (DNS rebinding). If you need a LAN node,
+   *  use the desktop app where the trust boundary is the Tauri
+   *  shell, not the URL filter. */
+  const tryAddManual = async () => {
+    const raw = manualUrl().trim();
+    if (!raw) return;
+    setAddError('');
+    setAdding(true);
+    try {
+      let url = raw.replace(/\/$/, '');
+      if (!/^https?:\/\//i.test(url)) {
+        url = `https://${url}`;
+      }
+      if (!validateNodeUrl(url)) {
+        setAddError(
+          t('node_add_failed_invalid_url') ||
+            'Invalid URL. Must be http(s), under 256 chars, and a public host.',
+        );
+        return;
+      }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      let resp: Response;
+      try {
+        resp = await fetch(`${url}/api/v1/health`, { signal: controller.signal });
+      } catch (e: any) {
+        clearTimeout(timeoutId);
+        const msg = e?.message || String(e);
+        let hint = '';
+        if (/CORS|Access-Control/i.test(msg)) {
+          hint = ' The node may need to add this origin to its CORS allow-list.';
+        } else if (/mixed content|insecure/i.test(msg)) {
+          hint = ' Browser blocks HTTP from HTTPS pages — use https:// for the node URL.';
+        }
+        setAddError(`Fetch failed: ${msg}.${hint}`);
+        return;
+      }
+      clearTimeout(timeoutId);
+      if (!resp.ok) {
+        setAddError(`Node returned HTTP ${resp.status} for /api/v1/health.`);
+        return;
+      }
+      let body: any;
+      try { body = await resp.json(); }
+      catch { setAddError(`Response wasn't JSON — that URL doesn't look like an L2 node.`); return; }
+      if (!body || typeof body.version !== 'string') {
+        setAddError(`Response had no \`version\` field — that URL doesn't look like an L2 node.`);
+        return;
+      }
+      handleSelect(url);
+      setManualUrl('');
+    } catch (e: any) {
+      setAddError(`Unexpected error: ${e?.message || String(e)}`);
+    } finally {
+      setAdding(false);
+    }
   };
 
   const pingLabel = (ping: number) => {
@@ -45,7 +108,15 @@ export const NodeSelector: Component = () => {
 
   return (
     <div class="node-selector">
-      <button class="node-current" onClick={() => { setOpen(!open()); if (!open()) handleRefresh(); }}>
+      <button class="node-current" onClick={() => {
+        // Refresh on OPEN so a manually-added node shows up the first
+        // time. The previous expression actually refreshed on CLOSE
+        // (setOpen had already flipped the signal by then), which is
+        // why new entries only appeared on the second open.
+        const willOpen = !open();
+        setOpen(willOpen);
+        if (willOpen) handleRefresh();
+      }}>
         <span class="node-dot" />
         <span class="node-url">{currentUrl().replace(/^https?:\/\//, '')}</span>
         <span class="node-arrow">{open() ? '▲' : '▼'}</span>
@@ -59,22 +130,47 @@ export const NodeSelector: Component = () => {
           </div>
           <Show when={!nodes.loading} fallback={<div class="node-loading">{t('loading')}</div>}>
             <For each={nodes()}>
-              {(node: NodeWithPing) => (
-                <button
-                  class={`node-option ${node.url === currentUrl() ? 'active' : ''}`}
-                  onClick={() => handleSelect(node.url)}
-                >
-                  <span class="node-option-left">
-                    <span class="node-option-url">{node.url.replace(/^https?:\/\//, '')}</span>
-                    <Show when={node.anchorStatus && node.anchorStatus.level !== 'none'}>
-                      <AnchorBadge level={node.anchorStatus!.level} showLabel={false} />
+              {(node: NodeWithPing) => {
+                // ✕ button only on entries the user manually added.
+                // Default and current entries can't usefully be removed
+                // (the default re-appears from `getAvailableNodes`;
+                // the current is what's actually in use).
+                const isUserAdded = () =>
+                  getKnownNodes().includes(node.url) &&
+                  node.url !== DEFAULT_NODE_URL &&
+                  node.url !== currentUrl();
+                return (
+                  <div class={`node-option-row ${node.url === currentUrl() ? 'active' : ''}`}>
+                    <button
+                      class="node-option"
+                      onClick={() => handleSelect(node.url)}
+                    >
+                      <span class="node-option-left">
+                        <span class="node-option-url">{node.url.replace(/^https?:\/\//, '')}</span>
+                        <Show when={node.anchorStatus && node.anchorStatus.level !== 'none'}>
+                          <AnchorBadge level={node.anchorStatus!.level} showLabel={false} />
+                        </Show>
+                      </span>
+                      <span class="node-ping" style={{ color: pingColor(node.ping) }}>
+                        {node.ping === Infinity ? '∞' : node.ping}ms ({pingLabel(node.ping)})
+                      </span>
+                    </button>
+                    <Show when={isUserAdded()}>
+                      <button
+                        class="node-option-remove"
+                        title={t('node_remove_known') || 'Remove from list'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeKnownNode(node.url);
+                          handleRefresh();
+                        }}
+                      >
+                        ✕
+                      </button>
                     </Show>
-                  </span>
-                  <span class="node-ping" style={{ color: pingColor(node.ping) }}>
-                    {node.ping}ms ({pingLabel(node.ping)})
-                  </span>
-                </button>
-              )}
+                  </div>
+                );
+              }}
             </For>
           </Show>
           <div class="node-manual">
@@ -82,34 +178,24 @@ export const NodeSelector: Component = () => {
               type="text"
               placeholder="https://custom-node.example.com"
               value={manualUrl()}
-              onInput={(e) => setManualUrl(e.currentTarget.value)}
-              onKeyPress={async (e) => {
-                if (e.key === 'Enter' && manualUrl().trim()) {
-                  const url = manualUrl().trim().replace(/\/$/, '');
-                  const ping = await pingNode(url);
-                  if (ping < Infinity) {
-                    handleSelect(url);
-                    setManualUrl('');
-                  }
-                }
+              onInput={(e) => { setManualUrl(e.currentTarget.value); setAddError(''); }}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && !adding()) tryAddManual();
               }}
               class="node-manual-input"
+              disabled={adding()}
             />
             <button
               class="node-manual-btn"
-              onClick={async () => {
-                if (!manualUrl().trim()) return;
-                const url = manualUrl().trim().replace(/\/$/, '');
-                const ping = await pingNode(url);
-                if (ping < Infinity) {
-                  handleSelect(url);
-                  setManualUrl('');
-                }
-              }}
+              onClick={tryAddManual}
+              disabled={adding() || !manualUrl().trim()}
             >
-              +
+              {adding() ? '…' : '+'}
             </button>
           </div>
+          <Show when={addError()}>
+            <div class="node-manual-error">{addError()}</div>
+          </Show>
         </div>
       </Show>
 
@@ -160,18 +246,35 @@ export const NodeSelector: Component = () => {
           color: var(--color-text-secondary);
         }
         .node-refresh:hover { color: var(--color-accent-primary); }
+        .node-option-row {
+          display: flex;
+          align-items: stretch;
+          width: 100%;
+        }
+        .node-option-row.active { background: var(--color-bg-tertiary); font-weight: 600; }
+        .node-option-row:hover { background: var(--color-bg-tertiary); }
         .node-option {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          width: 100%;
+          flex: 1;
           padding: var(--spacing-sm);
           text-align: left;
           font-size: var(--font-size-sm);
           cursor: pointer;
+          background: transparent;
         }
         .node-option:hover { background: var(--color-bg-tertiary); }
         .node-option.active { background: var(--color-bg-tertiary); font-weight: 600; }
+        .node-option-remove {
+          padding: 0 10px;
+          background: transparent;
+          color: var(--color-text-secondary);
+          font-size: 12px;
+          cursor: pointer;
+          opacity: 0.6;
+        }
+        .node-option-remove:hover { opacity: 1; color: var(--color-error); }
         .node-option-left {
           display: flex;
           align-items: center;
@@ -208,6 +311,15 @@ export const NodeSelector: Component = () => {
           border-radius: var(--radius-sm);
           font-weight: 700;
           cursor: pointer;
+        }
+        .node-manual-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .node-manual-input:disabled { opacity: 0.6; cursor: not-allowed; }
+        .node-manual-error {
+          padding: var(--spacing-xs) var(--spacing-sm);
+          font-size: var(--font-size-xs);
+          color: var(--color-error);
+          border-top: 1px solid var(--color-border);
+          line-height: 1.4;
         }
       `}</style>
     </div>
