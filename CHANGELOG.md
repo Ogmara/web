@@ -5,6 +5,20 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.1] - 2026-05-18
+
+Parity fix with desktop v1.22.1: switching to a different L2 node
+only reset the HTTP client + WS but every `createResource` kept
+serving the previous node's cached payload, leaving channels /
+news / profile / DMs visibly stale until the user manually
+reloaded the page.
+
+### Fixed
+- **`switchNode` triggers `window.location.reload()`** after
+  persisting the new URL and tearing down the cached client/WS.
+  [src/lib/api.ts](src/lib/api.ts). Synchronous localStorage
+  writes complete before reload fires so persistence is intact.
+
 ## [0.35.0] - 2026-05-17
 
 Mirrors the desktop v1.22.0 node-picker fixes to web for parity.
