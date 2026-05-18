@@ -90,10 +90,18 @@ export function switchNode(nodeUrl: string): void {
   resetClient();
   // Reset WS so push events follow the new node. Lazy import to break
   // the api.ts ↔ ws.ts circular dependency.
-  import('./ws').then(({ closeWs, initWs }) => {
+  import('./ws').then(({ closeWs }) => {
     closeWs();
-    initWs();
   }).catch(() => { /* ws module optional at boot */ });
+  // Force a full page reload so every `createResource` in the app
+  // refetches against the new node. Without this, channels / news /
+  // profile / DMs all keep showing the previous node's cached
+  // payload until the user manually reloads. The setSetting +
+  // addKnownNode above are synchronous localStorage writes, so the
+  // new node URL persists before reload kicks in.
+  if (typeof window !== 'undefined') {
+    window.location.reload();
+  }
 }
 
 /** Get the current node URL. */
