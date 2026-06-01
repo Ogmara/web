@@ -8,7 +8,7 @@ import { initWs } from './lib/ws';
 import { detectKleverExtension, setContractAddress, setKleverNetwork, resolveNetworkReadyFallback } from './lib/klever';
 import { detectK5, checkK5Callback } from './lib/k5';
 import { vaultGetSigner } from './lib/vault';
-import { getClient } from './lib/api';
+import { getClient, bootstrapNodeSelection } from './lib/api';
 import { installNetworkActivityTracker } from './lib/network-activity';
 import './styles/global.css';
 import './styles/design-styles.css';
@@ -39,26 +39,31 @@ if (!initialHash || initialHash === '#' || initialHash === '#/') {
 detectKleverExtension();
 detectK5();
 
-// Initialize auth (loads vault, attaches signer), then start WebSocket
-initAuth().then(() => {
-  const signer = vaultGetSigner();
-  initWs(signer ?? undefined);
+// Bootstrap node selection (v0.36.0+ / spec 5 §1.1): land on the
+// pinned default if set and reachable, otherwise pick the lowest-
+// ping candidate. Runs BEFORE auth / networkStats so those fetches
+// hit the chosen node — no reload needed mid-boot.
+bootstrapNodeSelection()
+  .catch(() => { /* leave nodeUrl as-is; downstream catches will handle */ })
+  .finally(() => {
+    initAuth().then(() => {
+      const signer = vaultGetSigner();
+      initWs(signer ?? undefined);
+      if (checkK5Callback()) {
+        // K5 callback handling is done by the router + WalletView
+      }
+    });
 
-  // Check for K5 callback return flow
-  if (checkK5Callback()) {
-    // K5 callback handling is done by the router + WalletView
-  }
-});
-
-// Fetch node config for on-chain operations (contract address + network)
-getClient().networkStats().then((stats: any) => {
-  if (stats?.contract_address) setContractAddress(stats.contract_address);
-  if (stats?.network) setKleverNetwork(stats.network);
-}).catch(() => {
-  // Node unreachable — resolve networkReady so connectExtension() doesn't
-  // hang forever. It will use mainnet provider URLs as a fallback.
-  resolveNetworkReadyFallback();
-});
+    // Fetch node config for on-chain operations (contract address + network)
+    getClient().networkStats().then((stats: any) => {
+      if (stats?.contract_address) setContractAddress(stats.contract_address);
+      if (stats?.network) setKleverNetwork(stats.network);
+    }).catch(() => {
+      // Node unreachable — resolve networkReady so connectExtension() doesn't
+      // hang forever. It will use mainnet provider URLs as a fallback.
+      resolveNetworkReadyFallback();
+    });
+  });
 
 // Disable native browser context menu globally so only in-app right-click menus appear.
 // Allow native context menu on text inputs/textareas for paste/spellcheck.
