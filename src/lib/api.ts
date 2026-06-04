@@ -16,8 +16,22 @@ let client: OgmaraClient | null = null;
  * once at mount) showed blank until a manual switch. Components read this
  * signal so the label updates the moment bootstrap (or any silent switch)
  * settles on a node. Kept in lockstep with `setSetting('nodeUrl', …)`.
+ *
+ * Initialized inline (NOT via `getCurrentNodeUrl()`) — calling that at module
+ * eval reaches `STALE_NODE_URLS` / `resolveNodeUrl`, which are declared below
+ * this line, and reading a `const` before its declaration runs is a temporal
+ * dead-zone crash ("Cannot access … before initialization"). The dev-proxy
+ * origin on localhost else saved-node else '' mirrors `resolveNodeUrl`'s
+ * initial value without the stale-URL migration (which `getClient` still runs
+ * lazily on first use).
  */
-const [activeNodeUrl, setActiveNodeUrl] = createSignal(getCurrentNodeUrl());
+const [activeNodeUrl, setActiveNodeUrl] = createSignal(
+  getSetting('nodeUrl') ||
+    (typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? window.location.origin
+      : ''),
+);
 export { activeNodeUrl };
 
 /** Network the cold-boot SC node discovery targets. Persisted by

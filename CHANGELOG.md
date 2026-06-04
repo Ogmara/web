@@ -5,6 +5,19 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.2] - 2026-06-04
+
+### Fixed
+
+- **App failed to start** (`Uncaught ReferenceError: Cannot access 'KX'
+  before initialization`) — a temporal dead-zone crash introduced in
+  0.37.1. The new `activeNodeUrl` signal initialized via
+  `getCurrentNodeUrl()` at module-eval, which reaches the `STALE_NODE_URLS`
+  const + `resolveNodeUrl()` declared lower in the file — reading a `const`
+  before its declaration runs throws. The signal now initializes inline
+  (saved node, dev-proxy origin on localhost, else '') without calling into
+  the later functions.
+
 ## [0.37.1] - 2026-06-04
 
 ### Fixed
