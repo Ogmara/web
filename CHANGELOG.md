@@ -5,6 +5,15 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.3] - 2026-06-04
+
+### Changed
+
+- Build: split third-party code into `solid` / `sdk` / `vendor` chunks via
+  Rollup `manualChunks` (grouped by change-cadence). Same total size
+  (~643 kB), but editing app code no longer busts the vendor cache, and the
+  >500 kB chunk-size warning is gone (largest chunk now ~484 kB).
+
 ## [0.37.2] - 2026-06-04
 
 ### Fixed
