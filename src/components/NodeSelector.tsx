@@ -8,7 +8,7 @@
 import { Component, createResource, createSignal, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import {
-  getCurrentNodeUrl,
+  activeNodeUrl,
   getAvailableNodes,
   switchNode,
   removeKnownNode,
@@ -23,7 +23,10 @@ import { AnchorBadge } from './AnchorBadge';
 
 export const NodeSelector: Component = () => {
   const [open, setOpen] = createSignal(false);
-  const [currentUrl, setCurrentUrl] = createSignal(getCurrentNodeUrl());
+  // Reactive current node — updates the moment bootstrap / any silent switch
+  // lands a node (the old local signal was captured once at mount, so it
+  // showed blank on a fresh load until a manual select).
+  const currentUrl = activeNodeUrl;
   const [manualUrl, setManualUrl] = createSignal('');
   const [addError, setAddError] = createSignal('');
   const [adding, setAdding] = createSignal(false);
@@ -51,8 +54,7 @@ export const NodeSelector: Component = () => {
   });
 
   const handleSelect = (url: string) => {
-    switchNode(url);
-    setCurrentUrl(url);
+    switchNode(url); // updates activeNodeUrl via switchNodeSilent, then reloads
     setOpen(false);
   };
 

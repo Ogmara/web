@@ -5,6 +5,19 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.1] - 2026-06-04
+
+### Fixed
+
+- Node-picker current-node label was blank on a fresh load (only the ▾
+  toggle showed) until the user manually selected a node. Regression from
+  0.37.0 dropping the `DEFAULT_NODE_URL` fallback to `''`: the picker read
+  the current URL into a signal once at mount — before
+  `bootstrapNodeSelection()` silently landed a node (no reload) — and that
+  signal wasn't reactive to the switch. The active node URL is now a
+  reactive signal (`activeNodeUrl`) updated by `switchNodeSilent`, so the
+  label appears the moment bootstrap (or any silent switch) settles.
+
 ## [0.37.0] - 2026-06-04
 
 Ports the desktop 1.24–1.25 fixes to the web app. Requires
