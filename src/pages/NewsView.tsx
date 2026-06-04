@@ -5,10 +5,12 @@
 import { Component, createResource, createSignal, createEffect, createMemo, onCleanup, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
+import { avatarUrl } from '../lib/ownAvatar';
 import { authStatus, getSigner, l2Address, walletAddress } from '../lib/auth';
 import { navigate, queryParam } from '../lib/router';
 import { getSetting, setSetting } from '../lib/settings';
 import { FormattedText } from '../components/FormattedText';
+import { MediaImage } from '../components/MediaImage';
 import { getPayloadContent, getPayloadTitle, getPayloadAttachments, decodePayload, safeAttachmentName } from '../lib/payload';
 import { sendTip, kleverAvailable, getExplorerUrl } from '../lib/klever';
 import { resolveProfile } from '../lib/profile';
@@ -545,7 +547,7 @@ const NewsCard: Component<{ post: any }> = (props) => {
           <Show when={profile().avatar_cid}>
             <img
               class="news-avatar"
-              src={getClient().getMediaUrl(profile().avatar_cid!)}
+              src={avatarUrl(profile().avatar_cid!)}
               alt=""
               loading="lazy"
             />
@@ -587,14 +589,12 @@ const NewsCard: Component<{ post: any }> = (props) => {
               const mediaUrl = getClient().getMediaUrl(att.cid);
               if (isImage) {
                 return (
-                  <a href={mediaUrl} target="_blank" rel="noopener noreferrer">
-                    <img
-                      class="news-attachment-img"
-                      src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)}
-                      alt={safeAttachmentName(att)}
-                      loading="lazy"
-                    />
-                  </a>
+                  <MediaImage
+                    src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)}
+                    href={mediaUrl}
+                    alt={safeAttachmentName(att)}
+                    class="news-attachment-img"
+                  />
                 );
               }
               if (isVideo) {
