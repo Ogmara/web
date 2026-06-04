@@ -2,11 +2,23 @@
  * Ogmara SDK integration — shared client instance.
  */
 
+import { createSignal } from 'solid-js';
 import { OgmaraClient, DEFAULT_NODE_URL, discoverAndPingNodes, discoverNodesViaSc, pingNode, validateNodeUrl, type NodeWithPing } from '@ogmara/sdk';
 import { getSetting, setSetting } from './settings';
 import { vaultGetSigner } from './vault';
 
 let client: OgmaraClient | null = null;
+
+/**
+ * Reactive mirror of the active node URL. localStorage reads aren't reactive
+ * in Solid, and `bootstrapNodeSelection()` lands a node via `switchNodeSilent`
+ * WITHOUT a reload — so the picker's current-node label (which read the URL
+ * once at mount) showed blank until a manual switch. Components read this
+ * signal so the label updates the moment bootstrap (or any silent switch)
+ * settles on a node. Kept in lockstep with `setSetting('nodeUrl', …)`.
+ */
+const [activeNodeUrl, setActiveNodeUrl] = createSignal(getCurrentNodeUrl());
+export { activeNodeUrl };
 
 /** Network the cold-boot SC node discovery targets. Persisted by
  *  `setKleverNetwork` once a node's stats are read; defaults to mainnet
@@ -158,6 +170,7 @@ export function switchNodeSilent(nodeUrl: string): void {
     return;
   }
   setSetting('nodeUrl', nodeUrl);
+  setActiveNodeUrl(nodeUrl); // keep the reactive label in sync
   addKnownNode(nodeUrl);
   resetClient();
   // RECONNECT (not just close) the WebSocket so push events follow the new
