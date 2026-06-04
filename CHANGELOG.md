@@ -5,6 +5,54 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.0] - 2026-06-04
+
+Ports the desktop 1.24–1.25 fixes to the web app. Requires
+@ogmara/sdk 0.21.0+ and l2-node 0.48.7+. Web keeps its stricter SSRF
+posture throughout (no `allowPrivateHosts` — the browser must never
+probe private space).
+
+### Added
+
+- On-chain node discovery: the picker and cold-load bootstrap now source
+  nodes from the Klever KApp registry (`discoverNodesViaSc`, current
+  network) ∪ the user's `knownNodes`, with a 7-day anchor-staleness
+  filter. New `kleverNetwork` setting persists the last-known network so
+  cold-load discovery targets the right registry; `getKleverNetwork()`
+  added.
+- Media-capability awareness: reads the node's `media_uploads` health
+  flag (`lib/media.ts`); the attach button is disabled with an
+  explanatory tooltip when the node can't host files, and inline images
+  that fail to load render a "hosted on another node" placeholder.
+
+### Changed
+
+- **Dropped the hardcoded `DEFAULT_NODE_URL` seed (`node.ogmara.org`).**
+  Dead, yet always injected into the picker as a permanent-∞ row and
+  used as the fallback. `getClient`/`getCurrentNodeUrl` now resolve to
+  the dev-proxy origin on localhost else `''` (until discovery / a saved
+  node lands one). The deprecated seed is purged from `knownNodes` at
+  boot, and the picker's ✕ no longer exempts it — any stale known node
+  is removable.
+
+### Fixed
+
+- **"Signer required" after a node switch** — `getClient()` now
+  re-attaches the vault signer on every (re)creation (works for builtin,
+  extension, and K5 signers), so a `resetClient()` no longer drops it.
+- **Manual node switch didn't stick** — a user switch is recorded as a
+  one-shot explicit choice honored across the reload, instead of
+  bootstrap re-running best-ping and bouncing the user elsewhere.
+- **Real-time died after a silent switch** — `switchNodeSilent` now
+  reconnects the WebSocket (gated on an already-live socket) instead of
+  only closing it. `validateNodeUrl` now runs at that single chokepoint.
+- **Node-picker ping label overlapped the ✕** — the row is CSS Grid with
+  explicit `[pin][url][ping][✕]` tracks; the URL truncates with an
+  ellipsis.
+- **Missing i18n keys rendered as raw key names** (e.g.
+  `node_default_pinned`). Added the 5 `node_*` + 3 `media_*` keys to all
+  7 locales.
+
 ## [0.36.0] - 2026-06-01
 
 Default-node pinning + best-ping bootstrap (spec 5 §1.1 / spec 13

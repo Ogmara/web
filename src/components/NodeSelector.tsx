@@ -18,7 +18,7 @@ import {
   getLastBootstrapResult,
 } from '../lib/api';
 import type { NodeWithPing } from '@ogmara/sdk';
-import { validateNodeUrl, DEFAULT_NODE_URL } from '@ogmara/sdk';
+import { validateNodeUrl } from '@ogmara/sdk';
 import { AnchorBadge } from './AnchorBadge';
 
 export const NodeSelector: Component = () => {
@@ -184,9 +184,12 @@ export const NodeSelector: Component = () => {
                 // Default and current entries can't usefully be removed
                 // (the default re-appears from `getAvailableNodes`;
                 // the current is what's actually in use).
+                // ✕ on any known-nodes breadcrumb that isn't the current
+                // node. (No hardcoded-default exemption anymore — nodes come
+                // from the SC registry + the user's list, and a stale/dead
+                // known node must always be removable.)
                 const isUserAdded = () =>
                   getKnownNodes().includes(node.url) &&
-                  node.url !== DEFAULT_NODE_URL &&
                   node.url !== currentUrl();
                 const isPinned = () => defaultUrl() === node.url;
                 return (
@@ -220,10 +223,13 @@ export const NodeSelector: Component = () => {
                           <AnchorBadge level={node.anchorStatus!.level} showLabel={false} />
                         </Show>
                       </span>
-                      <span class="node-ping" style={{ color: pingColor(node.ping) }}>
-                        {node.ping === Infinity ? '∞' : node.ping}ms ({pingLabel(node.ping)})
-                      </span>
                     </button>
+                    {/* Ping + ✕ are ROW-LEVEL siblings (not inside the select
+                        button), in their own grid tracks, so the ping label
+                        can never overlap the remove button. */}
+                    <span class="node-ping" style={{ color: pingColor(node.ping) }}>
+                      {node.ping === Infinity ? '∞' : node.ping}ms ({pingLabel(node.ping)})
+                    </span>
                     <Show when={isUserAdded()}>
                       <button
                         class="node-option-remove"
@@ -316,7 +322,13 @@ export const NodeSelector: Component = () => {
         }
         .node-refresh:hover { color: var(--color-accent-primary); }
         .node-option-row {
-          display: flex;
+          /* Grid with explicit column tracks [pin][url(flex)][ping][✕].
+             Tracks can't overlap, so the ping label never lands on the
+             remove button regardless of URL length or active-row bold.
+             The url track is minmax(0,1fr) so only it absorbs slack and
+             truncates; the 4th track is empty on rows without a ✕. */
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr) auto auto;
           align-items: stretch;
           width: 100%;
         }
@@ -326,6 +338,7 @@ export const NodeSelector: Component = () => {
         .node-option-pin {
           display: flex;
           align-items: center;
+          flex-shrink: 0;
           padding: 0 8px;
           background: transparent;
           color: var(--color-text-secondary);
@@ -366,9 +379,8 @@ export const NodeSelector: Component = () => {
         .node-boot-dismiss:hover { opacity: 1; }
         .node-option {
           display: flex;
-          justify-content: space-between;
           align-items: center;
-          flex: 1;
+          min-width: 0;
           padding: var(--spacing-sm);
           text-align: left;
           font-size: var(--font-size-sm);
@@ -378,6 +390,7 @@ export const NodeSelector: Component = () => {
         .node-option:hover { background: var(--color-bg-tertiary); }
         .node-option.active { background: var(--color-bg-tertiary); font-weight: 600; }
         .node-option-remove {
+          flex-shrink: 0;
           padding: 0 10px;
           background: transparent;
           color: var(--color-text-secondary);
@@ -390,9 +403,25 @@ export const NodeSelector: Component = () => {
           display: flex;
           align-items: center;
           gap: var(--spacing-xs);
+          min-width: 0;
+          overflow: hidden;
         }
-        .node-option-url { color: var(--color-text-primary); }
-        .node-ping { font-size: var(--font-size-xs); font-weight: 600; }
+        .node-option-url {
+          color: var(--color-text-primary);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        /* Ping is a row-level grid item: reserved width, never overlaps ✕. */
+        .node-ping {
+          flex-shrink: 0;
+          display: flex;
+          align-items: center;
+          padding: 0 var(--spacing-sm);
+          white-space: nowrap;
+          font-size: var(--font-size-xs);
+          font-weight: 600;
+        }
         .node-loading {
           padding: var(--spacing-md);
           text-align: center;

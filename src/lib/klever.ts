@@ -10,6 +10,7 @@
  */
 
 import { createSignal } from 'solid-js';
+import { getSetting, setSetting } from './settings';
 
 // --- TypeScript declarations for Klever Extension ---
 
@@ -56,11 +57,13 @@ declare global {
  * Klever network provider URLs.
  * Set from L2 node stats (testnet or mainnet). Defaults to mainnet.
  */
-let kleverProvider: KleverProvider = {
-  api: 'https://api.mainnet.klever.org',
-  node: 'https://node.mainnet.klever.org',
-};
-let currentNetwork = 'mainnet';
+// Initialize from the last-known network (persisted) so cold-load SC node
+// discovery targets the right registry BEFORE we've reached any node to read
+// its networkStats. Defaults to mainnet (the production registry).
+let currentNetwork = getSetting('kleverNetwork') === 'testnet' ? 'testnet' : 'mainnet';
+let kleverProvider: KleverProvider = currentNetwork === 'testnet'
+  ? { api: 'https://api.testnet.klever.org', node: 'https://node.testnet.klever.org' }
+  : { api: 'https://api.mainnet.klever.org', node: 'https://node.mainnet.klever.org' };
 
 /** Get the Kleverscan explorer base URL for the current network. */
 export function getExplorerUrl(): string {
@@ -84,9 +87,17 @@ export function resolveNetworkReadyFallback(): void {
   resolveNetworkReady();
 }
 
+/** Current Klever network for SC discovery / explorer links. */
+export function getKleverNetwork(): 'mainnet' | 'testnet' {
+  return currentNetwork === 'testnet' ? 'testnet' : 'mainnet';
+}
+
 /** Set the Klever network provider URLs (called after fetching node stats). */
 export function setKleverNetwork(network: string): void {
   currentNetwork = network;
+  // Persist so the NEXT cold load's SC node discovery targets this network
+  // before any node has been reached.
+  setSetting('kleverNetwork', network === 'testnet' ? 'testnet' : 'mainnet');
   if (network === 'testnet') {
     kleverProvider = {
       api: 'https://api.testnet.klever.org',
