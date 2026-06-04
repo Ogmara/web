@@ -62,6 +62,14 @@ export interface Settings {
    * client always lands there first.
    */
   defaultNodeUrl: string;
+
+  /**
+   * Last-known Klever network ('mainnet' | 'testnet'), persisted from a
+   * node's `networkStats.network`. Read at cold load so on-chain SC node
+   * discovery targets the right registry before any node is reached.
+   * Defaults to mainnet (the production registry).
+   */
+  kleverNetwork: 'mainnet' | 'testnet';
 }
 
 const defaults: Settings = {
@@ -88,6 +96,7 @@ const defaults: Settings = {
   defaultFeed: 'global',
   knownNodes: [],
   defaultNodeUrl: '',
+  kleverNetwork: 'mainnet',
 };
 
 /** Load a setting from localStorage with fallback to default. */

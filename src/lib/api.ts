@@ -2,10 +2,25 @@
  * Ogmara SDK integration — shared client instance.
  */
 
-import { OgmaraClient, DEFAULT_NODE_URL, discoverAndPingNodes, pingNode, type NodeWithPing } from '@ogmara/sdk';
+import { OgmaraClient, DEFAULT_NODE_URL, discoverAndPingNodes, discoverNodesViaSc, pingNode, validateNodeUrl, type NodeWithPing } from '@ogmara/sdk';
 import { getSetting, setSetting } from './settings';
+import { vaultGetSigner } from './vault';
 
 let client: OgmaraClient | null = null;
+
+/** Network the cold-boot SC node discovery targets. Persisted by
+ *  `setKleverNetwork` once a node's stats are read; defaults to mainnet
+ *  (the production registry) on a fresh load. */
+function discoveryNetwork(): 'mainnet' | 'testnet' {
+  return getSetting('kleverNetwork') === 'testnet' ? 'testnet' : 'mainnet';
+}
+
+/** Drop SC-registered nodes that haven't anchored within this window. A node
+ *  doesn't auto-deregister on-chain when it goes offline, so the CLIENT
+ *  applies the staleness filter (same 7-day window the node's media fallback
+ *  uses). Nodes that never anchored (lastAnchorAt === 0) are kept — they may
+ *  be coming online. */
+const SC_MAX_ANCHOR_AGE_SECS = 7 * 24 * 60 * 60;
 
 /**
  * URLs that point at the website (or other non-node hosts) but were ever
@@ -37,16 +52,32 @@ function resolveNodeUrl(): string {
   migrateStaleNodeUrl();
   const saved = getSetting('nodeUrl');
   if (saved) return saved;
-  // On localhost the dev proxy forwards /api/v1/* to the upstream node
+  // On localhost the dev proxy forwards /api/v1/* to the upstream node.
+  // Otherwise there's NO hardcoded seed anymore — the node comes from
+  // on-chain SC discovery via `bootstrapNodeSelection()`. Empty until it
+  // lands one; calls fail (caught by views) in the meantime.
   const isLocal = typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  return isLocal ? window.location.origin : DEFAULT_NODE_URL;
+  return isLocal ? window.location.origin : '';
 }
 
-/** Get or create the shared API client. */
+/**
+ * Get or create the shared API client.
+ *
+ * The signer is RE-ATTACHED on every (re)creation from the vault's
+ * in-memory signer. This decouples signer lifetime from client lifetime:
+ * any `resetClient()` (every node switch) used to silently drop the
+ * signer, so the next authenticated call threw "Signer required for
+ * authenticated endpoints". At boot it raced — `bootstrapNodeSelection()`
+ * runs concurrently with `initAuth()` and can `resetClient()` AFTER the
+ * signer was attached. Re-reading the vault signer here makes the client
+ * robust regardless of reset ordering (null when locked/disconnected).
+ */
 export function getClient(): OgmaraClient {
   if (!client) {
     client = new OgmaraClient({ nodeUrl: resolveNodeUrl() });
+    const signer = vaultGetSigner();
+    if (signer) client.withSigner(signer);
   }
   return client;
 }
@@ -86,6 +117,16 @@ export function removeKnownNode(url: string): void {
  */
 export function switchNode(nodeUrl: string): void {
   switchNodeSilent(nodeUrl);
+  // Mark this as an EXPLICIT user choice so the post-reload
+  // `bootstrapNodeSelection()` honors it instead of re-running best-ping
+  // (or pinned-default) selection and bouncing the user onto a different
+  // node. Without this a manual switch never stuck (the reload re-ran
+  // selection). Survives the reload via sessionStorage; consumed at boot.
+  try {
+    sessionStorage.setItem('ogmara:explicitNode', nodeUrl);
+  } catch {
+    /* sessionStorage unavailable — fall back to best-ping after reload */
+  }
   // Force a full page reload so every `createResource` in the app
   // refetches against the new node. Without this, channels / news /
   // profile / DMs all keep showing the previous node's cached
@@ -108,11 +149,24 @@ export function switchNode(nodeUrl: string): void {
  * previous node won't refetch on their own. Use `switchNode` there.
  */
 export function switchNodeSilent(nodeUrl: string): void {
+  // Validate at this single chokepoint so EVERY switch path — picker,
+  // manual-add, pinned, best-ping, explicit-flag — is covered. A
+  // compromised current node can advertise arbitrary peer URLs; web does
+  // NOT allow private hosts (browser SSRF), so this also blocks loopback/
+  // RFC1918/etc. URLs from being switched to. Keep current node on reject.
+  if (!validateNodeUrl(nodeUrl)) {
+    return;
+  }
   setSetting('nodeUrl', nodeUrl);
   addKnownNode(nodeUrl);
   resetClient();
-  import('./ws').then(({ closeWs }) => {
-    closeWs();
+  // RECONNECT (not just close) the WebSocket so push events follow the new
+  // node — but only when a socket is already live. At cold boot the
+  // connection is owned by the auth/init path; a concurrent bootstrap
+  // switch must not open its own (possibly anonymous) socket and race it.
+  // `initWs()` closes any existing socket first.
+  import('./ws').then(({ initWs, wsIsActive }) => {
+    if (wsIsActive()) initWs(vaultGetSigner() ?? undefined);
   }).catch(() => { /* ws module optional at boot */ });
 }
 
@@ -180,6 +234,11 @@ export function getLastBootstrapResult(): BootstrapResult | null {
 }
 
 export async function bootstrapNodeSelection(): Promise<BootstrapResult> {
+  // One-time cleanup: purge the deprecated hardcoded seed
+  // (`node.ogmara.org`) from persisted known-nodes if present. It's now
+  // dead and used to linger in the picker as an unremovable ∞ row.
+  removeKnownNode(DEFAULT_NODE_URL);
+
   // Dev-mode shortcut: when running under Vite on localhost, the dev
   // proxy is the only sensible target — skip discovery entirely.
   const isLocal =
@@ -187,6 +246,23 @@ export async function bootstrapNodeSelection(): Promise<BootstrapResult> {
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
   if (isLocal) {
     const result: BootstrapResult = { chosen: getCurrentNodeUrl(), reason: 'best-ping' };
+    _lastBootstrapResult = result;
+    return result;
+  }
+
+  // An explicit user switch (picker / manual-add) triggers a reload, which
+  // re-enters this function. Honor that choice verbatim — skip pin +
+  // best-ping — so the user lands on the node they picked. One-shot flag.
+  let explicit = '';
+  try {
+    explicit = sessionStorage.getItem('ogmara:explicitNode') || '';
+    if (explicit) sessionStorage.removeItem('ogmara:explicitNode');
+  } catch {
+    /* sessionStorage unavailable — fall through to normal selection */
+  }
+  if (explicit) {
+    if (explicit !== getCurrentNodeUrl()) switchNodeSilent(explicit);
+    const result: BootstrapResult = { chosen: explicit, reason: 'default' };
     _lastBootstrapResult = result;
     return result;
   }
@@ -221,10 +297,10 @@ export async function bootstrapNodeSelection(): Promise<BootstrapResult> {
   return result;
 }
 
-/** Get the current node URL. */
+/** Get the current node URL (dev-proxy origin on localhost, else the saved
+ *  node, else '' until SC discovery / a saved node lands one). */
 export function getCurrentNodeUrl(): string {
-  migrateStaleNodeUrl();
-  return getSetting('nodeUrl') || DEFAULT_NODE_URL;
+  return resolveNodeUrl();
 }
 
 /** Discover available nodes with ping times, sorted by latency.
@@ -238,8 +314,13 @@ export function getCurrentNodeUrl(): string {
  * URL hostname and with the current node winning any tie:
  *
  * 1. `discoverAndPingNodes` — pings current node + any peers it
- *    advertises in `/api/v1/network/nodes`.
- * 2. `DEFAULT_NODE_URL` — SDK hardcoded fallback. Always pingable.
+ *    advertises in `/api/v1/network/nodes`. Skipped when there's no
+ *    current node yet.
+ * 2. `discoverNodesViaSc` — the ON-CHAIN registry (getActiveNodes →
+ *    getNodeMetadata → derived HTTPS endpoint), with a 7-day anchor-
+ *    staleness filter. This REPLACED the dead hardcoded
+ *    `DEFAULT_NODE_URL` (`node.ogmara.org`) seed — a single point of
+ *    failure that cluttered the picker as a permanently-∞ row.
  * 3. `knownNodes` — every URL the user has successfully switched
  *    to in the past. Solves the "switched to a new node and the
  *    previous one disappeared from the dropdown" UX trap.
@@ -256,18 +337,31 @@ export async function getAvailableNodes(): Promise<NodeWithPing[]> {
     return [{ url: getCurrentNodeUrl(), ping: 0 }];
   }
   const currentUrl = getCurrentNodeUrl();
-  const discovered = await discoverAndPingNodes(currentUrl);
+  const discovered = currentUrl
+    ? await discoverAndPingNodes(currentUrl).catch(() => [] as NodeWithPing[])
+    : [];
 
   const discoveredUrls = new Set(discovered.map((n) => n.url));
+  // On-chain registry seeds (staleness-filtered) + every user-added URL.
+  // SC discovery is best-effort (Klever RPC may be down). Web does NOT
+  // pass allowPrivateHosts — the SC SSRF guard already strips private
+  // hosts, and the browser must never probe private space.
+  const nowSecs = Math.floor(Date.now() / 1000);
+  const scNodes = await discoverNodesViaSc(discoveryNetwork()).catch(() => []);
+  const scUrls = scNodes
+    .filter((n) => !!n.endpoint)
+    .filter((n) => !n.lastAnchorAt || nowSecs - n.lastAnchorAt <= SC_MAX_ANCHOR_AGE_SECS)
+    .map((n) => n.endpoint as string);
   const extras: string[] = [];
-  if (!discoveredUrls.has(DEFAULT_NODE_URL) && DEFAULT_NODE_URL !== currentUrl) {
-    extras.push(DEFAULT_NODE_URL);
-  }
-  for (const url of getKnownNodes()) {
-    if (!discoveredUrls.has(url) && url !== DEFAULT_NODE_URL && url !== currentUrl) {
-      extras.push(url);
+  const pushExtra = (url: string) => {
+    if (!url || discoveredUrls.has(url) || url === currentUrl || extras.includes(url)) {
+      return;
     }
-  }
+    extras.push(url);
+  };
+  for (const url of scUrls) pushExtra(url);
+  for (const url of getKnownNodes()) pushExtra(url);
+
   const extraPings = await Promise.all(
     extras.map(async (url) => ({ url, ping: await pingNode(url) })),
   );

@@ -47,6 +47,16 @@ export function initWs(signer?: WalletSigner): void {
   });
 }
 
+/**
+ * True if a WebSocket subscription currently exists. `switchNodeSilent`
+ * uses this to only follow a node switch with a reconnect once the app's
+ * own auth/init path has opened the (signed) connection — so a concurrent
+ * cold-boot bootstrap switch doesn't race it with an anonymous socket.
+ */
+export function wsIsActive(): boolean {
+  return subscription !== null;
+}
+
 /** Close the WebSocket connection. */
 export function closeWs(): void {
   if (subscription) {

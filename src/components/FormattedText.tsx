@@ -5,13 +5,45 @@
  * URLs open in a new browser tab.
  */
 
-import { Component, For, Show } from 'solid-js';
+import { Component, For, Show, createSignal } from 'solid-js';
 import { JSX } from 'solid-js/jsx-runtime';
 import { parseMessageContent, type TextSegment, type Attachment } from '@ogmara/sdk';
 import { getClient } from '../lib/api';
 import { navigate } from '../lib/router';
 import { getSetting } from '../lib/settings';
+import { t } from '../i18n/init';
 import { safeAttachmentName } from '../lib/payload';
+
+/**
+ * Inline message image with a graceful failure state. When the CID can't be
+ * fetched from the current node — most commonly because the image lives on a
+ * different node and THIS node has no IPFS backend (503/404) — show a readable
+ * "hosted on another node" placeholder instead of the broken-image icon.
+ */
+const MsgImage: Component<{ thumbSrc: string; fullUrl: string; alt: string }> = (props) => {
+  const [errored, setErrored] = createSignal(false);
+  return (
+    <Show
+      when={!errored()}
+      fallback={
+        <div class="msg-image-missing" title={props.alt}>
+          <span class="msg-image-missing-icon" aria-hidden="true">🖼️</span>
+          <span class="msg-image-missing-text">{t('media_image_other_node')}</span>
+        </div>
+      }
+    >
+      <a href={props.fullUrl} target="_blank" rel="noopener noreferrer">
+        <img
+          src={props.thumbSrc}
+          alt={props.alt}
+          class="msg-image"
+          loading="lazy"
+          onError={() => setErrored(true)}
+        />
+      </a>
+    </Show>
+  );
+};
 
 interface Props {
   content: string;
@@ -160,16 +192,13 @@ export const FormattedText: Component<Props> = (props) => {
               const safeName = safeAttachmentName(att);
               if (isImage && autoload) {
                 return (
-                  <a href={mediaUrl} target="_blank" rel="noopener noreferrer">
-                    <img
-                      src={att.thumbnail_cid
-                        ? getClient().getMediaUrl(att.thumbnail_cid)
-                        : mediaUrl}
-                      alt={safeName}
-                      class="msg-image"
-                      loading="lazy"
-                    />
-                  </a>
+                  <MsgImage
+                    thumbSrc={att.thumbnail_cid
+                      ? getClient().getMediaUrl(att.thumbnail_cid)
+                      : mediaUrl}
+                    fullUrl={mediaUrl}
+                    alt={safeName}
+                  />
                 );
               }
               if (isVideo && autoload) {
@@ -229,6 +258,24 @@ export const FormattedText: Component<Props> = (props) => {
           object-fit: cover;
         }
         .msg-image:hover { opacity: 0.9; }
+        .msg-image-missing {
+          display: inline-flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: var(--spacing-xs);
+          width: 220px;
+          max-width: 100%;
+          min-height: 120px;
+          padding: var(--spacing-md);
+          border: 1px dashed var(--color-border);
+          border-radius: var(--radius-md);
+          background: var(--color-bg-tertiary);
+          color: var(--color-text-secondary);
+          text-align: center;
+        }
+        .msg-image-missing-icon { font-size: 28px; opacity: 0.7; }
+        .msg-image-missing-text { font-size: var(--font-size-xs); line-height: 1.4; }
         .msg-video {
           max-width: 400px;
           max-height: 300px;
