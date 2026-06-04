@@ -72,5 +72,20 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     target: 'esnext',
+    rollupOptions: {
+      output: {
+        // Split third-party code out of the app bundle so editing app code
+        // doesn't bust the (large, rarely-changing) vendor cache. Three
+        // groups by change-cadence: `solid` (framework, very stable),
+        // `sdk` (@ogmara/sdk — bumps with protocol work), `vendor`
+        // (crypto/msgpack/i18n/etc.). App code stays in the entry chunk.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('solid-js') || id.includes('vite-plugin-solid')) return 'solid';
+          if (id.includes('@ogmara') || id.includes('/sdk-js/')) return 'sdk';
+          return 'vendor';
+        },
+      },
+    },
   },
 }));
