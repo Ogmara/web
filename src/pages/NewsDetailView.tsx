@@ -9,9 +9,11 @@
 import { Component, createResource, createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
+import { avatarUrl } from '../lib/ownAvatar';
 import { authStatus, getSigner, l2Address, walletAddress, isRegistered } from '../lib/auth';
 import { navigate, routeParam } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
+import { MediaImage } from '../components/MediaImage';
 import { getPayloadContent, getPayloadTitle, getPayloadAttachments, decodePayload, safeAttachmentName } from '../lib/payload';
 import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
 import { MentionPopover } from '../components/MentionPopover';
@@ -39,7 +41,7 @@ const CommentCard: Component<{ comment: any; onReply: (msgId: string, author: st
           <Show when={profile().avatar_cid}>
             <img
               class="comment-avatar"
-              src={getClient().getMediaUrl(profile().avatar_cid!)}
+              src={avatarUrl(profile().avatar_cid!)}
               alt=""
               loading="lazy"
             />
@@ -73,9 +75,12 @@ const CommentCard: Component<{ comment: any; onReply: (msgId: string, author: st
               const mediaUrl = getClient().getMediaUrl(att.cid);
               if (isImage) {
                 return (
-                  <a href={mediaUrl} target="_blank" rel="noopener noreferrer">
-                    <img class="comment-attachment-img" src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)} alt={safeAttachmentName(att)} loading="lazy" />
-                  </a>
+                  <MediaImage
+                    src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)}
+                    href={mediaUrl}
+                    alt={safeAttachmentName(att)}
+                    class="comment-attachment-img"
+                  />
                 );
               }
               if (isVideo) {
@@ -365,7 +370,7 @@ export const NewsDetailView: Component = () => {
               <Show when={postProfile().avatar_cid}>
                 <img
                   class="detail-avatar"
-                  src={getClient().getMediaUrl(postProfile().avatar_cid!)}
+                  src={avatarUrl(postProfile().avatar_cid!)}
                   alt=""
                   loading="lazy"
                 />
@@ -403,9 +408,12 @@ export const NewsDetailView: Component = () => {
                   const mediaUrl = getClient().getMediaUrl(att.cid);
                   if (isImage) {
                     return (
-                      <a href={mediaUrl} target="_blank" rel="noopener noreferrer">
-                        <img class="detail-attachment-img" src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)} alt={safeAttachmentName(att)} loading="lazy" />
-                      </a>
+                      <MediaImage
+                        src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)}
+                        href={mediaUrl}
+                        alt={safeAttachmentName(att)}
+                        class="detail-attachment-img"
+                      />
                     );
                   }
                   if (isVideo) {

@@ -5,6 +5,30 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.0] - 2026-06-04
+
+### Added
+
+- **Own-avatar local cache** (`lib/ownAvatar.ts`): the user's own avatar is
+  cached as a data URL in localStorage (populated on profile-load and on
+  upload, cleared on disconnect) so it renders on ANY node — including ones
+  with no IPFS backend or that haven't synced this user's media. The
+  burger menu now shows the avatar (was initials-only), and the prominent
+  own-avatar spots (toolbar, profile, news posts, chat messages) resolve
+  through a cache-aware `avatarUrl()`.
+- **News image placeholders**: news post + comment attachment images now use
+  the shared `MediaImage` component, so an image that can't be fetched (e.g.
+  hosted on a node without IPFS) shows the "Image hosted on another node —
+  switch nodes to view" placeholder instead of a broken icon. Chat already
+  had this; both now share one component (placeholder CSS in `global.css`).
+
+### Fixed
+
+- Profile-page avatar was broken even on the node that hosts it — it built a
+  **relative** `/api/v1/media/<cid>` URL (resolves against the page origin,
+  not the node) while every other avatar used `getClient().getMediaUrl()`.
+  Now uses the node-based URL like the rest.
+
 ## [0.37.3] - 2026-06-04
 
 ### Changed
