@@ -5,6 +5,21 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.1] - 2026-06-05
+
+### Fixed
+
+- **Device-mapping banner no longer false-fires on reload and is dismissible.**
+  On a cold reload the Klever extension isn't initialized yet, so the
+  speculative device re-registration was raising the "device not linked"
+  banner even when the node already had the mapping (now propagated via the
+  node's delegation gossip, l2-node 0.49.0+). `verifyDeviceMapping` — which
+  actually asks the node whether the mapping is live — is now the SOLE
+  authority for the banner, and the banner has a ✕ to dismiss it (re-shown only
+  on a genuinely new failure). Builds against @ogmara/sdk 0.22.0, whose
+  `registerDevice` now co-signs the device claim so the node can gossip a free,
+  unforgeable delegation that follows the user to any node.
+
 ## [0.38.0] - 2026-06-04
 
 ### Added
