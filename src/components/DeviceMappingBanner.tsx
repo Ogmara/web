@@ -8,7 +8,7 @@
  * Detection runs in `verifyDeviceMapping()` after each auth-ready transition.
  */
 
-import { Component, Show, createSignal } from 'solid-js';
+import { Component, Show, createSignal, createEffect } from 'solid-js';
 import { t } from '../i18n/init';
 import {
   authStatus,
@@ -22,11 +22,22 @@ import { navigate } from '../lib/router';
 export const DeviceMappingBanner: Component = () => {
   const [retrying, setRetrying] = createSignal(false);
   const [resultMsg, setResultMsg] = createSignal('');
+  // Dismissible per-occurrence: the ✕ hides it; a NEW failure (false→true
+  // transition) re-shows it. Without this the banner couldn't be cleared at
+  // all, which read as "stuck".
+  const [dismissed, setDismissed] = createSignal(false);
+  let wasFailed = false;
+  createEffect(() => {
+    const failed = deviceMappingFailed();
+    if (failed && !wasFailed) setDismissed(false);
+    wasFailed = failed;
+  });
 
   const visible = () =>
     authStatus() === 'ready'
     && walletSource() === 'klever-extension'
-    && deviceMappingFailed();
+    && deviceMappingFailed()
+    && !dismissed();
 
   const handleRelink = async () => {
     setRetrying(true);
@@ -58,6 +69,14 @@ export const DeviceMappingBanner: Component = () => {
           </button>
           <button class="device-banner-btn-secondary" onClick={() => navigate('/wallet')}>
             {t('device_link_open_wallet')}
+          </button>
+          <button
+            class="device-banner-dismiss"
+            title="Dismiss"
+            aria-label="Dismiss"
+            onClick={() => setDismissed(true)}
+          >
+            ✕
           </button>
         </div>
       </div>
@@ -93,6 +112,12 @@ export const DeviceMappingBanner: Component = () => {
           padding: 6px 14px; border-radius: var(--radius-sm);
           cursor: pointer; font-size: var(--font-size-sm);
         }
+        .device-banner-dismiss {
+          background: transparent; color: var(--color-text-secondary);
+          border: none; padding: 4px 8px; border-radius: var(--radius-sm);
+          cursor: pointer; font-size: var(--font-size-md); line-height: 1;
+        }
+        .device-banner-dismiss:hover { color: var(--color-text-primary); }
       `}</style>
     </Show>
   );

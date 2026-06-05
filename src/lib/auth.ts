@@ -174,16 +174,17 @@ async function ensureDeviceRegistered(
     setDeviceMappingFailed(false);
     setDeviceMappingError(null);
   } catch (e: any) {
+    // Do NOT raise the device-mapping banner here. This is a SPECULATIVE
+    // re-registration on session restore; on a cold reload the Klever
+    // Extension isn't initialized yet ("Provider not init"), so this call is
+    // expected to be skipped — that's not a failure. And the node may already
+    // know this device via delegation gossip from the node we first
+    // registered on, so a missing local re-registration doesn't mean the
+    // mapping is broken. `verifyDeviceMapping()` (called right after in
+    // initAuth) is the SOLE authority: it asks the node whether the mapping
+    // is actually live and shows the banner only if it genuinely isn't.
     const errMsg = e?.message || String(e);
-    if (errMsg.includes('Provider not init') || errMsg.includes('not available')) {
-      console.debug('[auth] Skipping device re-registration: Klever Extension not initialized');
-      setDeviceMappingFailed(true);
-      setDeviceMappingError('Klever Extension not initialized');
-      return;
-    }
-    console.warn('Device re-registration failed:', errMsg);
-    setDeviceMappingFailed(true);
-    setDeviceMappingError(errMsg);
+    console.debug('[auth] speculative device re-registration skipped/failed (verifyDeviceMapping decides):', errMsg);
   }
 }
 
