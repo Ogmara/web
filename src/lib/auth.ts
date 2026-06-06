@@ -197,13 +197,16 @@ async function ensureDeviceRegistered(
  * all data produced by this device is indexed under the wallet address.
  */
 export async function connectKleverExtension(extensionAddress: string): Promise<void> {
-  // Reuse existing device key if available, otherwise generate a new one
+  // Reuse existing device key if available, otherwise generate a new one.
+  // NOTE: `signer`/`deviceAddress` are `let` because the registration step
+  // below may mint a FRESH device key if this browser's existing key is
+  // already bound to a different wallet (wallet switch — see the 409 path).
   const vaultAddr = await vaultInit() ?? await vaultGenerate();
-  const signer = vaultGetSigner()!;
+  let signer = vaultGetSigner()!;
   getClient().withSigner(signer);
 
   // Device address uses ogd1... prefix (distinct from wallet's klv1...)
-  const deviceAddress = signer.deviceAddress;
+  let deviceAddress = signer.deviceAddress;
   void vaultAddr; // vault returns klv1; we use ogd1 for device identity
 
   // CRITICAL: set walletAddress on the signer BEFORE registerDeviceOnNode().
@@ -229,21 +232,52 @@ export async function connectKleverExtension(extensionAddress: string): Promise<
   // caller check passes, and registration proceeds.
   signer.walletAddress = extensionAddress;
 
-  // Register device on L2 node (skip if already registered for this pair)
-  const cacheKey = `${extensionAddress}:${deviceAddress}`;
+  // Register device on L2 node (skip if already registered for this pair).
   const cached = getSetting('deviceRegistered');
-  if (cached !== cacheKey) {
-    try {
-      await registerDeviceOnNode(signer, extensionAddress);
-      setSetting('deviceRegistered', cacheKey);
+  if (cached !== `${extensionAddress}:${deviceAddress}`) {
+    // Device keys are EPHEMERAL and PER-WALLET. If this browser's existing
+    // device key is already bound to a different wallet (i.e. you switched
+    // wallets in the same browser), the node refuses to reassign it with a
+    // 409 (cross-wallet hijack defense). The correct resolution is to mint a
+    // FRESH device key for the new wallet and retry — NOT to steal the old
+    // one (which would re-attribute the previous wallet's history). We retry
+    // once after regenerating.
+    let registered = false;
+    for (let attempt = 0; attempt < 2 && !registered; attempt++) {
+      try {
+        await registerDeviceOnNode(signer, extensionAddress);
+        registered = true;
+      } catch (e: any) {
+        const errMsg = e?.message || String(e);
+        const conflict =
+          errMsg.includes('409') || errMsg.includes('already linked');
+        // SAFETY (CRITICAL): `vaultGenerate()` OVERWRITES the vault key. Only
+        // mint a fresh key when the vault provably holds an ephemeral DEVICE
+        // key — i.e. an external-wallet source where the vault is device-only.
+        // FAIL CLOSED: regenerate ONLY for the known device-key sources;
+        // never for 'builtin' (the vault IS the user's wallet → would destroy
+        // it), nor for null/''/unknown. Positive-allow, not "!= builtin".
+        const src = getSetting('walletSource');
+        const safeToRegen = src === 'klever-extension' || src === 'k5-delegation';
+        if (conflict && safeToRegen && attempt === 0) {
+          // Mint a fresh device key for this wallet and re-wire the signer.
+          await vaultGenerate();
+          signer = vaultGetSigner()!;
+          getClient().withSigner(signer);
+          signer.walletAddress = extensionAddress;
+          deviceAddress = signer.deviceAddress;
+          continue;
+        }
+        // Genuine failure (or the retry also failed) — continue without the
+        // mapping. The node falls back to using the device key as identity.
+        console.warn('Device registration failed, continuing without mapping:', errMsg);
+        setDeviceMappingFailed(true);
+        setDeviceMappingError(errMsg);
+      }
+    }
+    if (registered) {
+      setSetting('deviceRegistered', `${extensionAddress}:${deviceAddress}`);
       setDeviceMappingFailed(false);
-    } catch (e: any) {
-      // Registration failed — continue without it. The node falls back to
-      // using the device key as identity (built-in wallet mode).
-      const errMsg = e?.message || String(e);
-      console.warn('Device registration failed, continuing without mapping:', errMsg);
-      setDeviceMappingFailed(true);
-      setDeviceMappingError(errMsg);
     }
   }
 
