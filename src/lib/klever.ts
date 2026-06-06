@@ -11,6 +11,7 @@
 
 import { createSignal } from 'solid-js';
 import { getSetting, setSetting } from './settings';
+import { getClient } from './api';
 
 // --- TypeScript declarations for Klever Extension ---
 
@@ -319,65 +320,31 @@ export async function createChannelOnChain(slug: string, channelType: number): P
 }
 
 /**
- * Wait for a createChannel TX to confirm, then query the SC view function
- * `getChannelBySlug` to retrieve the assigned channel_id.
+ * Resolve a freshly-created channel's SC-assigned `channel_id` by polling the
+ * connected Ogmara NODE for the channel by slug.
  *
- * Klever SC events are not easily accessible from the API, so we poll
- * the TX status and then query the SC storage directly.
+ * The browser cannot query Klever's RPC directly (CORS-blocked), so we don't
+ * poll the TX status or the SC view here. Instead the node's chain scanner
+ * records the channel (slug + channel_id) once it sees the on-chain creation —
+ * so a successful by-slug lookup BOTH confirms the TX landed AND yields the id,
+ * with no browser→Klever call. `txHash` is unused now (kept for call-site
+ * compatibility).
  */
-export async function getChannelIdFromTx(txHash: string, slug: string): Promise<number> {
-  const apiBase = kleverProvider.api;
-  const nodeBase = kleverProvider.node;
-  const maxAttempts = 20;
+export async function getChannelIdFromTx(_txHash: string, slug: string): Promise<number> {
+  const maxAttempts = 30;
   const delay = 2000;
-
-  // Step 1: Wait for TX to succeed
   for (let i = 0; i < maxAttempts; i++) {
     try {
-      const resp = await fetch(`${apiBase}/v1.0/transaction/${txHash}`);
-      if (!resp.ok) { await sleep(delay); continue; }
-      const data = await resp.json();
-      const tx = data?.data?.transaction;
-
-      if (!tx || !tx.status) { await sleep(delay); continue; }
-      if (tx.status === 'fail') {
-        throw new Error(tx.resultCode || 'Transaction failed');
-      }
-      if (tx.status === 'success') break;
-      await sleep(delay);
-    } catch (e: any) {
-      if (e.message?.includes('failed')) throw e;
-      await sleep(delay);
+      const ch = await getClient().getChannelBySlug(slug);
+      if (ch && typeof ch.channel_id === 'number') return ch.channel_id;
+    } catch {
+      // Node not reachable yet, or still catching up on chain scan — retry.
     }
+    await sleep(delay);
   }
-
-  // Step 2: Query SC view function to get channel_id by slug
-  const slugHex = Array.from(new TextEncoder().encode(slug))
-    .map(b => b.toString(16).padStart(2, '0')).join('');
-
-  const vmResp = await fetch(`${nodeBase}/vm/hex`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      scAddress: scAddress,
-      funcName: 'getChannelBySlug',
-      args: [slugHex],
-    }),
-  });
-
-  if (!vmResp.ok) {
-    throw new Error('Failed to query SC for channel ID');
-  }
-
-  const vmData = await vmResp.json();
-  const hexResult = vmData?.data?.data;
-
-  if (!hexResult) {
-    throw new Error('Channel not found in SC after creation');
-  }
-
-  // Result is a hex-encoded integer (e.g., "03" = 3)
-  return parseInt(hexResult, 16);
+  throw new Error(
+    'Channel not found on the node yet — it may still be scanning the chain. Try again shortly.',
+  );
 }
 
 function sleep(ms: number): Promise<void> {
