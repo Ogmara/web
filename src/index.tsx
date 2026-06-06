@@ -7,7 +7,7 @@ import { initAuth } from './lib/auth';
 import { initWs } from './lib/ws';
 import { detectKleverExtension, setContractAddress, setKleverNetwork, resolveNetworkReadyFallback } from './lib/klever';
 import { detectK5, checkK5Callback } from './lib/k5';
-import { vaultGetSigner } from './lib/vault';
+import { getActiveSigner } from './lib/signerRef';
 import { getClient, bootstrapNodeSelection } from './lib/api';
 import { installNetworkActivityTracker } from './lib/network-activity';
 import './styles/global.css';
@@ -47,7 +47,7 @@ bootstrapNodeSelection()
   .catch(() => { /* leave nodeUrl as-is; downstream catches will handle */ })
   .finally(() => {
     initAuth().then(() => {
-      const signer = vaultGetSigner();
+      const signer = getActiveSigner();
       initWs(signer ?? undefined);
       if (checkK5Callback()) {
         // K5 callback handling is done by the router + WalletView

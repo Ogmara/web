@@ -15,10 +15,22 @@ import {
   vaultWipe,
   vaultGetSigner,
   vaultGetAddress,
+  deviceVaultInit,
+  deviceVaultGenerate,
+  deviceVaultGetSigner,
+  deviceVaultAdoptFromMainIfEmpty,
 } from './vault';
 import { getClient } from './api';
 import { getSetting, setSetting } from './settings';
 import { signMessage } from './klever';
+import { setActiveSigner, getActiveSigner } from './signerRef';
+
+/** Attach a signer to the API client AND record it as the active L2 signer so
+ *  non-auth modules (api/ws/boot) can read it without an import cycle. */
+function attachSigner(s: WalletSigner): void {
+  getClient().withSigner(s);
+  setActiveSigner(s);
+}
 
 export type AuthStatus = 'none' | 'loading' | 'locked' | 'ready';
 export type WalletSource = 'builtin' | 'klever-extension' | 'k5-delegation' | null;
@@ -38,12 +50,15 @@ export { authStatus, walletAddress, walletSource, isRegistered, l2Address, devic
 
 /** Get the current signer (from vault or external). */
 export function getSigner(): WalletSigner | null {
-  return vaultGetSigner();
+  // The active signer is whatever the current connect/restore path attached —
+  // a built-in wallet key, or the extension/K5 device key. Single source of
+  // truth (set via attachSigner), so it's correct regardless of mode.
+  return getActiveSigner();
 }
 
 /** Guard: throws if no signer is available. Use in action handlers. */
 export function requireAuth(): WalletSigner {
-  const signer = vaultGetSigner();
+  const signer = getActiveSigner();
   if (!signer) throw new Error('Wallet not connected');
   return signer;
 }
@@ -52,50 +67,52 @@ export function requireAuth(): WalletSigner {
 export async function initAuth(): Promise<void> {
   setAuthStatus('loading');
   try {
+    const savedSource = getSetting('walletSource') as WalletSource;
+    const savedAddress = getSetting('walletAddress');
+
+    // Extension / K5: the L2 signer is the DEVICE key in its OWN vault slot.
+    // Adopt a legacy device key from the shared KEY_PRIVATE slot if this user
+    // predates the device slot (one-time, copy-only — the built-in wallet is
+    // never touched), otherwise load the device slot directly.
+    if (
+      (savedSource === 'klever-extension' || savedSource === 'k5-delegation') &&
+      savedAddress
+    ) {
+      const deviceSigner =
+        (await deviceVaultAdoptFromMainIfEmpty()) ?? (await deviceVaultInit());
+      if (deviceSigner) {
+        deviceSigner.walletAddress = savedAddress;
+        attachSigner(deviceSigner);
+        const deviceAddr = deviceSigner.deviceAddress;
+        setL2Address(deviceAddr);
+        setWalletAddress(savedAddress);
+        setWalletSource(savedSource);
+        setAuthStatus('ready');
+        // Re-register if the cache key was lost (e.g. localStorage cleared).
+        ensureDeviceRegistered(deviceSigner, savedAddress, deviceAddr);
+        checkRegistrationStatus();
+        verifyDeviceMapping();
+      } else {
+        // No device key yet — reconnect the extension to mint one.
+        setAuthStatus('none');
+      }
+      return;
+    }
+
+    // Built-in wallet (or unknown): the signer IS the wallet, from the main vault.
     const address = await vaultInit();
     if (address) {
       const signer = vaultGetSigner();
       if (signer) {
-        getClient().withSigner(signer);
-
-        // Restore wallet source and address from persisted settings
-        const savedSource = getSetting('walletSource') as WalletSource;
-        const savedAddress = getSetting('walletAddress');
-
-        if (savedSource === 'klever-extension' && savedAddress) {
-          // Device address uses ogd1... prefix for delegated keys
-          const deviceAddr = signer.deviceAddress;
-          setL2Address(deviceAddr);
-          setWalletAddress(savedAddress);
-          setWalletSource('klever-extension');
-          signer.walletAddress = savedAddress;
-          setAuthStatus('ready');
-          // Re-register device if cache key was lost (e.g. localStorage cleared)
-          ensureDeviceRegistered(signer, savedAddress, deviceAddr);
-          checkRegistrationStatus();
-          verifyDeviceMapping();
-        } else if (savedSource === 'k5-delegation' && savedAddress) {
-          const deviceAddr = signer.deviceAddress;
-          setL2Address(deviceAddr);
-          setWalletAddress(savedAddress);
-          setWalletSource('k5-delegation');
-          signer.walletAddress = savedAddress;
-          setAuthStatus('ready');
-          ensureDeviceRegistered(signer, savedAddress, deviceAddr);
-          checkRegistrationStatus();
-          verifyDeviceMapping();
-        } else if (savedSource === 'builtin' && savedAddress) {
-          // Built-in wallet mode: signer IS the wallet, uses klv1...
+        attachSigner(signer);
+        if (savedSource === 'builtin' && savedAddress) {
           setL2Address(address);
           setWalletAddress(address);
           setWalletSource('builtin');
           setAuthStatus('ready');
           checkRegistrationStatus();
         } else {
-          // Vault has a key but no wallet source saved (e.g. localStorage cleared).
-          // This is an orphaned device key — don't activate as a wallet.
-          // Keep the signer attached for when the user reconnects their wallet,
-          // but don't set auth to 'ready'.
+          // Vault has a key but no built-in source — orphaned; don't activate.
           setAuthStatus('none');
         }
         return;
@@ -111,7 +128,7 @@ export async function initAuth(): Promise<void> {
 export async function connectWithKey(hexKey: string): Promise<string> {
   const address = await vaultStore(hexKey);
   const signer = vaultGetSigner()!;
-  getClient().withSigner(signer);
+  attachSigner(signer);
   setWalletAddress(address);
   setL2Address(address);
   setWalletSource('builtin');
@@ -126,7 +143,7 @@ export async function connectWithKey(hexKey: string): Promise<string> {
 export async function generateWallet(): Promise<string> {
   const address = await vaultGenerate();
   const signer = vaultGetSigner()!;
-  getClient().withSigner(signer);
+  attachSigner(signer);
   setWalletAddress(address);
   setL2Address(address);
   setWalletSource('builtin');
@@ -197,17 +214,17 @@ async function ensureDeviceRegistered(
  * all data produced by this device is indexed under the wallet address.
  */
 export async function connectKleverExtension(extensionAddress: string): Promise<void> {
-  // Reuse existing device key if available, otherwise generate a new one.
-  // NOTE: `signer`/`deviceAddress` are `let` because the registration step
-  // below may mint a FRESH device key if this browser's existing key is
-  // already bound to a different wallet (wallet switch — see the 409 path).
-  const vaultAddr = await vaultInit() ?? await vaultGenerate();
-  let signer = vaultGetSigner()!;
-  getClient().withSigner(signer);
+  // The extension provides the wallet; L2 ops are signed by a DEVICE key kept
+  // in its OWN vault slot (separate from any built-in wallet in KEY_PRIVATE).
+  // Load the existing device key or mint a fresh one. `signer`/`deviceAddress`
+  // are `let` because the registration step may mint a fresh device key if the
+  // current one is already bound to a different wallet (wallet switch / 409) —
+  // and doing so NEVER touches the built-in wallet, so it's always safe.
+  let signer = (await deviceVaultInit()) ?? (await deviceVaultGenerate());
+  attachSigner(signer);
 
   // Device address uses ogd1... prefix (distinct from wallet's klv1...)
   let deviceAddress = signer.deviceAddress;
-  void vaultAddr; // vault returns klv1; we use ogd1 for device identity
 
   // CRITICAL: set walletAddress on the signer BEFORE registerDeviceOnNode().
   //
@@ -251,19 +268,13 @@ export async function connectKleverExtension(extensionAddress: string): Promise<
         const errMsg = e?.message || String(e);
         const conflict =
           errMsg.includes('409') || errMsg.includes('already linked');
-        // SAFETY (CRITICAL): `vaultGenerate()` OVERWRITES the vault key. Only
-        // mint a fresh key when the vault provably holds an ephemeral DEVICE
-        // key — i.e. an external-wallet source where the vault is device-only.
-        // FAIL CLOSED: regenerate ONLY for the known device-key sources;
-        // never for 'builtin' (the vault IS the user's wallet → would destroy
-        // it), nor for null/''/unknown. Positive-allow, not "!= builtin".
-        const src = getSetting('walletSource');
-        const safeToRegen = src === 'klever-extension' || src === 'k5-delegation';
-        if (conflict && safeToRegen && attempt === 0) {
-          // Mint a fresh device key for this wallet and re-wire the signer.
-          await vaultGenerate();
-          signer = vaultGetSigner()!;
-          getClient().withSigner(signer);
+        if (conflict && attempt === 0) {
+          // This device key is bound to a different wallet (you switched
+          // wallets). Mint a FRESH device key in the device slot and retry.
+          // This only writes KEY_DEVICE_PRIVATE — the built-in wallet
+          // (KEY_PRIVATE) is never touched — so it is unconditionally safe.
+          signer = await deviceVaultGenerate();
+          attachSigner(signer);
           signer.walletAddress = extensionAddress;
           deviceAddress = signer.deviceAddress;
           continue;
@@ -430,10 +441,11 @@ async function registerDeviceOnNode(
  * @param k5WalletAddress - The K5 wallet address that delegated (from callback or on-chain event)
  */
 export async function connectK5Delegation(k5WalletAddress: string): Promise<void> {
-  const signer = vaultGetSigner();
+  // The K5 device key lives in the device slot (minted in initiateK5Connection).
+  const signer = deviceVaultGetSigner() ?? (await deviceVaultInit());
   if (!signer) return;
 
-  getClient().withSigner(signer);
+  attachSigner(signer);
   const deviceAddress = signer.deviceAddress;
 
   // Register the device on the L2 node under the K5 wallet address.
@@ -479,6 +491,7 @@ export async function disconnectWallet(): Promise<void> {
   setSetting('walletSource', '');
   setSetting('walletAddress', '');
   setSetting('deviceRegistered', '');
+  setActiveSigner(null);
   setWalletAddress(null);
   setL2Address(null);
   setWalletSource(null);
@@ -527,23 +540,39 @@ export async function checkRegistrationStatus(): Promise<void> {
 export async function relinkDevice(): Promise<boolean> {
   const source = walletSource();
   const wallet = walletAddress();
-  const signer = vaultGetSigner();
-  if (source !== 'klever-extension' || !wallet || !signer) return false;
+  if (source !== 'klever-extension' || !wallet) return false;
+  // The L2 signer is the device key (its own slot); load or mint one.
+  let signer = deviceVaultGetSigner() ?? (await deviceVaultInit());
+  if (!signer) signer = await deviceVaultGenerate();
   // Bust the cache so registerDeviceOnNode actually runs
   setSetting('deviceRegistered', '');
-  signer.walletAddress = wallet;
-  try {
-    await registerDeviceOnNode(signer, wallet);
-    setSetting('deviceRegistered', `${wallet}:${signer.deviceAddress}`);
-    setDeviceMappingFailed(false);
-    setDeviceMappingError(null);
-    await verifyDeviceMapping();
-    return !deviceMappingFailed();
-  } catch (e: any) {
-    setDeviceMappingFailed(true);
-    setDeviceMappingError(e?.message || String(e));
-    return false;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    signer.walletAddress = wallet;
+    attachSigner(signer);
+    try {
+      await registerDeviceOnNode(signer, wallet);
+      setSetting('deviceRegistered', `${wallet}:${signer.deviceAddress}`);
+      setL2Address(signer.deviceAddress);
+      setDeviceMappingFailed(false);
+      setDeviceMappingError(null);
+      await verifyDeviceMapping();
+      return !deviceMappingFailed();
+    } catch (e: any) {
+      const errMsg = e?.message || String(e);
+      const conflict =
+        errMsg.includes('409') || errMsg.includes('already linked');
+      if (conflict && attempt === 0) {
+        // Device key bound to another wallet — mint a fresh one (device slot
+        // only; never touches the built-in wallet) and retry.
+        signer = await deviceVaultGenerate();
+        continue;
+      }
+      setDeviceMappingFailed(true);
+      setDeviceMappingError(errMsg);
+      return false;
+    }
   }
+  return false;
 }
 
 /**
