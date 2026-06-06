@@ -5,6 +5,19 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.40.2] - 2026-06-06
+
+### Fixed
+
+- **Chat no longer jumps/scrolls up when a reaction (or edit/delete) arrives.**
+  0.40.1 handled live reactions via a full message-list refetch, which rebuilt
+  every row and lost the scroll position (most visible when scrolled up reading
+  history). Reactions/edits/deletes are now applied **in place** to the target
+  message (copied out of the channel resource into `localMessages` if needed) —
+  no refetch, no re-render, scroll stays put. Own reactions are skipped on the
+  WS echo (already counted optimistically) to avoid double-counting. (Replaces
+  the 0.40.1 refetch + resource-overlay approach.)
+
 ## [0.40.1] - 2026-06-06
 
 ### Fixed
