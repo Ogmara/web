@@ -589,8 +589,21 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         Math.abs(normalizeTs(am.timestamp) - normalizeTs(lm.timestamp)) < 10000,
       );
     });
-    // localMessages first so optimistic updates (delete, edit, react) take priority in dedup
-    const combined = [...filteredLocal, ...apiMsgs];
+    // localMessages first so optimistic updates (delete, edit, react) take priority in dedup.
+    // BUT reaction counts are authoritative from the node: a localMessages copy
+    // (WS-received / poll) holds stale or no reactions yet wins the dedup, so a
+    // reaction from ANOTHER user — refetched into the resource — never showed
+    // without a full reload. Overlay the resource's `reactions` when present
+    // (the node OMITS the field when empty, so this never clobbers an optimistic
+    // own-reaction before the refetch catches up).
+    const apiById = new Map(apiMsgs.map((m) => [msgIdToHex(m.msg_id), m]));
+    const combined = [
+      ...filteredLocal.map((m) => {
+        const api = apiById.get(msgIdToHex(m.msg_id));
+        return api && api.reactions ? { ...m, reactions: api.reactions } : m;
+      }),
+      ...apiMsgs,
+    ];
     const deduped = combined.filter((msg) => {
       const id = msgIdToHex(msg.msg_id);
       if (!id || seen.has(id)) return false;
