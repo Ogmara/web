@@ -554,11 +554,15 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const seen = new Set<string>();
     const apiMsgs = messages() || [];
     const local = localMessages();
-    // Remove optimistic messages that now have a real counterpart from the API
-    // (same author, similar timestamp, optimistic flag)
+    // Remove optimistic messages that now have a real counterpart (same author,
+    // similar timestamp). Match against BOTH the API resource AND the real
+    // (non-optimistic) messages already in localMessages — the real message can
+    // arrive via the WS echo or the poll (into localMessages), not just the
+    // resource, so checking apiMsgs alone left a duplicate until a full reload.
+    const realMsgs = [...apiMsgs, ...local.filter((m) => !m._optimistic)];
     const filteredLocal = local.filter((lm) => {
       if (!lm._optimistic) return true;
-      return !apiMsgs.some((am) =>
+      return !realMsgs.some((am) =>
         am.author === lm.author &&
         Math.abs(normalizeTs(am.timestamp) - normalizeTs(lm.timestamp)) < 10000,
       );
