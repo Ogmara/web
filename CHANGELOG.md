@@ -5,6 +5,19 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.2] - 2026-06-06
+
+### Fixed
+
+- **No more duplicated message after posting.** The optimistic-message dedup
+  only matched the real message when it came from the channel's REST resource —
+  but the real message can arrive via the live WS event or the 15s poll (into
+  `localMessages`) first, leaving the optimistic copy until a full reload. The
+  filter now also matches real (non-optimistic) messages already in
+  `localMessages`, so the optimistic copy is removed as soon as the real one
+  lands by any path. (Pairs with l2-node 0.56.0's real-time WS chat delivery,
+  which also makes cross-node messages appear live instead of on reload.)
+
 ## [0.39.1] - 2026-06-06
 
 ### Fixed
