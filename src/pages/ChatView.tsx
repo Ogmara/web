@@ -297,7 +297,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   // cancels the previous request instead of letting it pile up on the main
   // thread and clobber state out of order.
   let initFetchAbort: AbortController | null = null;
-  const [messages, { refetch: refetchMessages }] = createResource(
+  const [messages] = createResource(
     () => ({ channelId: props.channelId, auth: authStatus() }),
     async ({ channelId }) => {
       if (!channelId) return [];
@@ -466,44 +466,51 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
   const MAX_LOCAL_MESSAGES = 200;
 
-  // Debounced authoritative refetch for in-place updates (reactions/edits/
-  // deletes). These modify EXISTING messages — including ones loaded from the
-  // channel resource, which the client-side handlers below (which only touch
-  // localMessages) can't reach. The refetch pulls the canonical state
-  // (reaction counts, edited content, deleted flag); the debounce batches bursts.
-  let inplaceRefetchTimer: ReturnType<typeof setTimeout> | null = null;
-  const scheduleInplaceRefetch = () => {
-    if (inplaceRefetchTimer) clearTimeout(inplaceRefetchTimer);
-    inplaceRefetchTimer = setTimeout(() => { void refetchMessages(); }, 600);
+  // Apply an in-place update (reaction/edit/delete) to the target message
+  // WITHOUT refetching the whole list — a refetch rebuilds every row and loses
+  // scroll position. Updates the localMessages copy, or copies the target out
+  // of the channel resource into localMessages so it wins the dedup. Unknown
+  // target → ignored (it'll be correct on the next full load).
+  const applyToTarget = (targetId: string, fn: (m: any) => any) => {
+    setLocalMessages((prev) => {
+      const idx = prev.findIndex((m) => msgIdToHex(m.msg_id) === msgIdToHex(targetId));
+      if (idx >= 0) return prev.map((m, i) => (i === idx ? fn(m) : m));
+      const fromResource = (messages() || []).find(
+        (m) => msgIdToHex(m.msg_id) === msgIdToHex(targetId),
+      );
+      return fromResource ? [...prev, fn(fromResource)] : prev;
+    });
   };
-  onCleanup(() => { if (inplaceRefetchTimer) clearTimeout(inplaceRefetchTimer); });
 
   // Subscribe to channel WebSocket events
   const wsCleanup = onWsEvent((event) => {
     if (event.type === 'message' && props.channelId) {
       const msg = event.envelope;
       if (msg.channel_id === props.channelId || msg.channel_id === String(props.channelId)) {
-        // Reactions: refetch to get authoritative counts (covers messages from
-        // the resource, not just localMessages). Don't append — it's not a new
-        // message.
+        // Reactions: apply the delta IN PLACE (no refetch → no scroll jump).
+        // Skip our OWN reaction — handleReact already counted it optimistically,
+        // so applying the echo would double-count.
         if (msg.msg_type === 'ChatReaction') {
-          scheduleInplaceRefetch();
+          if (msg.author === walletAddress() || !msg.target_msg_id) return;
+          applyToTarget(msg.target_msg_id, (m) => {
+            const reactions = { ...(m.reactions || {}) };
+            const cur = reactions[msg.emoji] || 0;
+            const next = msg.remove ? cur - 1 : cur + 1;
+            if (next <= 0) delete reactions[msg.emoji];
+            else reactions[msg.emoji] = next;
+            return { ...m, reactions };
+          });
           return;
         }
-        // Handle edit/delete events by updating existing messages
+        // Edits/deletes: apply in place (covers resource messages too).
         if (msg.msg_type === 'ChatEdit' || msg.msg_type === 'ChatDelete') {
           const targetId = msg.target_msg_id || msg.msg_id;
           if (targetId) {
-            setLocalMessages((prev) => prev.map((m) => {
-              if (msgIdToHex(m.msg_id) === msgIdToHex(targetId)) {
-                if (msg.msg_type === 'ChatDelete') return { ...m, deleted: true };
-                if (msg.msg_type === 'ChatEdit') return { ...m, payload: msg.payload, edited: true, last_edited_at: msg.timestamp };
-              }
-              return m;
-            }));
-            // Backstop: also refetch so an edit/delete to a message that lives
-            // in the resource (not localMessages) is reflected too.
-            scheduleInplaceRefetch();
+            applyToTarget(targetId, (m) =>
+              msg.msg_type === 'ChatDelete'
+                ? { ...m, deleted: true }
+                : { ...m, payload: msg.payload, edited: true, last_edited_at: msg.timestamp },
+            );
             return;
           }
         }
@@ -589,21 +596,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         Math.abs(normalizeTs(am.timestamp) - normalizeTs(lm.timestamp)) < 10000,
       );
     });
-    // localMessages first so optimistic updates (delete, edit, react) take priority in dedup.
-    // BUT reaction counts are authoritative from the node: a localMessages copy
-    // (WS-received / poll) holds stale or no reactions yet wins the dedup, so a
-    // reaction from ANOTHER user — refetched into the resource — never showed
-    // without a full reload. Overlay the resource's `reactions` when present
-    // (the node OMITS the field when empty, so this never clobbers an optimistic
-    // own-reaction before the refetch catches up).
-    const apiById = new Map(apiMsgs.map((m) => [msgIdToHex(m.msg_id), m]));
-    const combined = [
-      ...filteredLocal.map((m) => {
-        const api = apiById.get(msgIdToHex(m.msg_id));
-        return api && api.reactions ? { ...m, reactions: api.reactions } : m;
-      }),
-      ...apiMsgs,
-    ];
+    // localMessages first so in-place updates (delete, edit, react) applied to
+    // the localMessages copy take priority in the dedup.
+    const combined = [...filteredLocal, ...apiMsgs];
     const deduped = combined.filter((msg) => {
       const id = msgIdToHex(msg.msg_id);
       if (!id || seen.has(id)) return false;
