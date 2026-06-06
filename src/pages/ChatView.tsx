@@ -297,7 +297,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   // cancels the previous request instead of letting it pile up on the main
   // thread and clobber state out of order.
   let initFetchAbort: AbortController | null = null;
-  const [messages] = createResource(
+  const [messages, { refetch: refetchMessages }] = createResource(
     () => ({ channelId: props.channelId, auth: authStatus() }),
     async ({ channelId }) => {
       if (!channelId) return [];
@@ -466,11 +466,30 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
   const MAX_LOCAL_MESSAGES = 200;
 
+  // Debounced authoritative refetch for in-place updates (reactions/edits/
+  // deletes). These modify EXISTING messages — including ones loaded from the
+  // channel resource, which the client-side handlers below (which only touch
+  // localMessages) can't reach. The refetch pulls the canonical state
+  // (reaction counts, edited content, deleted flag); the debounce batches bursts.
+  let inplaceRefetchTimer: ReturnType<typeof setTimeout> | null = null;
+  const scheduleInplaceRefetch = () => {
+    if (inplaceRefetchTimer) clearTimeout(inplaceRefetchTimer);
+    inplaceRefetchTimer = setTimeout(() => { void refetchMessages(); }, 600);
+  };
+  onCleanup(() => { if (inplaceRefetchTimer) clearTimeout(inplaceRefetchTimer); });
+
   // Subscribe to channel WebSocket events
   const wsCleanup = onWsEvent((event) => {
     if (event.type === 'message' && props.channelId) {
       const msg = event.envelope;
       if (msg.channel_id === props.channelId || msg.channel_id === String(props.channelId)) {
+        // Reactions: refetch to get authoritative counts (covers messages from
+        // the resource, not just localMessages). Don't append — it's not a new
+        // message.
+        if (msg.msg_type === 'ChatReaction') {
+          scheduleInplaceRefetch();
+          return;
+        }
         // Handle edit/delete events by updating existing messages
         if (msg.msg_type === 'ChatEdit' || msg.msg_type === 'ChatDelete') {
           const targetId = msg.target_msg_id || msg.msg_id;
@@ -482,6 +501,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
               }
               return m;
             }));
+            // Backstop: also refetch so an edit/delete to a message that lives
+            // in the resource (not localMessages) is reflected too.
+            scheduleInplaceRefetch();
             return;
           }
         }

@@ -5,6 +5,17 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.40.0] - 2026-06-06
+
+### Added
+
+- **Reactions, edits, and deletes now update live** (paired with l2-node
+  0.57.0's broadcast). A `ChatReaction` WS event triggers a debounced refetch
+  for authoritative reaction counts; edits/deletes apply client-side and also
+  schedule the same refetch as a backstop — so an in-place update to a message
+  loaded from the channel resource (not just `localMessages`) is reflected too,
+  without a manual reload.
+
 ## [0.39.2] - 2026-06-06
 
 ### Fixed
