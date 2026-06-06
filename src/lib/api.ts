@@ -5,7 +5,7 @@
 import { createSignal } from 'solid-js';
 import { OgmaraClient, DEFAULT_NODE_URL, discoverAndPingNodes, pingNode, validateNodeUrl, type NodeWithPing } from '@ogmara/sdk';
 import { getSetting, setSetting } from './settings';
-import { vaultGetSigner } from './vault';
+import { getActiveSigner } from './signerRef';
 
 let client: OgmaraClient | null = null;
 
@@ -113,7 +113,7 @@ function resolveNodeUrl(): string {
 export function getClient(): OgmaraClient {
   if (!client) {
     client = new OgmaraClient({ nodeUrl: resolveNodeUrl() });
-    const signer = vaultGetSigner();
+    const signer = getActiveSigner();
     if (signer) client.withSigner(signer);
   }
   return client;
@@ -204,7 +204,7 @@ export function switchNodeSilent(nodeUrl: string): void {
   // switch must not open its own (possibly anonymous) socket and race it.
   // `initWs()` closes any existing socket first.
   import('./ws').then(({ initWs, wsIsActive }) => {
-    if (wsIsActive()) initWs(vaultGetSigner() ?? undefined);
+    if (wsIsActive()) initWs(getActiveSigner() ?? undefined);
   }).catch(() => { /* ws module optional at boot */ });
 }
 

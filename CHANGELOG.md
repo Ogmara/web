@@ -5,6 +5,30 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.0] - 2026-06-06
+
+### Changed
+
+- **Extension / K5 device keys now live in their OWN vault slot
+  (`KEY_DEVICE_PRIVATE`), fully separate from a built-in wallet
+  (`KEY_PRIVATE`).** Previously both shared one slot, so switching wallets in
+  the same browser risked overwriting a built-in wallet when regenerating the
+  device key — the 0.38.3 fix could only guard against this with a fragile
+  `walletSource` check (which failed closed and left the device-link banner
+  stuck). Now the device key has a dedicated slot the device flow can freely
+  (re)generate; **no device-flow code path ever writes or clears `KEY_PRIVATE`**,
+  so a built-in wallet can never be destroyed, and the guard is gone. Switching
+  wallets reliably mints a fresh device key and clears the banner.
+- Existing extension users are migrated transparently: a legacy device key in
+  the shared slot is copied (never moved/cleared) into the device slot on next
+  load, so no re-registration is needed.
+
+### Fixed
+
+- Real-time DMs and the signer re-attach on node-switch/boot now use the active
+  signer for extension/K5 users (they previously read the old shared slot, which
+  is empty in the new layout). Audit-found regressions fixed before release.
+
 ## [0.38.3] - 2026-06-06
 
 ### Fixed

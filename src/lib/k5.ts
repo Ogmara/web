@@ -14,7 +14,7 @@
  */
 
 import { createSignal } from 'solid-js';
-import { vaultGenerate, vaultGetSigner } from './vault';
+import { deviceVaultGenerate } from './vault';
 
 const [k5Available, setK5Available] = createSignal(false);
 const [k5Connecting, setK5Connecting] = createSignal(false);
@@ -55,9 +55,8 @@ export async function initiateK5Connection(): Promise<string> {
   setK5Connecting(true);
   setK5DelegationPending(true);
 
-  // Generate device key in vault
-  await vaultGenerate();
-  const signer = vaultGetSigner();
+  // Generate the device key in its OWN vault slot (never touches a built-in wallet)
+  const signer = await deviceVaultGenerate();
   if (!signer) {
     setK5Connecting(false);
     throw new Error('Failed to generate device key');

@@ -225,6 +225,73 @@ export async function vaultGenerate(): Promise<string> {
   return newSigner.address;
 }
 
+// ---------------------------------------------------------------------------
+// Device-key vault (extension / K5 delegation flows)
+//
+// A SEPARATE slot from the built-in wallet (`KEY_PRIVATE`). The extension/K5
+// flows use an EPHEMERAL device key that signs L2 ops on behalf of the wallet
+// (the wallet authorizes it via delegation). Keeping it in its own slot means
+// we can freely (re)generate it — e.g. when switching wallets — and NEVER risk
+// overwriting a user's built-in wallet. No function below ever writes or clears
+// `KEY_PRIVATE`. Device keys are always stored raw (no passphrase) — ephemeral.
+// ---------------------------------------------------------------------------
+const KEY_DEVICE_PRIVATE = 'device_private_key';
+let cachedDeviceSigner: WalletSigner | null = null;
+
+/** Load the existing device key from its own slot. Returns null if none. */
+export async function deviceVaultInit(): Promise<WalletSigner | null> {
+  if (cachedDeviceSigner) return cachedDeviceSigner;
+  const hex = await dbGet<string>(KEY_DEVICE_PRIVATE);
+  if (!hex) return null;
+  try {
+    cachedDeviceSigner = await WalletSigner.fromHex(hex);
+    return cachedDeviceSigner;
+  } catch {
+    return null;
+  }
+}
+
+/** Mint a FRESH device key in the device slot and return it. SAFE — only ever
+ *  writes `KEY_DEVICE_PRIVATE`, never the built-in wallet's `KEY_PRIVATE`. */
+export async function deviceVaultGenerate(): Promise<WalletSigner> {
+  const privateKey = new Uint8Array(32);
+  crypto.getRandomValues(privateKey);
+  const signer = await WalletSigner.fromPrivateKey(privateKey);
+  const privHex = bytesToHex(privateKey);
+  privateKey.fill(0); // best-effort zeroing
+  await dbPut(KEY_DEVICE_PRIVATE, privHex);
+  cachedDeviceSigner = signer;
+  return signer;
+}
+
+/** The cached device signer (null until init/generate this session). */
+export function deviceVaultGetSigner(): WalletSigner | null {
+  return cachedDeviceSigner;
+}
+
+/** One-time migration for users created before the device slot existed: their
+ *  device key lived in the shared `KEY_PRIVATE` slot. If the device slot is
+ *  empty AND the main slot holds a RAW key, COPY it into the device slot so the
+ *  existing device key keeps working (no re-registration). An ENCRYPTED
+ *  `KEY_PRIVATE` is a passphrase-protected WALLET and is never adopted. Only
+ *  READS `KEY_PRIVATE`; never writes/clears it — even a mistaken adopt copies,
+ *  so the original wallet can never be destroyed. Returns the signer or null. */
+export async function deviceVaultAdoptFromMainIfEmpty(): Promise<WalletSigner | null> {
+  if (await dbGet<string>(KEY_DEVICE_PRIVATE)) return deviceVaultInit();
+  const mode = await dbGet<VaultMode>(KEY_MODE);
+  if (mode !== 'raw') return null; // encrypted → it's a wallet; don't adopt
+  const hex = await dbGet<string>(KEY_PRIVATE);
+  if (!hex) return null;
+  try {
+    const signer = await WalletSigner.fromHex(hex);
+    await dbPut(KEY_DEVICE_PRIVATE, hex); // copy into device slot; KEY_PRIVATE untouched
+    cachedDeviceSigner = signer;
+    return signer;
+  } catch {
+    return null;
+  }
+}
+
 /** Get the cached signer (null if locked or no wallet). */
 export function vaultGetSigner(): WalletSigner | null {
   return cachedSigner;
@@ -278,6 +345,10 @@ export async function vaultExportKey(): Promise<string | null> {
 export async function vaultWipe(): Promise<void> {
   cachedSigner = null;
   cachedAddress = null;
+  // `deleteDatabase` drops the whole DB (incl. KEY_DEVICE_PRIVATE), so clear the
+  // device-signer cache too — otherwise a stale in-memory device signer would
+  // survive a wipe and point at a key no longer on disk.
+  cachedDeviceSigner = null;
   return new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase(DB_NAME);
     req.onsuccess = () => resolve();
