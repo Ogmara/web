@@ -5,6 +5,22 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.3] - 2026-06-06
+
+### Fixed
+
+- **Switching wallets in the same browser no longer leaves the "device not
+  linked" banner stuck.** The browser holds a single device key; when you
+  connected a new wallet, the node refused to reassign that key from the
+  previous wallet (cross-wallet hijack defense → 409). `connectKleverExtension`
+  now detects the 409 and **mints a fresh device key for the new wallet**, then
+  retries registration. Device keys are ephemeral and per-wallet, so each
+  wallet gets its own.
+- **Vault safety:** the fresh-key path is **fail-closed** — it only regenerates
+  when the vault provably holds an ephemeral device key (`walletSource` is
+  `klever-extension` or `k5-delegation`), never when it could hold a built-in
+  wallet (`builtin`/unset), so it can never overwrite a user's stored wallet.
+
 ## [0.38.2] - 2026-06-06
 
 ### Fixed
