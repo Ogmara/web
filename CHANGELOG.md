@@ -5,6 +5,18 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.1] - 2026-06-06
+
+### Fixed
+
+- **Creating a channel now works in the browser** (it was the last flow still
+  calling Klever's RPC directly — CORS-blocked). `getChannelIdFromTx` no longer
+  polls the Klever TX status or `getChannelBySlug` SC view; it polls the
+  connected node's new `GET /api/v1/channels/by-slug/:slug` instead. The node's
+  chain scanner records the channel once it sees the on-chain creation, so a
+  successful lookup both confirms the TX and yields the SC-assigned
+  `channel_id`. (Requires l2-node 0.55.0 + sdk 0.23.0.)
+
 ## [0.39.0] - 2026-06-06
 
 ### Changed
