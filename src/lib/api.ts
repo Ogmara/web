@@ -3,7 +3,7 @@
  */
 
 import { createSignal } from 'solid-js';
-import { OgmaraClient, DEFAULT_NODE_URL, discoverAndPingNodes, discoverNodesViaSc, pingNode, validateNodeUrl, type NodeWithPing } from '@ogmara/sdk';
+import { OgmaraClient, DEFAULT_NODE_URL, discoverAndPingNodes, pingNode, validateNodeUrl, type NodeWithPing } from '@ogmara/sdk';
 import { getSetting, setSetting } from './settings';
 import { vaultGetSigner } from './vault';
 
@@ -34,19 +34,30 @@ const [activeNodeUrl, setActiveNodeUrl] = createSignal(
 );
 export { activeNodeUrl };
 
-/** Network the cold-boot SC node discovery targets. Persisted by
- *  `setKleverNetwork` once a node's stats are read; defaults to mainnet
- *  (the production registry) on a fresh load. */
-function discoveryNetwork(): 'mainnet' | 'testnet' {
-  return getSetting('kleverNetwork') === 'testnet' ? 'testnet' : 'mainnet';
+/** Cold-boot bootstrap: fetch a SAME-ORIGIN node list the website serves
+ *  (e.g. `ogmara.org/nodes.json`). This gives a fresh browser its first node
+ *  WITHOUT calling Klever's RPC directly (which is CORS-blocked + rate-limited)
+ *  and WITHOUT a hardcoded node domain baked into the app — anyone self-hosting
+ *  the app ships their own list. Once a node is reached, `discoverAndPingNodes`
+ *  (the node's `/network/nodes`, SC-derived server-side) takes over. Returns
+ *  validated node URLs; best-effort (empty on any error). Accepts either a JSON
+ *  array of URL strings or `{ "nodes": ["..."] }`. */
+async function fetchBootstrapNodes(): Promise<string[]> {
+  if (typeof window === 'undefined') return [];
+  try {
+    const resp = await fetch(`${window.location.origin}/nodes.json`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    const raw: unknown[] = Array.isArray(data) ? data : (data?.nodes ?? []);
+    return raw.filter(
+      (u): u is string => typeof u === 'string' && validateNodeUrl(u),
+    );
+  } catch {
+    return [];
+  }
 }
-
-/** Drop SC-registered nodes that haven't anchored within this window. A node
- *  doesn't auto-deregister on-chain when it goes offline, so the CLIENT
- *  applies the staleness filter (same 7-day window the node's media fallback
- *  uses). Nodes that never anchored (lastAnchorAt === 0) are kept — they may
- *  be coming online. */
-const SC_MAX_ANCHOR_AGE_SECS = 7 * 24 * 60 * 60;
 
 /**
  * URLs that point at the website (or other non-node hosts) but were ever
@@ -369,16 +380,15 @@ export async function getAvailableNodes(): Promise<NodeWithPing[]> {
     : [];
 
   const discoveredUrls = new Set(discovered.map((n) => n.url));
-  // On-chain registry seeds (staleness-filtered) + every user-added URL.
-  // SC discovery is best-effort (Klever RPC may be down). Web does NOT
-  // pass allowPrivateHosts — the SC SSRF guard already strips private
-  // hosts, and the browser must never probe private space.
-  const nowSecs = Math.floor(Date.now() / 1000);
-  const scNodes = await discoverNodesViaSc(discoveryNetwork()).catch(() => []);
-  const scUrls = scNodes
-    .filter((n) => !!n.endpoint)
-    .filter((n) => !n.lastAnchorAt || nowSecs - n.lastAnchorAt <= SC_MAX_ANCHOR_AGE_SECS)
-    .map((n) => n.endpoint as string);
+  // The browser must NEVER call Klever's RPC directly — it is CORS-blocked
+  // (no Access-Control-Allow-Origin) and rate-limited (429). Node discovery
+  // instead comes from the connected node's `/network/nodes`
+  // (`discoverAndPingNodes` above), which the NODE derives from the SC
+  // registry server-side. For COLD boot (no node reached yet) we seed from a
+  // same-origin bootstrap list the website serves — no hardcoded node domain
+  // in the app, and anyone self-hosting ships their own list. Plus every
+  // user-added URL.
+  const bootstrapUrls = await fetchBootstrapNodes().catch(() => [] as string[]);
   const extras: string[] = [];
   const pushExtra = (url: string) => {
     if (!url || discoveredUrls.has(url) || url === currentUrl || extras.includes(url)) {
@@ -386,7 +396,7 @@ export async function getAvailableNodes(): Promise<NodeWithPing[]> {
     }
     extras.push(url);
   };
-  for (const url of scUrls) pushExtra(url);
+  for (const url of bootstrapUrls) pushExtra(url);
   for (const url of getKnownNodes()) pushExtra(url);
 
   const extraPings = await Promise.all(

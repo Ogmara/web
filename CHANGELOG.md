@@ -5,6 +5,22 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.2] - 2026-06-06
+
+### Fixed
+
+- **Node discovery no longer hammers Klever's RPC from the browser
+  (CORS-blocked + 429 spam).** `getAvailableNodes` was calling the Klever SC
+  RPC directly (`node.{network}.klever.org/vm/query`), which the browser blocks
+  (no `Access-Control-Allow-Origin`) and Klever rate-limits — flooding the
+  console and breaking the picker. Discovery now comes entirely from the
+  **connected node's `/api/v1/network/nodes`** (`discoverAndPingNodes`), which
+  the node derives from the SC registry server-side. For **cold boot** (no node
+  saved yet) the app seeds from a **same-origin `/nodes.json`** the website
+  serves — so there's no hardcoded node domain in the app and the browser never
+  touches Klever's RPC. (Desktop is unaffected — Tauri bypasses CORS and keeps
+  direct SC discovery.)
+
 ## [0.38.1] - 2026-06-05
 
 ### Fixed
