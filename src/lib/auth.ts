@@ -7,7 +7,7 @@
 
 import { createSignal } from 'solid-js';
 import type { WalletSigner } from '@ogmara/sdk';
-import { buildDeviceClaim } from '@ogmara/sdk';
+import { buildDeviceClaim, normalizeWalletSig } from '@ogmara/sdk';
 import {
   vaultInit,
   vaultStore,
@@ -24,6 +24,7 @@ import { getClient } from './api';
 import { getSetting, setSetting } from './settings';
 import { signMessage } from './klever';
 import { setActiveSigner, getActiveSigner } from './signerRef';
+import { ensureDeviceEncBinding } from './deviceEnc';
 
 /** Attach a signer to the API client AND record it as the active L2 signer so
  *  non-auth modules (api/ws/boot) can read it without an import cycle. */
@@ -301,6 +302,12 @@ export async function connectKleverExtension(extensionAddress: string): Promise<
   setAuthStatus('ready');
   checkRegistrationStatus();
   verifyDeviceMapping();
+
+  // Publish this device's encryption-key binding (E2E P0, §2.4). Best-effort +
+  // idempotent: the wallet signs the claim (Extension/K5); retries next connect.
+  void ensureDeviceEncBinding(extensionAddress).catch((e) =>
+    console.warn('[deviceEnc] binding failed:', e),
+  );
 }
 
 /**
@@ -338,14 +345,9 @@ async function repairLegacyDevice(legacyDeviceAddress: string): Promise<void> {
   // Ask the Klever Extension to sign the auth string AS THE WALLET.
   // This uses the user's klv1... wallet key (not the local device key),
   // which is the only identity that can authorize revoking a device it owns.
-  const hexSig = await signMessage(authString);
-  if (!/^[0-9a-fA-F]{128}$/.test(hexSig)) {
-    throw new Error(`Klever Extension returned non-hex signature: ${hexSig}`);
-  }
-
-  // Convert 64-byte hex signature to base64 for the X-Ogmara-Auth header.
-  const sigBytes = new Uint8Array(64);
-  for (let i = 0; i < 64; i++) sigBytes[i] = parseInt(hexSig.substring(i * 2, i * 2 + 2), 16);
+  // Normalize across wallet encodings (Extension returns hex, K5 returns
+  // base64-of-hex) → 64 raw signature bytes, then base64 for the auth header.
+  const sigBytes = normalizeWalletSig(await signMessage(authString));
   const sigB64 = btoa(String.fromCharCode(...sigBytes));
 
   // Use same-origin path so the Vite dev proxy (or the real node in prod)
@@ -400,12 +402,11 @@ async function registerDeviceOnNode(
   let sigSource: 'klever-extension' | 'device-fallback' = 'device-fallback';
   try {
     const result = await signMessage(claimString);
-    if (typeof result === 'string' && /^[0-9a-fA-F]{128}$/.test(result)) {
-      sigHex = result;
-      sigSource = 'klever-extension';
-    } else {
-      console.warn('[register] signMessage returned non-hex result:', typeof result, result);
-    }
+    // Normalize across wallet encodings (Extension hex / K5 base64-of-hex) → hex.
+    sigHex = Array.from(normalizeWalletSig(result), (b) =>
+      b.toString(16).padStart(2, '0'),
+    ).join('');
+    sigSource = 'klever-extension';
   } catch (e: any) {
     const errMsg = e?.message || String(e);
     // "Provider not init yet" = Klever Extension installed but not yet
@@ -491,6 +492,10 @@ export async function disconnectWallet(): Promise<void> {
   setSetting('walletSource', '');
   setSetting('walletAddress', '');
   setSetting('deviceRegistered', '');
+  // Clear the enc-key binding marker so reconnect re-publishes (idempotent). The
+  // enc key itself follows the device key: kept for extension/K5, dropped by the
+  // built-in vaultWipe above.
+  setSetting('encKeyBound', '');
   setActiveSigner(null);
   setWalletAddress(null);
   setL2Address(null);

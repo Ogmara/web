@@ -5,6 +5,31 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.42.0] - 2026-06-07
+
+### Added
+
+- **Device encryption key (E2E P0, protocol §2.4).** On wallet connect the app mints
+  a per-device X25519 encryption keypair (IndexedDB, alongside the device signing
+  key) and publishes a wallet-authored `DeviceEncBinding` to the node, so other
+  users can wrap message keys to this device. `device_id` is the delegated device
+  signing key; the external wallet (Extension/K5) signs the binding claim. Idempotent
+  (cached `encKeyBound` marker), best-effort (retries next connect).
+
+### Fixed
+
+- **K5 wallet signatures now accepted.** Device registration and legacy-device repair
+  validated the `signMessage` return with `/^[0-9a-fA-F]{128}$/`, which **rejected
+  K5's base64-of-hex encoding** — silently falling back to device-signed claims.
+  Both paths now use the SDK's `normalizeWalletSig` (handles Extension hex, K5
+  base64-of-hex, and raw bytes), so K5 wallet-authorized flows work.
+
+### Notes
+
+- The enc private key is stored raw in IndexedDB (no web keyring); it is not yet used
+  to decrypt anything (message encryption is P1). Folding it into the
+  wallet-encrypted key vault is a P3 (§2.5) follow-up.
+
 ## [0.41.0] - 2026-06-07
 
 Sidebar channel organization — group, reorder, and tidy the channel list.

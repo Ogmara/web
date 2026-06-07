@@ -24,6 +24,8 @@ export interface Settings {
   channelsExpanded: boolean;
   /** Cached device registration status: "wallet:device" key to avoid re-registration. */
   deviceRegistered: string;
+  /** Cached enc-key binding marker "wallet:enc_pub" to avoid re-publishing (§2.4). */
+  encKeyBound: string;
   /** Push gateway URL. Empty = auto-derive from nodeUrl (same host, port 41722). */
   pushGatewayUrl: string;
   /** Default tab to land on when opening the app with no explicit hash route. */
@@ -91,6 +93,7 @@ const defaults: Settings = {
   walletSource: '',
   nodeUrl: '',
   deviceRegistered: '',
+  encKeyBound: '',
   pushGatewayUrl: '',
   defaultLandingView: 'chat',
   defaultFeed: 'global',
