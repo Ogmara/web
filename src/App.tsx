@@ -26,6 +26,8 @@ import { ChannelJoinView } from './pages/ChannelJoinView';
 import { NotificationsView } from './pages/NotificationsView';
 import { FollowListView } from './pages/FollowListView';
 import { StatusBar } from './components/StatusBar';
+import { NoNodeLandingPage } from './components/NoNodeLandingPage';
+import { activeNodeUrl } from './lib/api';
 import { DeviceMappingBanner } from './components/DeviceMappingBanner';
 import { route } from './lib/router';
 
@@ -67,6 +69,7 @@ export const App: Component = () => {
         </Show>
       </div>
       <DeviceMappingBanner />
+      <Show when={activeNodeUrl()} fallback={<NoNodeLandingPage />}>
       <div class={bodyClass()}>
         <Sidebar onNavigate={() => { if (isMobileViewport()) showMobileDetail(); }} />
         <main class="main-content">
@@ -134,6 +137,7 @@ export const App: Component = () => {
           </Switch>
         </main>
       </div>
+      </Show>
       <StatusBar />
     </div>
   );

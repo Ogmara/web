@@ -5,6 +5,21 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.43.0] - 2026-06-07
+
+### Added
+
+- **"No node connected" landing page.** When the app can't reach or discover an L2
+  node (e.g. a fresh visit on mainnet, which currently has no registered nodes), it
+  shows a clean, branded screen — a "connecting…" state while discovery runs, then
+  an informative page with a manual node-connect field, a retry button, and an
+  automatic exponential-backoff retry that self-heals once a node comes online
+  (spec 05-clients §1.1) — instead of an empty feed with a raw `Unexpected token
+  '<' … not valid JSON` error. The app body is gated on a connected node, so no
+  data view mounts (and no misleading fetch error fires) until one is reachable.
+  Localized in all 7 languages. The manual-connect field persists the validator's
+  canonical origin (strips credentials/path/query).
+
 ## [0.42.5] - 2026-06-07
 
 ### Added
