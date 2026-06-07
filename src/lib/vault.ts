@@ -269,6 +269,30 @@ export function deviceVaultGetSigner(): WalletSigner | null {
   return cachedDeviceSigner;
 }
 
+// --- Device encryption key (X25519, E2E P0 — protocol §2.4) ---
+//
+// A per-device X25519 *encryption* secret, separate from the Ed25519 device
+// SIGNING key above. Stored in its own slot; never overwrites KEY_PRIVATE or
+// KEY_DEVICE_PRIVATE. NOTE: not yet used to decrypt anything (message encryption
+// is P1); the wallet-encrypted key vault (P3, §2.5) supersedes raw storage.
+const KEY_DEVICE_ENC_PRIVATE = 'device_enc_private_key';
+
+/** Load the stored device X25519 encryption secret (32 bytes), or null. */
+export async function encVaultGet(): Promise<Uint8Array | null> {
+  const hex = await dbGet<string>(KEY_DEVICE_ENC_PRIVATE);
+  return hex ? hexToBytes(hex) : null;
+}
+
+/** Persist the device X25519 encryption secret (32 bytes). */
+export async function encVaultStore(secret: Uint8Array): Promise<void> {
+  await dbPut(KEY_DEVICE_ENC_PRIVATE, bytesToHex(secret));
+}
+
+/** Wipe the device encryption secret (whole-DB wipe also drops it). */
+export async function encVaultWipe(): Promise<void> {
+  await dbDelete(KEY_DEVICE_ENC_PRIVATE);
+}
+
 /** One-time migration for users created before the device slot existed: their
  *  device key lived in the shared `KEY_PRIVATE` slot. If the device slot is
  *  empty AND the main slot holds a RAW key, COPY it into the device slot so the
