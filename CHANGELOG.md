@@ -5,6 +5,39 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.41.0] - 2026-06-07
+
+Sidebar channel organization — group, reorder, and tidy the channel list.
+Channels were previously shown in raw API order with no way to organize them.
+
+### Added
+
+- **User-created channel groups** in the sidebar (both Classic and Modern
+  styles). Create a group via the 🗂 button next to the channel list, rename it
+  inline, collapse/expand it, and delete it (its channels fall back to the
+  ungrouped list — never lost). Collapsed groups show an aggregate unread badge.
+- **Alphabetical-by-default ordering.** Channels with no custom placement sort
+  A–Z (`display_name` then `slug`); the default `ogmara` channel is always
+  pinned first. A "Sort A→Z" reset clears manual ordering while keeping groups.
+- **Drag-and-drop reordering** of channels within and across groups, powered by
+  `@thisbeyond/solid-dnd` (pointer + touch sensors). A keyboard/touch-friendly
+  "Move to group" submenu in the channel right-click menu is provided as a
+  non-drag alternative, plus "Move up/down" for groups.
+- **Cross-device sync of the organization.** Groups, group order, channel→group
+  assignment, and custom ordering ride along in the existing encrypted
+  `SettingsSync` blob (E2E-encrypted; the node never sees plaintext). Edits
+  auto-upload (debounced) and the organization auto-downloads on login, resolved
+  last-writer-wins by an `updatedAt` stamp. A channel grouped on one device
+  auto-joins (becomes visible) on the others.
+- New `sidebar_*` i18n strings across all 7 locales (en, de, es, pt, ja, zh, ru).
+
+### Changed
+
+- Per-device view-state (which group is collapsed, the last-open channel) stays
+  local and is **not** synced, by design.
+- Joined-channel tracking extracted from `Sidebar.tsx` into `lib/joined-channels.ts`
+  so library code can auto-join without importing a UI component.
+
 ## [0.40.2] - 2026-06-06
 
 ### Fixed
