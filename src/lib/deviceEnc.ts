@@ -16,7 +16,7 @@ import {
   encPublicKeyHex,
   buildDeviceEncBinding,
 } from '@ogmara/sdk';
-import { encVaultGet, encVaultStore, encVaultWipe, deviceVaultGetSigner } from './vault';
+import { encVaultGet, encVaultStore, deviceVaultGetSigner } from './vault';
 import { getSetting, setSetting } from './settings';
 import { signMessage } from './klever';
 import { getClient } from './api';
@@ -30,11 +30,6 @@ async function getOrCreateEncKeypair(): Promise<{ privateKey: Uint8Array; public
   const kp = generateDeviceEncKeypair();
   await encVaultStore(kp.privateKey);
   return kp;
-}
-
-/** Hex of this device's X25519 encryption public key (creates the keypair if absent). */
-export async function getDeviceEncPublicKeyHex(): Promise<string> {
-  return (await getOrCreateEncKeypair()).publicKeyHex;
 }
 
 /**
@@ -62,10 +57,4 @@ export async function ensureDeviceEncBinding(walletAddress: string): Promise<voi
   });
   await getClient().publishEncKeyEnvelope(walletAddress, envelope);
   setSetting('encKeyBound', marker);
-}
-
-/** Wipe the device encryption key + binding marker (on wallet disconnect). */
-export async function wipeDeviceEncKey(): Promise<void> {
-  await encVaultWipe();
-  setSetting('encKeyBound', '');
 }

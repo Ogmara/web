@@ -5,6 +5,52 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.45.1] - 2026-06-08
+
+Cleanup (audit 2026-06-07 fix-plan Batch 5).
+
+### Fixed
+
+- Added 3 missing i18n keys (`channel_private_invite_link`, `channel_not_found`,
+  `channel_not_found_desc`) to all 7 locales (were English-only → rendered as raw
+  keys elsewhere; non-English copies are placeholders pending translation).
+
+### Removed
+
+- Dead app-internal exports (8) removed; documented the intentional
+  `design-styles.css` border-radius override exception.
+
+## [0.45.0] - 2026-06-08
+
+Correctness + CSP (audit 2026-06-07 fix-plan Batch 4). Adopts sdk-js ≥0.26.0.
+
+### Security
+
+- **Content-Security-Policy added (B4.6/W3).** `index.html` now sets a CSP:
+  `script-src 'self'` (XSS defense), `connect/img/media` over `https:`/`wss:`
+  only (no plaintext), `object-src 'none'`.
+- Inherits the sdk-js `validateNodeUrl` SSRF hardening + https-required node URLs.
+
+### Fixed
+
+- **TypeScript now clean + enforced (B4.1).** Resolved all 30 tsc errors (SDK
+  type alignment + app fixes: ChatView WS-envelope handling, the `addModerator`
+  missing-permissions bug, `import.meta.env` via `vite-env.d.ts`, BufferSource
+  casts, base64-payload decode). `build` now runs `tsc --noEmit` before `vite
+  build`, so type errors fail CI.
+
+## [0.44.0] - 2026-06-08
+
+### Security
+
+- **Host-bound auth (audit 2026-06-07, fix-plan B1.3/B1.2).** Adopted sdk-js
+  ≥0.25.0. The DevTools device-repair helper (`window.__ogmaraRepair`) now signs
+  the new node-bound auth format (fetches `node_id`/`network` from `/health`,
+  adds a single-use nonce). Push-gateway registration/unregistration now use
+  `signPushClaim` (gateway-host + nonce bound) instead of the old node-auth
+  header, matching push-gateway ≥0.5.0. **Requires l2-node ≥0.61.0 and
+  push-gateway ≥0.5.0.**
+
 ## [0.43.0] - 2026-06-07
 
 ### Added

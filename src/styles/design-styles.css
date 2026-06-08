@@ -13,6 +13,11 @@
 
 [data-style="glassmorphism"] {
   /* Design tokens */
+  /* INTENTIONAL EXCEPTION to the "only colors vary, radius lives on :root" token
+   * rule ([[feedback_css_tokens]], spec 06 §3.2). Radius is overridden here per
+   * DESIGN-STYLE (glassmorphism/modern), NOT per light/dark theme — a design-style
+   * is chosen once and is stable across theme switches, so there is no theme-switch
+   * flash. Documented exception; safe. */
   --radius-sm: 10px;
   --radius-md: 16px;
   --radius-lg: 20px;
@@ -312,7 +317,9 @@
   --color-error: #E53935;
   --color-dm: #6AB2F2;
 
-  /* Radii */
+  /* Radii — INTENTIONAL EXCEPTION to the ":root-only radius" token rule
+   * ([[feedback_css_tokens]], spec 06 §3.2): overridden per design-style (not per
+   * theme), chosen once and stable across light/dark, so no theme-switch flash. */
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;

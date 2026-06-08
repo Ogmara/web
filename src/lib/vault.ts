@@ -180,18 +180,6 @@ export async function vaultInit(): Promise<string | null> {
   }
 }
 
-/** Check if a wallet exists in the vault (either raw or encrypted). */
-export async function vaultHasWallet(): Promise<boolean> {
-  const mode = await dbGet<VaultMode>(KEY_MODE);
-  return mode != null;
-}
-
-/** Check if the vault is encrypted (requires passphrase to unlock). */
-export async function vaultIsEncrypted(): Promise<boolean> {
-  const mode = await dbGet<VaultMode>(KEY_MODE);
-  return mode === 'encrypted';
-}
-
 /** Store a hex-encoded private key and return the derived address. */
 export async function vaultStore(hexKey: string): Promise<string> {
   // Validate hex format before attempting to create signer
@@ -326,7 +314,11 @@ export function vaultGetAddress(): string | null {
   return cachedAddress;
 }
 
-/** Encrypt the stored key with a passphrase (upgrades raw → encrypted). Locks the vault. */
+/**
+ * Encrypt the stored key with a passphrase (upgrades raw → encrypted). Locks the vault.
+ * Currently unreferenced by the UI but retained as the sole consumer of the
+ * `encryptData` raw→encrypted upgrade path (do not prune without the helper).
+ */
 export async function vaultEncryptWithPassphrase(passphrase: string): Promise<void> {
   const hexKey = await dbGet<string>(KEY_PRIVATE);
   if (!hexKey) throw new Error('No wallet to encrypt');

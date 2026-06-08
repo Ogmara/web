@@ -4,7 +4,7 @@
  * Key derivation: HKDF from wallet signing key → AES-256-GCM.
  */
 
-import { getSetting, setSetting } from './settings';
+import { getSetting, setSetting, type Settings } from './settings';
 import { getClient } from './api';
 import { getChannelOrg, applyRemoteOrg } from './channel-org';
 import { addJoinedChannels } from './joined-channels';
@@ -26,7 +26,9 @@ async function deriveKey(hexKey: string): Promise<CryptoKey> {
     throw new Error('Invalid key format');
   }
   const keyBytes = fromHex(hexKey);
-  const baseKey = await crypto.subtle.importKey('raw', keyBytes, 'HKDF', false, ['deriveKey']);
+  // audit 2026-06-07 B4.1: copy into a plain ArrayBuffer-backed view so the bytes
+  // satisfy BufferSource under TS5.9's stricter ArrayBufferLike typing.
+  const baseKey = await crypto.subtle.importKey('raw', new Uint8Array(keyBytes), 'HKDF', false, ['deriveKey']);
   // Zero the intermediate key bytes
   keyBytes.fill(0);
   return crypto.subtle.deriveKey(
@@ -87,9 +89,11 @@ export async function decryptAndApplySettings(
 ): Promise<void> {
   const key = await deriveKey(hexKey);
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: nonce },
+    // audit 2026-06-07 B4.1: wrap in fresh Uint8Array views (plain ArrayBuffer
+    // backing) to satisfy BufferSource under TS5.9's stricter typing.
+    { name: 'AES-GCM', iv: new Uint8Array(nonce) },
     key,
-    encryptedSettings,
+    new Uint8Array(encryptedSettings),
   );
   let settings: Record<string, unknown>;
   try {
@@ -103,7 +107,10 @@ export async function decryptAndApplySettings(
   for (const [k, v] of Object.entries(settings)) {
     // JSON-encoded keys: write via setSetting
     if (SYNC_KEYS.includes(k as any) && (typeof v === 'string' || typeof v === 'boolean' || typeof v === 'number')) {
-      setSetting(k, v);
+      // audit 2026-06-07 B4.1: SYNC_KEYS.includes already gated k to a valid
+      // settings key; cast to keyof Settings to match setSetting's signature
+      // (value cast consistent with the existing `as any` guard above).
+      setSetting(k as keyof Settings, v as Settings[keyof Settings]);
     }
     // Raw-string theme keys: write directly to preserve theme.ts storage format
     if (RAW_SYNC_KEYS.includes(k as any) && typeof v === 'string') {

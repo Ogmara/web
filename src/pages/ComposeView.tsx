@@ -55,7 +55,13 @@ export const ComposeView: Component = () => {
       setTitle(getPayloadTitle(post.payload) || '');
       setContent(getPayloadContent(post.payload));
       try {
-        const decoded = decodePayload(post.payload);
+        // audit 2026-06-07 B4.1: Envelope.payload is a base64 STRING but
+        // decodePayload expects bytes. Decode to bytes first, mirroring the
+        // atob loop used elsewhere in lib/payload.ts (tryDecodeBase64Payload).
+        const binary = atob(post.payload);
+        const payloadBytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) payloadBytes[i] = binary.charCodeAt(i);
+        const decoded = decodePayload(payloadBytes);
         if (decoded.tags) setTags(decoded.tags.join(', '));
         // Preload attachments so they're visible in the MediaUpload list —
         // and so the SDK can resend them in the edit envelope. Without

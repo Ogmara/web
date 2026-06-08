@@ -495,19 +495,26 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   // Subscribe to channel WebSocket events
   const wsCleanup = onWsEvent((event) => {
     if (event.type === 'message' && props.channelId) {
-      const msg = event.envelope;
+      // WS envelopes are loose JSON: `msg_type` is the variant NAME (string) and
+      // `channel_id` may arrive as number or string. Widen locally so the
+      // defensive runtime checks below typecheck (audit 2026-06-07 B4.1).
+      const msg = event.envelope as Omit<typeof event.envelope, 'msg_type' | 'channel_id'> & {
+        msg_type: number | string;
+        channel_id?: number | string;
+      };
       if (msg.channel_id === props.channelId || msg.channel_id === String(props.channelId)) {
         // Reactions: apply the delta IN PLACE (no refetch → no scroll jump).
         // Skip our OWN reaction — handleReact already counted it optimistically,
         // so applying the echo would double-count.
         if (msg.msg_type === 'ChatReaction') {
-          if (msg.author === walletAddress() || !msg.target_msg_id) return;
+          const emoji = msg.emoji;
+          if (msg.author === walletAddress() || !msg.target_msg_id || !emoji) return;
           applyToTarget(msg.target_msg_id, (m) => {
             const reactions = { ...(m.reactions || {}) };
-            const cur = reactions[msg.emoji] || 0;
+            const cur = reactions[emoji] || 0;
             const next = msg.remove ? cur - 1 : cur + 1;
-            if (next <= 0) delete reactions[msg.emoji];
-            else reactions[msg.emoji] = next;
+            if (next <= 0) delete reactions[emoji];
+            else reactions[emoji] = next;
             return { ...m, reactions };
           });
           return;

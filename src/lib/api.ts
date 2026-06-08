@@ -52,7 +52,7 @@ async function fetchBootstrapNodes(): Promise<string[]> {
     const data = await resp.json();
     const raw: unknown[] = Array.isArray(data) ? data : (data?.nodes ?? []);
     return raw.filter(
-      (u): u is string => typeof u === 'string' && validateNodeUrl(u),
+      (u): u is string => typeof u === 'string' && Boolean(validateNodeUrl(u)),
     );
   } catch {
     return [];

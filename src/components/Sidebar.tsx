@@ -431,7 +431,18 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           break;
         }
         case 'promote': {
-          await client.addModerator(ctx.channelId, ctx.address);
+          // audit 2026-06-07 B4.1: pass the SDK's default full-permission set
+          // explicitly (mirrors the client.addModerator fallback) so the call
+          // type-checks regardless of whether `permissions` is optional in the
+          // resolved sdk-js typings. Runtime behavior is unchanged.
+          await client.addModerator(ctx.channelId, ctx.address, {
+            can_mute: true,
+            can_kick: true,
+            can_ban: true,
+            can_pin: true,
+            can_edit_info: true,
+            can_delete_msgs: true,
+          });
           await refreshMembers(ctx.channelId);
           break;
         }
@@ -736,7 +747,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
       const client = getClient();
       const lastSeenNotif = parseInt(localStorage.getItem('ogmara.lastSeenNotifTs') || '0', 10);
       const [unread, dmUnread, notifResp] = await Promise.all([
-        client.getUnreadCounts().catch(() => ({ unread: {} })),
+        client.getUnreadCounts().catch(() => ({ unread: {}, mentions: {} })),
         client.getDmUnread().catch(() => ({ unread: {} })),
         client.getNotifications(lastSeenNotif || undefined, 50).catch(() => ({ notifications: [] })),
         // Refresh channel list

@@ -67,8 +67,17 @@ async function registerWithGateway(
   const signer = getSigner();
   if (!signer) throw new Error('No signer available');
 
-  // Build auth headers (same scheme as L2 node API)
-  const authHeaders = await signer.signRequest('POST', '/register');
+  // Host-bound registration claim (audit 2026-06-07): bind to the gateway URL
+  // + a single-use nonce + the exact token. The signing address must equal the
+  // body address, so use the address returned by signPushClaim.
+  const token = JSON.stringify(subscription.toJSON());
+  const { headers: authHeaders, address: signedAddress } =
+    await signer.signPushClaim('register', gatewayUrl, token);
+  if (signedAddress !== address) {
+    // Built-in wallet: signing address == wallet. Delegated device keys can't
+    // self-register for a different wallet (gateway rejects) — deferred.
+    console.warn('[push] signer address differs from wallet address; gateway will use signer address');
+  }
 
   const resp = await fetch(`${gatewayUrl}/register`, {
     method: 'POST',
@@ -77,8 +86,8 @@ async function registerWithGateway(
       ...authHeaders,
     },
     body: JSON.stringify({
-      address,
-      token: JSON.stringify(subscription.toJSON()),
+      address: signedAddress,
+      token,
       platform: 'web',
       channels: [],
     }),
@@ -98,16 +107,19 @@ async function unregisterFromGateway(
 ): Promise<void> {
   const signer = getSigner();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  let bodyAddress = address;
   if (signer) {
-    const authHeaders = await signer.signRequest('POST', '/unregister');
+    const { headers: authHeaders, address: signedAddress } =
+      await signer.signPushClaim('unregister', gatewayUrl, subscriptionJson);
     Object.assign(headers, authHeaders);
+    bodyAddress = signedAddress;
   }
 
   await fetch(`${gatewayUrl}/unregister`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
-      address,
+      address: bodyAddress,
       token: subscriptionJson,
     }),
   });
