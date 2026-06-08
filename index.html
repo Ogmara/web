@@ -2,6 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <!--
+    Content-Security-Policy (audit 2026-06-07 B4.6/W3). The web app talks to
+    user-configurable nodes / IPFS gateways / the push gateway over TLS, so
+    connect/img/media allow `https:`+`wss:` (NOT plaintext http/ws — matches the
+    SSRF + host-binding fixes). `script-src 'self'` blocks injected/inline
+    scripts (XSS defense — the Vite build emits only external module scripts);
+    `style-src` keeps 'unsafe-inline' for injected styles; `object-src 'none'`.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https: wss:; font-src 'self' data:; object-src 'none'; base-uri 'self'" />
   <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
   <meta name="description" content="Ogmara — Decentralized chat and news on Klever blockchain" />
   <meta name="theme-color" content="#1a1a2e" />

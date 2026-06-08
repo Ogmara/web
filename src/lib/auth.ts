@@ -7,7 +7,7 @@
 
 import { createSignal } from 'solid-js';
 import type { WalletSigner } from '@ogmara/sdk';
-import { buildDeviceClaim, normalizeWalletSig } from '@ogmara/sdk';
+import { buildDeviceClaim, normalizeWalletSig, randomNonceHex } from '@ogmara/sdk';
 import {
   vaultInit,
   vaultStore,
@@ -55,13 +55,6 @@ export function getSigner(): WalletSigner | null {
   // a built-in wallet key, or the extension/K5 device key. Single source of
   // truth (set via attachSigner), so it's correct regardless of mode.
   return getActiveSigner();
-}
-
-/** Guard: throws if no signer is available. Use in action handlers. */
-export function requireAuth(): WalletSigner {
-  const signer = getActiveSigner();
-  if (!signer) throw new Error('Wallet not connected');
-  return signer;
 }
 
 /** Initialize auth on app startup. Loads vault, attaches signer to client. */
@@ -340,7 +333,23 @@ async function repairLegacyDevice(legacyDeviceAddress: string): Promise<void> {
 
   const timestamp = Date.now();
   const path = `/api/v1/devices/${legacyDeviceAddress}`;
-  const authString = `ogmara-auth:${timestamp}:DELETE:${path}`;
+
+  // Use same-origin so the Vite dev proxy (or the real node in prod) forwards
+  // transparently.
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+
+  // Host-bound auth (audit 2026-06-07): bind the signature to the node's
+  // {network, node_id} + a fresh single-use nonce. Fetch the binding from
+  // /health (same node we're about to call).
+  const healthResp = await fetch(`${origin}/api/v1/health`);
+  if (!healthResp.ok) throw new Error(`health fetch failed: ${healthResp.status}`);
+  const health = await healthResp.json() as { node_id?: string; network?: string };
+  if (!health.node_id || !health.network) {
+    throw new Error('node /health did not return node_id/network — node too old for host-bound auth');
+  }
+  const nonce = randomNonceHex();
+  const authString =
+    `ogmara-auth:${health.network}:${health.node_id}:${nonce}:${timestamp}:DELETE:${path}`;
 
   // Ask the Klever Extension to sign the auth string AS THE WALLET.
   // This uses the user's klv1... wallet key (not the local device key),
@@ -350,9 +359,7 @@ async function repairLegacyDevice(legacyDeviceAddress: string): Promise<void> {
   const sigBytes = normalizeWalletSig(await signMessage(authString));
   const sigB64 = btoa(String.fromCharCode(...sigBytes));
 
-  // Use same-origin path so the Vite dev proxy (or the real node in prod)
-  // forwards transparently.
-  const url = typeof window !== 'undefined' ? `${window.location.origin}${path}` : path;
+  const url = `${origin}${path}`;
 
   console.info(`[repair] DELETE ${path} — wallet: ${wallet}, legacy device: ${legacyDeviceAddress}`);
   const resp = await fetch(url, {
@@ -361,6 +368,7 @@ async function repairLegacyDevice(legacyDeviceAddress: string): Promise<void> {
       'x-ogmara-auth': sigB64,
       'x-ogmara-address': wallet, // sign as the wallet, not the device
       'x-ogmara-timestamp': String(timestamp),
+      'x-ogmara-nonce': nonce,
     },
   });
 
@@ -433,50 +441,6 @@ async function registerDeviceOnNode(
 
   // Submit to the L2 node
   await getClient().registerDevice(sigHex, walletAddress, timestamp);
-}
-
-/**
- * Connect via K5 wallet delegation.
- * The device key was pre-generated; K5 signed the delegation on-chain.
- *
- * @param k5WalletAddress - The K5 wallet address that delegated (from callback or on-chain event)
- */
-export async function connectK5Delegation(k5WalletAddress: string): Promise<void> {
-  // The K5 device key lives in the device slot (minted in initiateK5Connection).
-  const signer = deviceVaultGetSigner() ?? (await deviceVaultInit());
-  if (!signer) return;
-
-  attachSigner(signer);
-  const deviceAddress = signer.deviceAddress;
-
-  // Register the device on the L2 node under the K5 wallet address.
-  // The on-chain delegation proves ownership; now the L2 node needs to know too.
-  const cacheKey = `${k5WalletAddress}:${deviceAddress}`;
-  const cached = getSetting('deviceRegistered');
-  if (cached !== cacheKey) {
-    try {
-      // K5 signed the delegation on-chain, but we also need a Klever-message
-      // signature for L2 node registration. Since we can't call K5 again for
-      // a message signature, we rely on the on-chain delegation being sufficient.
-      // The L2 node's chain scanner will pick up the deviceDelegated event and
-      // create the mapping automatically.
-      // For now, just mark as pending — the chain scanner will resolve it.
-      console.info('K5 delegation: waiting for chain scanner to pick up device mapping');
-    } catch {
-      // Non-critical
-    }
-  }
-
-  // Set the wallet address to the K5 wallet (NOT the device address)
-  signer.walletAddress = k5WalletAddress;
-  setWalletAddress(k5WalletAddress);
-  setL2Address(deviceAddress);
-  setWalletSource('k5-delegation');
-  setSetting('walletSource', 'k5-delegation');
-  setSetting('walletAddress', k5WalletAddress);
-  setAuthStatus('ready');
-  checkRegistrationStatus();
-  verifyDeviceMapping();
 }
 
 /** Disconnect wallet and wipe vault. */

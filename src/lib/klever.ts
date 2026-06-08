@@ -88,11 +88,6 @@ export function resolveNetworkReadyFallback(): void {
   resolveNetworkReady();
 }
 
-/** Current Klever network for SC discovery / explorer links. */
-export function getKleverNetwork(): 'mainnet' | 'testnet' {
-  return currentNetwork === 'testnet' ? 'testnet' : 'mainnet';
-}
-
 /** Set the Klever network provider URLs (called after fetching node stats). */
 export function setKleverNetwork(network: string): void {
   currentNetwork = network;
@@ -170,11 +165,6 @@ export async function connectExtension(): Promise<string> {
   } finally {
     setKleverConnecting(false);
   }
-}
-
-/** Disconnect from the Klever Extension. */
-export function disconnectExtension(): void {
-  setKleverAddress(null);
 }
 
 // --- Smart Contract Transactions ---
@@ -422,18 +412,6 @@ export async function revokeDevice(devicePubKeyHex: string): Promise<string> {
   return invokeContract({
     functionName: 'revokeDevice',
     args: [devicePubKeyHex],
-  });
-}
-
-/**
- * Vote on a governance proposal.
- * @param proposalId - Proposal ID
- * @param support - true = vote for, false = vote against
- */
-export async function voteOnProposal(proposalId: number, support: boolean): Promise<string> {
-  return invokeContract({
-    functionName: 'vote',
-    args: [numberToHex(proposalId), support ? '01' : '00'],
   });
 }
 

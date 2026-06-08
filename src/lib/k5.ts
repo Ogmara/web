@@ -81,26 +81,6 @@ export async function initiateK5Connection(): Promise<string> {
 }
 
 /**
- * Handle the K5 callback when the user returns from K5 wallet.
- * Called by the router when navigating to #/wallet/k5-callback.
- *
- * @param params - URL parameters from the callback
- * @returns true if the delegation was confirmed
- */
-export function handleK5Callback(params: URLSearchParams): boolean {
-  const status = params.get('status');
-  const txHash = params.get('tx_hash');
-
-  if (status === 'success' && txHash) {
-    setK5DelegationPending(false);
-    return true;
-  }
-
-  setK5DelegationPending(false);
-  return false;
-}
-
-/**
  * Check if we're returning from a K5 delegation callback.
  * Called on app init to handle the return flow.
  */
