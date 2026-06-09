@@ -130,12 +130,17 @@ export function getKnownNodes(): string[] {
   return getSetting('knownNodes') ?? [];
 }
 
-/** Append a URL to the known-nodes list if not already there. */
+/** Max URLs kept in the known-nodes cache. Bounds localStorage growth now that
+ *  `getAvailableNodes` auto-persists every reachable peer (2026-06-09). */
+const KNOWN_NODES_MAX = 50;
+
+/** Append a URL to the known-nodes list if not already there (capped, FIFO). */
 export function addKnownNode(url: string): void {
   const existing = getKnownNodes();
-  if (!existing.includes(url)) {
-    setSetting('knownNodes', [...existing, url]);
-  }
+  if (existing.includes(url)) return;
+  const next = [...existing, url];
+  // Drop the oldest entries past the cap so the picker can't grow unbounded.
+  setSetting('knownNodes', next.length > KNOWN_NODES_MAX ? next.slice(next.length - KNOWN_NODES_MAX) : next);
 }
 
 /** Remove a URL from the known-nodes list (✕ button in picker). */
@@ -419,5 +424,17 @@ export async function getAvailableNodes(): Promise<NodeWithPing[]> {
     if (existing.url === currentUrl) { continue; }
     if (n.ping < existing.ping) byHost.set(host, n);
   }
-  return [...byHost.values()];
+  const result = [...byHost.values()];
+
+  // Remember the nodes we actually REACHED (2026-06-09). Until now only
+  // user-switched URLs were persisted (`knownNodes`); auto-discovered peers
+  // vanished from the picker the moment live discovery hiccuped or returned
+  // empty. Persisting reachable endpoints gives the client a durable cache of
+  // the fleet it has seen, so the picker is never empty on a later open even
+  // if the connected node is momentarily unreachable. Unreachable (∞) entries
+  // are NOT remembered, so dead nodes don't accumulate.
+  for (const n of result) {
+    if (n.ping !== Infinity) addKnownNode(n.url);
+  }
+  return result;
 }
