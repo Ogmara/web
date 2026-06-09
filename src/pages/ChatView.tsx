@@ -85,6 +85,16 @@ const ROLE_CACHE_TTL = 30_000;
 const ROLE_CACHE_MAX = 200;
 type RoleEntry = { role: 'creator' | 'moderator' | 'member'; expires: number };
 const roleCache = new Map<string, RoleEntry>();
+/**
+ * Keys of `(channel,address)` role fetches currently in flight. The role
+ * `createEffect` only populates `roleCache` after its async fetch resolves, so
+ * if the effect re-fires faster than the fetch completes (or its `getClient()`
+ * dependency churns) every re-fire would miss the cache and launch ANOTHER
+ * `members` request — flooding the node until the browser runs out of sockets
+ * (`ERR_INSUFFICIENT_RESOURCES`). This guard ensures at most one in-flight
+ * fetch per key (2026-06-09).
+ */
+const roleFetchInFlight = new Set<string>();
 function roleCacheKey(channelId: number, address: string): string {
   return `${channelId}:${address}`;
 }
@@ -447,12 +457,20 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     if (!id || !me) { setMyRole('member'); return; }
     const cached = roleCacheGet(id, me);
     if (cached) { setMyRole(cached); return; }
+    // Guard: never launch a second members fetch for the same (channel,me)
+    // while one is pending — otherwise a re-firing effect floods the node
+    // (2026-06-09). `untrack` so the Set check/mutation doesn't add reactive deps.
+    const key = roleCacheKey(id, me);
+    if (untrack(() => roleFetchInFlight.has(key))) return;
+    roleFetchInFlight.add(key);
     getClient().getChannelMembers(id, { limit: 200 }).then((resp) => {
       const member = resp.members.find((m) => m.address === me);
       const role = (member?.role as any) ?? 'member';
       roleCacheSet(id, me, role);
       setMyRole(role);
-    }).catch(() => setMyRole('member'));
+    }).catch(() => setMyRole('member')).finally(() => {
+      roleFetchInFlight.delete(key);
+    });
   });
 
   const isMod = () => myRole() === 'moderator' || myRole() === 'creator';
