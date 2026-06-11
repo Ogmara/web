@@ -66,13 +66,6 @@ let kleverProvider: KleverProvider = currentNetwork === 'testnet'
   ? { api: 'https://api.testnet.klever.org', node: 'https://node.testnet.klever.org' }
   : { api: 'https://api.mainnet.klever.org', node: 'https://node.mainnet.klever.org' };
 
-/** Get the Kleverscan explorer base URL for the current network. */
-export function getExplorerUrl(): string {
-  return currentNetwork === 'testnet'
-    ? 'https://testnet.kleverscan.org'
-    : 'https://kleverscan.org';
-}
-
 /**
  * Resolves once the network has been detected from the L2 node's
  * networkStats() at startup. Anything that needs the correct provider
