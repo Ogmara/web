@@ -19,6 +19,7 @@ import {
   buildChannelKeyEnvelope,
   buildEncryptedDirectMessage,
   decryptDmContent,
+  encPublicKeyHex,
   KeyScopeKind,
   type WrappedKey,
 } from '@ogmara/sdk';
@@ -30,6 +31,12 @@ import { getOrCreateEncKeypair } from './deviceEnc';
 
 const toHex = (b: Uint8Array): string =>
   Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+
+// TEMP E2E DM diagnostics (remove once cross-node DMs verified). Logs short
+// prefixes only — never full keys.
+const px = (b?: Uint8Array): string =>
+  b ? Array.from(b.slice(0, 4), (x) => x.toString(16).padStart(2, '0')).join('') : 'none';
+const dlog = (...a: unknown[]): void => console.log('[dm-e2e]', ...a);
 
 function fromHex(h: string): Uint8Array {
   const out = new Uint8Array(h.length / 2);
@@ -104,6 +111,15 @@ async function establishConvKey(
     throw new Error('no device encryption keys found for either participant');
   }
 
+  dlog('establish', {
+    convId: toHex(conversationId).slice(0, 8),
+    epoch,
+    convKey: px(convKey),
+    recipientKeys: recipKeys.keys.length,
+    myKeys: myKeys.keys.length,
+    targets: targets.map((t) => `${t.target.slice(0, 8)}/${t.deviceId.slice(0, 8)}/enc:${t.encPub.slice(0, 8)}`),
+  });
+
   for (const tg of targets) {
     const wrapped: WrappedKey = wrapConvKey(convKey, fromHex(tg.encPub), conversationId);
     const envelope = await buildChannelKeyEnvelope(ctx.signer!, {
@@ -157,8 +173,17 @@ async function fetchConvKey(
     return 'missing'; // network/transient — retry later
   }
   if (!resp.envelope) return 'missing';
+  const env = resp.envelope;
+  const myEncPub = encPublicKeyHex(ctx.encPriv);
+  dlog('fetch envelope', {
+    convId: convIdHex.slice(0, 8),
+    epoch,
+    myDeviceId: ctx.deviceId.slice(0, 8),
+    myEncPub: myEncPub.slice(0, 8),
+    envAuthor: env.author,
+    ephPub: env.eph_pub.slice(0, 8),
+  });
   try {
-    const env = resp.envelope;
     const wrapped: WrappedKey = {
       ephPub: fromHex(env.eph_pub),
       nonce: fromHex(env.nonce),
@@ -167,9 +192,13 @@ async function fetchConvKey(
     const key = unwrapConvKey(wrapped, ctx.encPriv, conversationId);
     const ep = resp.epoch ?? env.epoch;
     convKeys.set(cacheKey(convIdHex, ep), key);
+    dlog('UNWRAP OK', { convId: convIdHex.slice(0, 8), epoch: ep, convKey: px(key) });
     return { key, epoch: ep };
-  } catch {
-    return 'corrupt'; // envelope present but unwrap failed — a real error, not "waiting"
+  } catch (e) {
+    // envelope present but unwrap failed → enc-pubkey mismatch (sender wrapped to a
+    // different enc_pub than this device holds).
+    dlog('UNWRAP FAILED', { convId: convIdHex.slice(0, 8), myEncPub: myEncPub.slice(0, 8), err: String(e) });
+    return 'corrupt';
   }
 }
 
@@ -303,8 +332,12 @@ export async function decryptDmMessage(payload: number[] | Uint8Array | string):
   }
   try {
     const pt = decryptDmContent(key, conversationId, epoch, decoded.content, decoded.nonce);
+    dlog('DECRYPT OK', { convId: convIdHex.slice(0, 8), epoch });
     return { kind: 'text', text: pt.text };
-  } catch {
+  } catch (e) {
+    // unwrap gave a key but content AEAD failed → wrong conv_key (split-brain) or
+    // AAD mismatch.
+    dlog('DECRYPT FAILED', { convId: convIdHex.slice(0, 8), epoch, convKey: px(key), err: String(e) });
     return { kind: 'error' };
   }
 }
