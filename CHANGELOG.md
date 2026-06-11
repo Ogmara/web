@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `getExplorerUrl()` helper — are gone; a single base URL covers all
   networks.
 
+## [0.45.3] - 2026-06-11
+
+### Fixed
+
+- **Single-flight dedup for node-API GETs (client-side DoS guard).** A reactive
+  refetch loop (an effect re-firing faster than its fetch resolves, a remount
+  storm, or — as seen on first wallet-connect — a device-link 401 churning auth
+  state) could launch hundreds of identical `GET /api/v1/...` requests, exhausting
+  the browser's socket pool (`ERR_INSUFFICIENT_RESOURCES`) and bursting the node.
+  Concurrent identical GETs to the node API are now collapsed into one upstream
+  request (each caller gets an independent `Response.clone()`); mutations
+  (POST/PUT/DELETE) and body-bearing requests are never deduped. Post-build
+  code+security audit: clean.
+
 ## [0.45.2] - 2026-06-09
 
 ### Fixed
