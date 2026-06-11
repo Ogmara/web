@@ -12,7 +12,8 @@ import { getSetting, setSetting } from '../lib/settings';
 import { FormattedText } from '../components/FormattedText';
 import { MediaImage } from '../components/MediaImage';
 import { getPayloadContent, getPayloadTitle, getPayloadAttachments, decodePayload, safeAttachmentName } from '../lib/payload';
-import { sendTip, kleverAvailable, getExplorerUrl } from '../lib/klever';
+import { sendTip, kleverAvailable } from '../lib/klever';
+import { ex } from '../lib/klever-explorer-links';
 import { resolveProfile } from '../lib/profile';
 import { ensureHexMsgId, formatLocalTime, truncateAddress } from '../lib/news-utils';
 import { ReactionPicker } from '../components/ReactionPicker';
@@ -729,7 +730,7 @@ const NewsCard: Component<{ post: any }> = (props) => {
               <div class="tip-success">
                 Tip sent!{' '}
                 <a
-                  href={`${getExplorerUrl()}/transaction/${tipTxHash()}`}
+                  href={ex.tx(tipTxHash())}
                   target="_blank"
                   rel="noopener noreferrer"
                   class="tip-tx-link"
