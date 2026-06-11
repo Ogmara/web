@@ -16,7 +16,24 @@ import {
   type DragEvent,
 } from '@thisbeyond/solid-dnd';
 import { t } from '../i18n/init';
-import { getClient } from '../lib/api';
+import { getClient, getCurrentNodeUrl } from '../lib/api';
+
+// Per-node cache of the last-seen channel list. Channel logos are already
+// browser-cached (the node serves them immutable), but on every refresh the
+// channel-list resource starts empty and re-fetches, so the sidebar renders
+// blank → then the (cached) logos pop in once the list resolves = flicker.
+// Seeding the resource from this cache renders the sidebar — and its logos —
+// instantly on boot; the live fetch then reconciles in the background.
+const CHANNELS_CACHE_PREFIX = 'channelsCache:';
+function channelsCacheKey(): string {
+  try { return CHANNELS_CACHE_PREFIX + (getCurrentNodeUrl() || ''); } catch { return CHANNELS_CACHE_PREFIX; }
+}
+function getCachedChannels(): any[] {
+  try { const raw = localStorage.getItem(channelsCacheKey()); return raw ? JSON.parse(raw) : []; } catch { return []; }
+}
+function setCachedChannels(channels: any[]): void {
+  try { localStorage.setItem(channelsCacheKey(), JSON.stringify(channels)); } catch { /* quota/private mode — ignore */ }
+}
 import { authStatus, walletAddress } from '../lib/auth';
 import { navigate, route } from '../lib/router';
 import { getSetting, setSetting } from '../lib/settings';
@@ -471,20 +488,31 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
       try {
         const client = getClient();
         const resp = await client.listChannels(1, 50);
+        // Cache the fresh list so the next boot renders instantly (logos
+        // are already browser-cached, so they paint with no flicker).
+        setCachedChannels(resp.channels);
         return resp.channels;
       } catch {
-        return [];
+        // On failure keep showing the cached list rather than emptying the
+        // sidebar (which would also drop the logos).
+        return getCachedChannels();
       } finally {
         setHasLoadedOnce(true);
       }
     },
+    // Seed from cache so the sidebar + logos render immediately on refresh
+    // while the live fetch runs.
+    { initialValue: getCachedChannels() },
   );
 
   // Sync joined set with API data whenever the channel list refreshes.
   // Handles first-time migration and auto-adds private channels.
   createEffect(() => {
     const all = allChannels();
-    if (authStatus() === 'ready' && all && all.length > 0) {
+    // Only reconcile joined-state against the LIVE list, never the seeded
+    // cache: `syncJoinedWithApi` is add-only, so a stale cache could otherwise
+    // re-pin a private channel the user has since left (audit 2026-06-11).
+    if (hasLoadedOnce() && authStatus() === 'ready' && all && all.length > 0) {
       syncJoinedWithApi(all);
     }
   });
@@ -1351,7 +1379,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           </Show>
         </div>
         <Show when={channelsOpen()}>
-          <Show when={hasLoadedOnce() || !allChannels.loading} fallback={<div class="sidebar-loading">{t('loading')}</div>}>
+          <Show when={hasLoadedOnce() || !allChannels.loading || (channels().length > 0)} fallback={<div class="sidebar-loading">{t('loading')}</div>}>
             {renderGroupedChannels((channel) => (
               <div class="channel-group">
                 <button
