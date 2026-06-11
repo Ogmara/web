@@ -390,5 +390,6 @@
   "sidebar_mentioned_here": "Вас упомянули здесь",
   "dm_waiting_for_key": "ожидание ключа…",
   "dm_cannot_decrypt": "не удалось расшифровать",
-  "dm_attachments_not_encrypted_yet": "Зашифрованные вложения в ЛС скоро появятся — пока отправляйте только текст."
+  "dm_attachments_not_encrypted_yet": "Зашифрованные вложения в ЛС скоро появятся — пока отправляйте только текст.",
+  "dm_encrypted_preview": "Зашифрованное сообщение"
 }

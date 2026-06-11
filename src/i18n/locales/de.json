@@ -390,5 +390,6 @@
   "sidebar_mentioned_here": "Du wurdest hier erwähnt",
   "dm_waiting_for_key": "warte auf Schlüssel…",
   "dm_cannot_decrypt": "Entschlüsselung fehlgeschlagen",
-  "dm_attachments_not_encrypted_yet": "Verschlüsselte DM-Anhänge kommen bald — bitte vorerst nur Text senden."
+  "dm_attachments_not_encrypted_yet": "Verschlüsselte DM-Anhänge kommen bald — bitte vorerst nur Text senden.",
+  "dm_encrypted_preview": "Verschlüsselte Nachricht"
 }
