@@ -387,5 +387,8 @@
   "share_link_failed": "无法复制链接",
   "share_link_unavailable": "未找到消息",
   "chat_mention_you": "您被提及",
-  "sidebar_mentioned_here": "您在此被提及"
+  "sidebar_mentioned_here": "您在此被提及",
+  "dm_waiting_for_key": "等待密钥…",
+  "dm_cannot_decrypt": "无法解密",
+  "dm_attachments_not_encrypted_yet": "加密私信附件即将推出 — 目前请仅发送文本。"
 }

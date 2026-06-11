@@ -22,7 +22,7 @@ import { signMessage } from './klever';
 import { getClient } from './api';
 
 /** Load or create the device X25519 encryption keypair, persisting the secret. */
-async function getOrCreateEncKeypair(): Promise<{ privateKey: Uint8Array; publicKeyHex: string }> {
+export async function getOrCreateEncKeypair(): Promise<{ privateKey: Uint8Array; publicKeyHex: string }> {
   const existing = await encVaultGet();
   if (existing) {
     return { privateKey: existing, publicKeyHex: encPublicKeyHex(existing) };
