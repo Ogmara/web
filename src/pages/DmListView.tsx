@@ -4,7 +4,7 @@
 
 import { Component, createResource, createSignal, For, Show, onMount, onCleanup } from 'solid-js';
 import { t } from '../i18n/init';
-import { getClient } from '../lib/api';
+import { getClient, awaitNodeUrl } from '../lib/api';
 import { authStatus } from '../lib/auth';
 import { navigate } from '../lib/router';
 import type { DmConversation } from '@ogmara/sdk';
@@ -16,6 +16,7 @@ export const DmListView: Component = () => {
     () => authStatus() === 'ready',
     async (isReady) => {
       if (!isReady) return [];
+      await awaitNodeUrl(); // don't fetch the conversation list against an unchosen node
       try {
         const client = getClient();
         const resp = await client.getDmConversations();

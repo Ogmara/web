@@ -5,7 +5,7 @@
  * that needs to resolve a Klever address to a display name + avatar.
  */
 
-import { getClient } from './api';
+import { getClient, awaitNodeUrl, getCurrentNodeUrl } from './api';
 
 export interface CachedProfile {
   display_name?: string;
@@ -41,6 +41,9 @@ export async function resolveProfile(address: string): Promise<CachedProfile> {
   if (profileInflight.has(address)) return profileInflight.get(address)!;
   const promise = (async () => {
     try {
+      // Wait for the node to be chosen before fetching, so a boot-race fetch
+      // doesn't hit an empty node URL and come back blank.
+      await awaitNodeUrl();
       const client = getClient();
       const resp = await client.getUserProfile(address);
       const pk = resp.user?.public_key;
@@ -53,7 +56,13 @@ export async function resolveProfile(address: string): Promise<CachedProfile> {
       return profile;
     } catch {
       const empty: CachedProfile = {};
-      profileCache.set(address, { profile: empty, timestamp: Date.now() });
+      // Only cache the "empty" result when we actually reached a node (genuine
+      // not-found). If no node ever landed, this is a transient boot failure —
+      // do NOT poison the cache, so the next call retries instead of showing a
+      // blank name/avatar for the full empty-TTL window.
+      if (getCurrentNodeUrl()) {
+        profileCache.set(address, { profile: empty, timestamp: Date.now() });
+      }
       return empty;
     } finally {
       profileInflight.delete(address);

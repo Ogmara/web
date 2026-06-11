@@ -5,6 +5,25 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.47.1] - 2026-06-11
+
+### Fixed
+
+- **Identity UI intermittently showing "unlinked" (no verify-tick / username / DMs)
+  after a load.** Identity-dependent loads ran before node selection
+  (`bootstrapNodeSelection`) had landed a node, then **latched the empty result**:
+  - `checkRegistrationStatus` set `isRegistered=false` on any failure (incl. node
+    not ready) — now waits for a node, retries transient failures, and only records
+    a value from a real response (never latches false on a blip).
+  - `resolveProfile` cached an empty profile (30s TTL) on failure — now waits for a
+    node and does **not** poison the cache when no node was reachable (only caches a
+    genuine not-found), so the name/avatar appear as soon as the node is up.
+  - DM conversation list + thread fetchers now await a node before fetching.
+  - New `awaitNodeUrl()` gate in `api.ts`.
+  Desktop was unaffected (built-in-wallet boot doesn't hit this race). Note: a
+  service-worker stale-cache after a deploy is separate — hard-refresh (or bump the
+  SW) after deploying.
+
 ## [0.47.0] - 2026-06-11
 
 E2E encryption P1 — encrypted Direct Messages (text).

@@ -20,7 +20,7 @@ import {
   deviceVaultGetSigner,
   deviceVaultAdoptFromMainIfEmpty,
 } from './vault';
-import { getClient } from './api';
+import { getClient, awaitNodeUrl, getCurrentNodeUrl } from './api';
 import { getSetting, setSetting } from './settings';
 import { signMessage } from './klever';
 import { setActiveSigner, getActiveSigner } from './signerRef';
@@ -483,19 +483,33 @@ export function setRegistrationStatus(registered: boolean): void {
 export async function checkRegistrationStatus(): Promise<void> {
   const addr = walletAddress();
   if (!addr) return;
-  try {
-    const resp = await getClient().getUserProfile(addr);
-    setIsRegistered(resp.user.registered_at > 0);
-    // Cache the user's OWN avatar image locally while we're (presumably) on a
-    // node that has it, so it keeps rendering after switching to a node
-    // without IPFS / without this user's media. Best-effort, fire-and-forget.
-    import('./ownAvatar').then(({ ensureOwnAvatarCached }) =>
-      ensureOwnAvatarCached(resp.user.avatar_cid),
-    ).catch(() => { /* non-critical */ });
-  } catch {
-    // User not found on node or network error — assume unverified
-    setIsRegistered(false);
+  // Wait for a node, then retry transient failures. CRITICAL: never latch
+  // `isRegistered=false` just because the node wasn't ready yet (boot race) or
+  // a fetch blipped — only set the value from an actual successful response.
+  // Otherwise the verify-tick disappears until a manual reload.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    await awaitNodeUrl();
+    if (!getCurrentNodeUrl()) {
+      await new Promise((r) => setTimeout(r, 1000));
+      continue; // no node landed yet — keep waiting, don't latch
+    }
+    try {
+      const resp = await getClient().getUserProfile(addr);
+      setIsRegistered(resp.user.registered_at > 0);
+      // Cache the user's OWN avatar image locally while we're (presumably) on a
+      // node that has it, so it keeps rendering after switching to a node
+      // without IPFS / without this user's media. Best-effort, fire-and-forget.
+      import('./ownAvatar').then(({ ensureOwnAvatarCached }) =>
+        ensureOwnAvatarCached(resp.user.avatar_cid),
+      ).catch(() => { /* non-critical */ });
+      return; // definitive answer recorded
+    } catch {
+      // Transient (network / node blip). Back off and retry; do NOT latch false.
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+    }
   }
+  // Exhausted retries on persistent failure — leave isRegistered as-is rather
+  // than asserting "unverified" on a flaky connection.
 }
 
 /**
