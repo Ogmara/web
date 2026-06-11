@@ -10,7 +10,7 @@
     scripts (XSS defense — the Vite build emits only external module scripts);
     `style-src` keeps 'unsafe-inline' for injected styles; `object-src 'none'`.
   -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https: wss:; font-src 'self' data:; object-src 'none'; base-uri 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-TIbeecLDQA1P6N7GWFGQ98O+4HyieI3SeHiouGv9e2Y='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https: wss:; font-src 'self' data:; object-src 'none'; base-uri 'self'" />
   <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
   <meta name="description" content="Ogmara — Decentralized chat and news on Klever blockchain" />
   <meta name="theme-color" content="#1a1a2e" />

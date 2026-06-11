@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `getExplorerUrl()` helper — are gone; a single base URL covers all
   networks.
 
+## [0.45.4] - 2026-06-11
+
+### Fixed
+
+- **CSP no longer blocks the service-worker registration script.** The B4.6/W3
+  `script-src 'self'` policy blocked the inline SW-(un)register script in
+  `index.html` (`Executing inline script violates ... 'script-src 'self''`), so
+  the service worker couldn't be managed on production. Allowed exactly that one
+  static script via its SHA-256 hash (`'sha256-TIbeecLDQA1P6N7GWFGQ98O+4HyieI3SeHiouGv9e2Y='`)
+  — no `'unsafe-inline'`, no other inline scripts permitted. Hash verified
+  against the built artifact. (Note: the SW bypasses cross-origin node API
+  calls, so this is not the cause of the device-link 401 — that's tracked
+  separately.)
+
 ## [0.45.3] - 2026-06-11
 
 ### Fixed
