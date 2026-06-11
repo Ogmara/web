@@ -387,5 +387,8 @@
   "share_link_failed": "リンクをコピーできませんでした",
   "share_link_unavailable": "メッセージが見つかりません",
   "chat_mention_you": "あなたがメンションされました",
-  "sidebar_mentioned_here": "ここであなたがメンションされました"
+  "sidebar_mentioned_here": "ここであなたがメンションされました",
+  "dm_waiting_for_key": "鍵を待っています…",
+  "dm_cannot_decrypt": "復号できません",
+  "dm_attachments_not_encrypted_yet": "暗号化されたDM添付は近日対応予定です。今はテキストのみ送信してください。"
 }

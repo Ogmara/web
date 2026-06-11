@@ -5,6 +5,31 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.47.0] - 2026-06-11
+
+E2E encryption P1 — encrypted Direct Messages (text).
+
+### Added
+
+- **`lib/dmCrypto.ts`** — DM conv_key lifecycle: establish on first send (wrap to
+  every device of both participants via `ChannelKeyEnvelope` 0x61, `peer` always the
+  recipient), fetch+unwrap on demand, in-memory cache, encrypt/decrypt.
+- DM send now **encrypts text** (`buildEncryptedDm`); messages decrypt on render via
+  the SDK crypto core. "🔒 waiting for key…" / "🔒 can't decrypt" bubble states
+  (i18n in all 7 locales). Multi-device: keys wrapped to every bound device.
+
+### Changed
+
+- DM attachments are **blocked** (with a clear message) until encrypted media ships
+  (P5/D6) — sending one would have downgraded the whole message, text body included,
+  to plaintext (audit 2026-06-11 Sec-W1). Legacy/MVP plaintext DMs (`key_epoch 0`)
+  render via a plaintext path; encrypted DMs (`epoch ≥ 1`) decrypt.
+
+### Notes
+
+- conv_keys are cached in-memory (per session); cross-device/restart recovery is P3
+  (wallet key vault). DM edit/delete content E2E is a P1 follow-up.
+
 ## [0.46.0] - 2026-06-11
 
 ### Changed

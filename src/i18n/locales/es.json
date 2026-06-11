@@ -387,5 +387,8 @@
   "share_link_failed": "No se pudo copiar el enlace",
   "share_link_unavailable": "Mensaje no encontrado",
   "chat_mention_you": "Te mencionaron",
-  "sidebar_mentioned_here": "Te mencionaron aquí"
+  "sidebar_mentioned_here": "Te mencionaron aquí",
+  "dm_waiting_for_key": "esperando la clave…",
+  "dm_cannot_decrypt": "no se puede descifrar",
+  "dm_attachments_not_encrypted_yet": "Los adjuntos cifrados en MD llegarán pronto — por ahora envía solo texto."
 }

@@ -387,5 +387,8 @@
   "share_link_failed": "Link konnte nicht kopiert werden",
   "share_link_unavailable": "Nachricht nicht gefunden",
   "chat_mention_you": "Du wurdest erwähnt",
-  "sidebar_mentioned_here": "Du wurdest hier erwähnt"
+  "sidebar_mentioned_here": "Du wurdest hier erwähnt",
+  "dm_waiting_for_key": "warte auf Schlüssel…",
+  "dm_cannot_decrypt": "Entschlüsselung fehlgeschlagen",
+  "dm_attachments_not_encrypted_yet": "Verschlüsselte DM-Anhänge kommen bald — bitte vorerst nur Text senden."
 }

@@ -387,5 +387,8 @@
   "share_link_failed": "Couldn't copy link",
   "share_link_unavailable": "Message not found",
   "chat_mention_you": "You were mentioned",
-  "sidebar_mentioned_here": "You were mentioned here"
+  "sidebar_mentioned_here": "You were mentioned here",
+  "dm_waiting_for_key": "waiting for key…",
+  "dm_cannot_decrypt": "can't decrypt",
+  "dm_attachments_not_encrypted_yet": "Encrypted DM attachments are coming soon — send text only for now."
 }
