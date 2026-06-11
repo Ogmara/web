@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `getExplorerUrl()` helper — are gone; a single base URL covers all
   networks.
 
+## [0.45.6] - 2026-06-11
+
+### Fixed
+
+- **Channel logos / avatars / media re-downloaded on every page reload (flicker).**
+  The service worker bypassed *all* cross-origin requests, so node media (served
+  from a different origin than the web app) was never cached app-side — and a
+  cross-origin `<img>` isn't reliably held by the browser HTTP cache even with
+  `Cache-Control: immutable`. The SW now caches `/api/v1/media/<cid>` **cache-first**
+  in a dedicated, durable `MEDIA_CACHE` (CID content is immutable, so it's safe to
+  keep forever). Media now paints from the SW cache on reload — no network, no
+  flicker. Range requests (e.g. video seeking) and partial responses are never
+  cached; the cache is capped (200 entries) and preserved across app-shell updates.
+  Pairs with the node-side fix (l2-node 0.63.4, dropped the cache-defeating
+  `Vary: Range`).
+
 ## [0.45.5] - 2026-06-11
 
 ### Fixed
