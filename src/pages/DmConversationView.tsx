@@ -4,7 +4,7 @@
 
 import { Component, createResource, createSignal, createEffect, createMemo, For, Show, onCleanup, onMount, untrack } from 'solid-js';
 import { t } from '../i18n/init';
-import { getClient } from '../lib/api';
+import { getClient, awaitNodeUrl } from '../lib/api';
 import { authStatus, walletAddress, getSigner, isRegistered } from '../lib/auth';
 import { onWsEvent } from '../lib/ws';
 import { navigate } from '../lib/router';
@@ -68,6 +68,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
     () => props.peerAddress,
     async (address) => {
       if (!address) return [];
+      await awaitNodeUrl(); // don't fetch DM history against an unchosen node
       try {
         const client = getClient();
         const resp = await client.getDmMessages(address);

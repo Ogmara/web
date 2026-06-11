@@ -348,6 +348,24 @@ export function getCurrentNodeUrl(): string {
   return resolveNodeUrl();
 }
 
+/**
+ * Resolve once a node URL is available (i.e. `bootstrapNodeSelection()` has
+ * landed one), or after `timeoutMs` with whatever we have (possibly '').
+ *
+ * Identity-dependent loads (registration status, own profile, DMs) MUST await
+ * this before fetching, otherwise a boot-time race where the fetch fires before
+ * the node is chosen returns empty and the UI latches "unlinked" until a reload.
+ */
+export async function awaitNodeUrl(timeoutMs = 8000): Promise<string> {
+  const start = Date.now();
+  let url = getCurrentNodeUrl();
+  while (!url && Date.now() - start < timeoutMs) {
+    await new Promise((r) => setTimeout(r, 250));
+    url = getCurrentNodeUrl();
+  }
+  return url;
+}
+
 /** Discover available nodes with ping times, sorted by latency.
  *
  * Web client does NOT pass `allowPrivateHosts` — the SDK's SSRF
