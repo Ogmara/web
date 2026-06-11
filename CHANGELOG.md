@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `getExplorerUrl()` helper — are gone; a single base URL covers all
   networks.
 
+## [0.45.5] - 2026-06-11
+
+### Fixed
+
+- **Channel logos no longer flicker on refresh.** Logo bytes were already
+  browser-cached (the node serves media `immutable`), but the sidebar's
+  channel-list resource started empty on every load and re-fetched, so the
+  sidebar rendered blank → then the cached logos popped in once the list
+  resolved. The channel list is now seeded from a per-node localStorage cache
+  and rendered immediately on boot (logos paint from cache, no flicker); the
+  live fetch reconciles in the background. The joined-channel sync runs only
+  against the live list (never the seeded cache), so a stale cache can't re-pin
+  a private channel the user has left.
+
 ## [0.45.4] - 2026-06-11
 
 ### Fixed
