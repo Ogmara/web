@@ -157,7 +157,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
       if (!id) continue;
       const existing = cur[id];
       if (existing && existing.kind !== 'waiting') continue; // already resolved
-      decryptDmMessage(msg.payload)
+      decryptDmMessage(msg.payload, msg.author)
         .then((disp) => {
           setDmDisplays((prev) =>
             prev[id] && prev[id].kind !== 'waiting' ? prev : { ...prev, [id]: disp },
