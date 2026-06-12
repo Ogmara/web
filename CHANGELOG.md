@@ -5,6 +5,17 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.47.4] - 2026-06-12
+
+### Fixed
+
+- **Cross-node DMs decrypting as "can't decrypt".** Moved to **per-sender keys**
+  (`lib/dmCrypto.ts`): each participant has their own `conv_key`; a message is
+  decrypted by fetching its author's key (`getKeyEnvelope(..., author=msg.author)`),
+  cached by `(conversation, epoch, author)`. Fixes the split-brain where both sides
+  generated their own epoch-1 key and neither could read the other. Needs l2-node
+  0.65.0 + sdk-js 0.29.0. Removed the temporary `[dm-e2e]` diagnostic logging.
+
 ## [0.47.2] - 2026-06-11
 
 ### Changed

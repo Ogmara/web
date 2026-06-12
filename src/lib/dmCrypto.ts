@@ -1,15 +1,16 @@
 /**
- * Direct Message E2E orchestration (P1, protocol §8.2).
+ * Direct Message E2E orchestration (P1, protocol §8.2) — **per-sender keys**.
  *
- * A DM conversation is a two-member group with a random per-epoch `conv_key`,
- * delivered to each participant device via `ChannelKeyEnvelope` (0x61) and used to
- * XChaCha20-Poly1305-encrypt each message. This module owns the conv_key lifecycle:
- * establish on first send, fetch+unwrap on demand, cache in memory, and
- * encrypt/decrypt. The L2 node only ever sees opaque ciphertext + wrapped keys.
+ * Each participant has their OWN sending key (`conv_key`) for a conversation,
+ * wrapped (ECIES) to every device of both participants via `ChannelKeyEnvelope`
+ * (0x61), keyed on the node by the author. To decrypt a message from author X, the
+ * recipient fetches X's key (`getKeyEnvelope(..., author=X)`). This avoids the
+ * shared-key agreement problem entirely: cross-node, both sides independently
+ * publish their own key and each can decrypt the other's messages (no "split-brain"
+ * where two epoch-1 keys collide under first-write-wins).
  *
- * Caching is in-memory (per session). Cross-device/restart recovery is P3 (the
- * wallet-encrypted key vault); until then, a fresh device fetches its wrapped key
- * envelopes from the node on demand.
+ * Caching is in-memory (per session), keyed by (conversation, epoch, author).
+ * Cross-device/restart recovery is P3 (the wallet-encrypted key vault).
  */
 import {
   computeConversationId,
@@ -19,7 +20,6 @@ import {
   buildChannelKeyEnvelope,
   buildEncryptedDirectMessage,
   decryptDmContent,
-  encPublicKeyHex,
   KeyScopeKind,
   type WrappedKey,
 } from '@ogmara/sdk';
@@ -32,40 +32,37 @@ import { getOrCreateEncKeypair } from './deviceEnc';
 const toHex = (b: Uint8Array): string =>
   Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 
-// TEMP E2E DM diagnostics (remove once cross-node DMs verified). Logs short
-// prefixes only — never full keys.
-const px = (b?: Uint8Array): string =>
-  b ? Array.from(b.slice(0, 4), (x) => x.toString(16).padStart(2, '0')).join('') : 'none';
-const dlog = (...a: unknown[]): void => console.log('[dm-e2e]', ...a);
-
 function fromHex(h: string): Uint8Array {
   const out = new Uint8Array(h.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
   return out;
 }
 
-/** In-memory conv_key cache: `${conversationIdHex}:${epoch}` → 32-byte key. */
+/** In-memory key cache: `${conversationIdHex}:${epoch}:${author}` → 32-byte key. */
 const convKeys = new Map<string, Uint8Array>();
-const cacheKey = (convIdHex: string, epoch: number) => `${convIdHex}:${epoch}`;
+const cacheKey = (convIdHex: string, epoch: number, author: string) =>
+  `${convIdHex}:${epoch}:${author}`;
 
-/** Highest cached epoch for a conversation, or null. */
-function cachedLatest(convIdHex: string): { key: Uint8Array; epoch: number } | null {
+/** Highest cached epoch of `author`'s key for a conversation, or null. */
+function cachedLatest(convIdHex: string, author: string): { key: Uint8Array; epoch: number } | null {
+  const suffix = `:${author}`;
   let best: { key: Uint8Array; epoch: number } | null = null;
   for (const [k, v] of convKeys) {
-    if (k.startsWith(`${convIdHex}:`)) {
-      const epoch = Number(k.slice(convIdHex.length + 1));
+    if (k.startsWith(`${convIdHex}:`) && k.endsWith(suffix)) {
+      const epoch = Number(k.slice(convIdHex.length + 1, k.length - suffix.length));
       if (!best || epoch > best.epoch) best = { key: v, epoch };
     }
   }
   return best;
 }
 
-/** Per-conversation in-flight establishment, so a double-send doesn't fork the key. */
+/** Per-conversation in-flight establishment, so a double-send doesn't fork my key. */
 const establishing = new Map<string, Promise<{ key: Uint8Array; epoch: number }>>();
 
 /** Clear cached keys (e.g. on logout / wallet switch). */
 export function clearDmKeyCache(): void {
   convKeys.clear();
+  establishing.clear();
 }
 
 interface DeviceCtx {
@@ -85,18 +82,17 @@ async function deviceCtx(): Promise<DeviceCtx | null> {
 }
 
 /**
- * Establish a brand-new `conv_key`: wrap it to every device of BOTH participants
- * and publish one `ChannelKeyEnvelope` (0x61) per device. `peer` is always the
- * recipient (the other party from the author's view) — even for the author's own
- * devices — so the node's `key_scope == conversation_id(author, peer)` check holds.
+ * Establish MY sending key for this conversation: generate a random `conv_key`,
+ * wrap it (ECIES) to every device of BOTH participants, and publish one
+ * `ChannelKeyEnvelope` (0x61) per device (authored by me, so the node stores it
+ * under my author id). `peer` is always the recipient. Caches + returns my key.
  */
-async function establishConvKey(
+async function establishMyKey(
   ctx: DeviceCtx,
   conversationId: Uint8Array,
+  convIdHex: string,
   recipient: string,
-  convKey: Uint8Array,
-  epoch: number,
-): Promise<void> {
+): Promise<{ key: Uint8Array; epoch: number }> {
   const client = getClient();
   const [recipKeys, myKeys] = await Promise.all([
     client.getEncKeys(recipient).catch(() => ({ keys: [] as { device_id: string; enc_pub: string }[] })),
@@ -111,15 +107,8 @@ async function establishConvKey(
     throw new Error('no device encryption keys found for either participant');
   }
 
-  dlog('establish', {
-    convId: toHex(conversationId).slice(0, 8),
-    epoch,
-    convKey: px(convKey),
-    recipientKeys: recipKeys.keys.length,
-    myKeys: myKeys.keys.length,
-    targets: targets.map((t) => `${t.target.slice(0, 8)}/${t.deviceId.slice(0, 8)}/enc:${t.encPub.slice(0, 8)}`),
-  });
-
+  const convKey = randomConvKey();
+  const epoch = 1;
   for (const tg of targets) {
     const wrapped: WrappedKey = wrapConvKey(convKey, fromHex(tg.encPub), conversationId);
     const envelope = await buildChannelKeyEnvelope(ctx.signer!, {
@@ -133,57 +122,30 @@ async function establishConvKey(
     });
     await client.publishKeyEnvelope(envelope);
   }
-}
-
-/**
- * Establish a new conv_key, then re-fetch our own device's envelope so we adopt the
- * **first-write-wins winner** — if the peer raced us and established first, the node
- * kept their key for our device, and we converge on it. Returns the authoritative
- * key (falls back to our candidate if the envelope isn't readable back yet).
- */
-async function establishAndAdopt(
-  ctx: DeviceCtx,
-  conversationId: Uint8Array,
-  convIdHex: string,
-  recipient: string,
-): Promise<{ key: Uint8Array; epoch: number }> {
-  const candidate = randomConvKey();
-  const epoch = 1;
-  await establishConvKey(ctx, conversationId, recipient, candidate, epoch);
-  const winner = await fetchConvKey(ctx, conversationId, convIdHex, epoch);
-  if (typeof winner !== 'string') return winner;
-  convKeys.set(cacheKey(convIdHex, epoch), candidate);
-  return { key: candidate, epoch };
+  convKeys.set(cacheKey(convIdHex, epoch, ctx.wallet), convKey);
+  return { key: convKey, epoch };
 }
 
 /** `missing` = not delivered yet (retry); `corrupt` = present but unwrap failed (error). */
 type FetchResult = { key: Uint8Array; epoch: number } | 'missing' | 'corrupt';
 
-/** Fetch + unwrap this device's `conv_key` for a scope/epoch. */
+/** Fetch + unwrap author `author`'s `conv_key` for a scope/epoch, addressed to my device. */
 async function fetchConvKey(
   ctx: DeviceCtx,
   conversationId: Uint8Array,
   convIdHex: string,
+  author: string,
   epoch?: number,
 ): Promise<FetchResult> {
   let resp;
   try {
-    resp = await getClient().getKeyEnvelope(convIdHex, ctx.deviceId, epoch);
+    resp = await getClient().getKeyEnvelope(convIdHex, ctx.deviceId, author, epoch);
   } catch {
     return 'missing'; // network/transient — retry later
   }
   if (!resp.envelope) return 'missing';
-  const env = resp.envelope;
-  const myEncPub = encPublicKeyHex(ctx.encPriv);
-  dlog('fetch envelope', {
-    convId: convIdHex.slice(0, 8),
-    epoch,
-    myDeviceId: ctx.deviceId.slice(0, 8),
-    myEncPub: myEncPub.slice(0, 8),
-    envAuthor: env.author,
-    ephPub: env.eph_pub.slice(0, 8),
-  });
   try {
+    const env = resp.envelope;
     const wrapped: WrappedKey = {
       ephPub: fromHex(env.eph_pub),
       nonce: fromHex(env.nonce),
@@ -191,20 +153,16 @@ async function fetchConvKey(
     };
     const key = unwrapConvKey(wrapped, ctx.encPriv, conversationId);
     const ep = resp.epoch ?? env.epoch;
-    convKeys.set(cacheKey(convIdHex, ep), key);
-    dlog('UNWRAP OK', { convId: convIdHex.slice(0, 8), epoch: ep, convKey: px(key) });
+    convKeys.set(cacheKey(convIdHex, ep, author), key);
     return { key, epoch: ep };
-  } catch (e) {
-    // envelope present but unwrap failed → enc-pubkey mismatch (sender wrapped to a
-    // different enc_pub than this device holds).
-    dlog('UNWRAP FAILED', { convId: convIdHex.slice(0, 8), myEncPub: myEncPub.slice(0, 8), err: String(e) });
+  } catch {
     return 'corrupt';
   }
 }
 
 /**
- * Ensure a usable `conv_key` for sending to `recipient`. Returns the current epoch's
- * key (establishing a new conversation at epoch 1 if none exists yet).
+ * Ensure MY sending key for `recipient` (establishing it if this is my first
+ * message). Always returns my own key — never the peer's.
  */
 export async function ensureConvKeyForSend(
   recipient: string,
@@ -214,20 +172,20 @@ export async function ensureConvKeyForSend(
   const conversationId = computeConversationId(ctx.wallet, recipient);
   const convIdHex = toHex(conversationId);
 
-  // 1) In-memory cache first — no node round-trip on the hot path.
-  const cached = cachedLatest(convIdHex);
+  // 1) My key cached?
+  const cached = cachedLatest(convIdHex, ctx.wallet);
   if (cached) return { convKey: cached.key, epoch: cached.epoch, conversationId };
 
-  // 2) Node: our wrapped envelope (latest epoch), unwrapped + cached.
-  const fetched = await fetchConvKey(ctx, conversationId, convIdHex);
+  // 2) My key already on the node (e.g. established on another of my devices)?
+  const fetched = await fetchConvKey(ctx, conversationId, convIdHex, ctx.wallet);
   if (typeof fetched !== 'string') {
     return { convKey: fetched.key, epoch: fetched.epoch, conversationId };
   }
 
-  // 3) New conversation — establish once (deduped) and adopt the FWW winner.
+  // 3) Establish my key (deduped against a concurrent send).
   let inflight = establishing.get(convIdHex);
   if (!inflight) {
-    inflight = establishAndAdopt(ctx, conversationId, convIdHex, recipient).finally(() =>
+    inflight = establishMyKey(ctx, conversationId, convIdHex, recipient).finally(() =>
       establishing.delete(convIdHex),
     );
     establishing.set(convIdHex, inflight);
@@ -244,9 +202,9 @@ export async function buildEncryptedDm(
 ): Promise<Uint8Array> {
   const established = await ensureConvKeyForSend(recipient);
   if (!established) throw new Error('device not ready for encrypted DMs');
-  const ctx = getSigner();
-  if (!ctx) throw new Error('no signer');
-  return buildEncryptedDirectMessage(ctx, {
+  const signer = getSigner();
+  if (!signer) throw new Error('no signer');
+  return buildEncryptedDirectMessage(signer, {
     recipient,
     convKey: established.convKey,
     epoch: established.epoch,
@@ -255,7 +213,6 @@ export async function buildEncryptedDm(
   });
 }
 
-/** Decoded DM payload (raw, pre-decrypt). */
 interface RawDmPayload {
   conversation_id?: Uint8Array;
   content?: Uint8Array | string;
@@ -285,11 +242,14 @@ export type DmDisplay =
   | { kind: 'error' };
 
 /**
- * Decrypt a DM message for rendering. Plaintext (optimistic local / legacy) is
- * returned as-is; encrypted content is decrypted with the conv_key (fetched +
- * cached on demand). Returns `waiting` when the key hasn't arrived yet.
+ * Decrypt a DM message for rendering. `author` is the message sender (resolved
+ * wallet) — we fetch THAT author's key to decrypt. Plaintext (optimistic local /
+ * legacy `key_epoch 0`) is returned as-is.
  */
-export async function decryptDmMessage(payload: number[] | Uint8Array | string): Promise<DmDisplay> {
+export async function decryptDmMessage(
+  payload: number[] | Uint8Array | string,
+  author?: string,
+): Promise<DmDisplay> {
   const bytes = toBytes(payload);
   if (!bytes) return { kind: 'error' };
   let decoded: RawDmPayload;
@@ -298,11 +258,8 @@ export async function decryptDmMessage(payload: number[] | Uint8Array | string):
   } catch {
     return { kind: 'error' };
   }
-  // Optimistic/legacy plaintext: content is a string.
   if (typeof decoded.content === 'string') return { kind: 'plain', text: decoded.content };
-  // Legacy/MVP plaintext DMs use key_epoch 0 with UTF-8 bytes in `content`
-  // (encrypted DMs are always epoch ≥ 1). Render them as plaintext rather than
-  // mis-routing to decrypt → permanent "waiting".
+  // Legacy/MVP plaintext DMs use key_epoch 0 with UTF-8 bytes in `content`.
   if ((decoded.key_epoch ?? 0) === 0) {
     if (decoded.content instanceof Uint8Array) {
       try {
@@ -321,23 +278,23 @@ export async function decryptDmMessage(payload: number[] | Uint8Array | string):
   const epoch = decoded.key_epoch ?? 1;
   const convIdHex = toHex(conversationId);
 
-  let key = convKeys.get(cacheKey(convIdHex, epoch));
+  const ctx = await deviceCtx();
+  if (!ctx) return { kind: 'waiting' };
+  // The sender's key. Default to my own wallet for an own-message echo when the
+  // caller didn't pass the author.
+  const keyAuthor = author ?? ctx.wallet;
+
+  let key = convKeys.get(cacheKey(convIdHex, epoch, keyAuthor));
   if (!key) {
-    const ctx = await deviceCtx();
-    if (!ctx) return { kind: 'waiting' };
-    const fetched = await fetchConvKey(ctx, conversationId, convIdHex, epoch);
+    const fetched = await fetchConvKey(ctx, conversationId, convIdHex, keyAuthor, epoch);
     if (fetched === 'missing') return { kind: 'waiting' };
     if (fetched === 'corrupt') return { kind: 'error' };
     key = fetched.key;
   }
   try {
     const pt = decryptDmContent(key, conversationId, epoch, decoded.content, decoded.nonce);
-    dlog('DECRYPT OK', { convId: convIdHex.slice(0, 8), epoch });
     return { kind: 'text', text: pt.text };
-  } catch (e) {
-    // unwrap gave a key but content AEAD failed → wrong conv_key (split-brain) or
-    // AAD mismatch.
-    dlog('DECRYPT FAILED', { convId: convIdHex.slice(0, 8), epoch, convKey: px(key), err: String(e) });
+  } catch {
     return { kind: 'error' };
   }
 }
