@@ -86,6 +86,13 @@ export async function initAuth(): Promise<void> {
         ensureDeviceRegistered(deviceSigner, savedAddress, deviceAddr);
         checkRegistrationStatus();
         verifyDeviceMapping();
+        // Re-assert the enc-key binding on restore (E2E P0, §2.4): if the enc
+        // key was regenerated since the last connect, this republishes it and
+        // revokes the stale enc_pub. Best-effort — needs a live extension to
+        // sign, so on a cold reload it silently retries at the next connect.
+        void ensureDeviceEncBinding(savedAddress).catch((e) =>
+          console.warn('[deviceEnc] binding failed:', e),
+        );
       } else {
         // No device key yet — reconnect the extension to mint one.
         setAuthStatus('none');
@@ -105,6 +112,10 @@ export async function initAuth(): Promise<void> {
           setWalletSource('builtin');
           setAuthStatus('ready');
           checkRegistrationStatus();
+          // Publish/repair this built-in wallet's enc-key binding on restore.
+          void ensureDeviceEncBinding(address).catch((e) =>
+            console.warn('[deviceEnc] binding failed:', e),
+          );
         } else {
           // Vault has a key but no built-in source — orphaned; don't activate.
           setAuthStatus('none');
@@ -130,6 +141,11 @@ export async function connectWithKey(hexKey: string): Promise<string> {
   setSetting('walletAddress', address);
   setAuthStatus('ready');
   checkRegistrationStatus();
+  // Publish this built-in wallet's device encryption-key binding (E2E P0, §2.4)
+  // so peers can wrap DM keys to it. Best-effort + idempotent; retries next login.
+  void ensureDeviceEncBinding(address).catch((e) =>
+    console.warn('[deviceEnc] binding failed:', e),
+  );
   return address;
 }
 
@@ -145,6 +161,10 @@ export async function generateWallet(): Promise<string> {
   setSetting('walletAddress', address);
   setAuthStatus('ready');
   checkRegistrationStatus();
+  // Publish this built-in wallet's device encryption-key binding (E2E P0, §2.4).
+  void ensureDeviceEncBinding(address).catch((e) =>
+    console.warn('[deviceEnc] binding failed:', e),
+  );
   return address;
 }
 

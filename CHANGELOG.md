@@ -5,6 +5,33 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.48.0] - 2026-06-13
+
+### Added
+
+- **E2E direct messages for built-in (raw-key) wallets.** Built-in wallets no
+  longer need the Klever Extension's delegated device key to send/read encrypted
+  DMs. They now mint a stable random per-install `device_id` (`lib/deviceEnc.ts`,
+  `getOrCreateDeviceId`, persisted in settings) and publish their X25519 enc-key
+  binding on connect, generate, and session restore — mirroring the desktop model.
+  Fixes **"device not ready for encrypted DMs"** on the raw-key login path.
+
+### Fixed
+
+- **"Can't decrypt" from a stale device key.** The node keys the enc-key directory
+  by `enc_pub` but wraps DM keys by `device_id` (first-write-wins), so a regenerated
+  enc key left a stale `enc_pub` active → two keys for one device → colliding key
+  envelopes where the wrong wrapping could win. `ensureDeviceEncBinding` now revokes
+  (0x37) superseded `enc_pub`s for the device when the key changes, and
+  `establishMyKey` wraps to only the newest `enc_pub` per `(target, device_id)`. The
+  binding marker is bumped to `v2:` so existing installs self-heal once on next login.
+- **DMs appearing empty on reload.** The conversation message fetch now re-keys on
+  auth readiness — previously it fired before the signer was attached on a cold
+  reload, the authenticated fetch 401'd, and it didn't refetch until the 8 s poll.
+- **DM view opening scrolled to the oldest message.** The auto-scroll trackers are
+  now reset per conversation, so opening/switching a DM lands on the newest message.
+- Undecrypted DM bubbles show `…` while decryption resolves instead of rendering blank.
+
 ## [0.47.4] - 2026-06-12
 
 ### Fixed
