@@ -29,6 +29,7 @@ import { getSetting, setSetting } from './settings';
 import { signMessage } from './klever';
 import { getActiveSigner } from './signerRef';
 import { getClient } from './api';
+import { e2elog, withRetry } from './e2eDebug';
 
 const bytesToHex = (b: Uint8Array): string =>
   Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
@@ -132,7 +133,8 @@ async function revokeStaleEncKeys(
         encPubHex: k.enc_pub,
         walletSign: sign,
       });
-      await getClient().publishEncKeyEnvelope(wallet, revoke);
+      await withRetry(() => getClient().publishEncKeyEnvelope(wallet, revoke), 'revoke stale enc-key');
+      e2elog('revoked stale enc_pub', { deviceId, staleEncPub: k.enc_pub });
     }
   } catch (e) {
     console.warn('[deviceEnc] stale enc-key revoke skipped:', e);
@@ -152,10 +154,28 @@ export async function ensureDeviceEncBinding(walletAddress: string): Promise<voi
   if (!deviceId) return; // external wallet without a device signer yet — retry later
 
   const kp = await getOrCreateEncKeypair();
-  // Marker is versioned (`v2:`) so existing installs re-run once after this
-  // fix to revoke any stale duplicate enc_pub left by the pre-revoke clients.
   const marker = `v2:${walletAddress}:${kp.publicKeyHex}`;
-  if (getSetting('encKeyBound') === marker) return;
+
+  // Registry-verified (not just the local marker): the marker only records what
+  // WE last published — it can't see that the node's enc_pub for our device_id
+  // diverged from our current local enc_pub (the "can't decrypt" cause). Confirm
+  // the node actually has THIS device_id bound to our CURRENT enc_pub; only skip
+  // when the registry agrees AND the marker is set.
+  let registryOk = false;
+  try {
+    const { keys } = await getClient().getEncKeys(walletAddress);
+    const mine = keys.find((k) => (k.device_id ?? '').toLowerCase() === deviceId.toLowerCase());
+    registryOk = !!mine && (mine.enc_pub ?? '').toLowerCase() === kp.publicKeyHex.toLowerCase();
+    e2elog('binding check', {
+      wallet: walletAddress, deviceId, localEncPub: kp.publicKeyHex,
+      registryEncPub: mine?.enc_pub ?? null, registryOk, markerSet: getSetting('encKeyBound') === marker,
+    });
+  } catch {
+    // Registry unreachable (429/offline): fall back to the local marker so we
+    // don't hammer the node; retry on the next login.
+    if (getSetting('encKeyBound') === marker) return;
+  }
+  if (registryOk && getSetting('encKeyBound') === marker) return;
 
   const sign = walletSignFn();
   const envelope = await buildDeviceEncBinding({
@@ -164,7 +184,8 @@ export async function ensureDeviceEncBinding(walletAddress: string): Promise<voi
     deviceIdHex: deviceId,
     walletSign: sign,
   });
-  await getClient().publishEncKeyEnvelope(walletAddress, envelope);
+  await withRetry(() => getClient().publishEncKeyEnvelope(walletAddress, envelope), 'publish binding');
+  e2elog('published binding', { deviceId, encPub: kp.publicKeyHex });
   // Retire any stale enc_pub for this device AFTER the new key is registered, so
   // there is never a window with zero active keys for the device.
   await revokeStaleEncKeys(walletAddress, deviceId, kp.publicKeyHex, sign);
