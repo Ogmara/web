@@ -5,6 +5,19 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.50.3] - 2026-06-13
+
+### Fixed
+
+- **Late-joining device gets the key without an app reload.** `coverDevices` was
+  once-per-session, so a peer device that registered after a sender established its
+  conv_key stayed "🔒 waiting for key" until the sender restarted. It's now
+  re-runnable (throttled ~10 s per conversation/epoch) and is triggered on each
+  **incoming DM** (`coverPeerDevices`): when a peer is active, the sender re-wraps
+  its conv_key to the peer's current devices, so a newly-joined device decrypts
+  automatically. (Reduces — but doesn't fully close — the offline case; the durable
+  node-side store-and-forward fix is planned separately.)
+
 ## [0.50.2] - 2026-06-13
 
 ### Fixed
