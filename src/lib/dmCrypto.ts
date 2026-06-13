@@ -140,31 +140,83 @@ async function wrapMyKeyToTargets(
   wrappedToDevices.set(wrappedSetKey(convIdHex, epoch), covered);
 }
 
+const bytesEq = (a: Uint8Array, b: Uint8Array): boolean =>
+  a.length === b.length && a.every((x, i) => x === b[i]);
+
 /**
- * Establish MY sending key for this conversation: generate a random `conv_key`,
- * wrap it to every current device of BOTH participants, publish one
- * `ChannelKeyEnvelope` (0x61) per device (authored by me). Caches + returns my key.
+ * Establish MY sending key for this conversation at `epoch`: generate a random
+ * `conv_key`, wrap it to every current device of BOTH participants, publish one
+ * `ChannelKeyEnvelope` (0x61) per device (authored by me).
+ *
+ * CRITICAL FWW read-back: the node keys envelopes by `(author, target-device,
+ * epoch)` first-write-wins, and the publish endpoint returns 200 even when the
+ * write is silently dropped (a key already existed for that device+epoch). If we
+ * just used our locally-generated key, we'd ENCRYPT with a key the node never
+ * stored → recipients (and we, on reload) fetch the surviving key → "invalid
+ * tag". So after publishing we re-fetch our own key and ADOPT whatever the node
+ * actually serves — guaranteeing we encrypt with the key everyone will fetch.
+ * (A truly fresh epoch has no prior envelopes, so our key wins all devices.)
  */
 async function establishMyKey(
   ctx: DeviceCtx,
   conversationId: Uint8Array,
   convIdHex: string,
   recipient: string,
+  epoch = 1,
 ): Promise<{ key: Uint8Array; epoch: number }> {
   const targets = await getConvTargets(ctx, recipient);
   e2elog('establish: targets', {
-    convIdHex, recipient,
+    convIdHex, recipient, epoch,
     targets: targets.map((t) => `${t.target.slice(0, 10)}…/${t.deviceId.slice(0, 8)}`),
   });
   if (targets.length === 0) {
     throw new Error('no device encryption keys found for either participant');
   }
   const convKey = randomConvKey();
-  const epoch = 1;
   await wrapMyKeyToTargets(ctx, conversationId, convIdHex, recipient, convKey, epoch, targets);
   convKeys.set(cacheKey(convIdHex, epoch, ctx.wallet), convKey);
+  // FWW read-back: adopt the node's stored key if ours lost the race.
+  const confirmed = await fetchConvKey(ctx, conversationId, convIdHex, ctx.wallet, epoch);
+  if (typeof confirmed !== 'string' && !bytesEq(confirmed.key, convKey)) {
+    e2elog('establish: adopted node FWW key (local lost the race)', { convIdHex, epoch });
+    return { key: confirmed.key, epoch }; // fetchConvKey already cached the node's key
+  }
   e2elog('establish: published', { convIdHex, epoch, deviceCount: targets.length });
   return { key: convKey, epoch };
+}
+
+/** Highest epoch the node has for `author`'s key in this conversation (0 = none). */
+async function latestEpochFor(
+  ctx: DeviceCtx, conversationId: Uint8Array, convIdHex: string, author: string,
+): Promise<number> {
+  const r = await fetchConvKey(ctx, conversationId, convIdHex, author); // no epoch → latest
+  return typeof r === 'string' ? 0 : r.epoch;
+}
+
+/**
+ * Re-key the conversation with a clean epoch bump. Establishes a fresh `conv_key`
+ * at `max(myLatest, peerLatest) + 1` — a fresh epoch has no prior envelopes, so
+ * the single establish wins FWW on EVERY device → one consistent key (escapes a
+ * corrupted epoch where repeated establishes left different keys per device).
+ * BOTH participants must re-key to stop sending under the corrupted epoch.
+ * Returns the new epoch. Old-epoch messages remain undecryptable.
+ */
+export async function reKeyConversation(
+  recipient: string,
+): Promise<{ epoch: number } | null> {
+  const ctx = await deviceCtx();
+  if (!ctx) return null;
+  const conversationId = computeConversationId(ctx.wallet, recipient);
+  const convIdHex = toHex(conversationId);
+  const [mine, theirs] = await Promise.all([
+    latestEpochFor(ctx, conversationId, convIdHex, ctx.wallet),
+    latestEpochFor(ctx, conversationId, convIdHex, recipient),
+  ]);
+  const epoch = Math.max(mine, theirs, 0) + 1;
+  coveredThisSession.delete(wrappedSetKey(convIdHex, epoch));
+  const res = await establishMyKey(ctx, conversationId, convIdHex, recipient, epoch);
+  e2elog('reKey: bumped epoch', { convIdHex, from: Math.max(mine, theirs, 0), to: res.epoch });
+  return { epoch: res.epoch };
 }
 
 /** Conversations whose current device set we've already reconciled this session. */
@@ -498,5 +550,10 @@ export async function e2eSelfCheck(peer?: string): Promise<Record<string, unknow
 }
 
 if (typeof window !== 'undefined') {
-  (window as unknown as { __ogmaraE2E?: typeof e2eSelfCheck }).__ogmaraE2E = e2eSelfCheck;
+  const w = window as unknown as {
+    __ogmaraE2E?: typeof e2eSelfCheck;
+    __ogmaraE2EReKey?: typeof reKeyConversation;
+  };
+  w.__ogmaraE2E = e2eSelfCheck;
+  w.__ogmaraE2EReKey = reKeyConversation; // __ogmaraE2EReKey('<peer>') — clean epoch bump
 }

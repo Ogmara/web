@@ -5,6 +5,28 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.50.0] - 2026-06-13
+
+### Fixed
+
+- **DM "can't decrypt" / "invalid tag" — conv_key divergence.** Root cause: the node
+  keys `channel_keys` envelopes by `(author, target-device, epoch)` first-write-wins
+  and the publish endpoint returns 200 even when a write is silently dropped. A
+  sender who re-established its epoch key (e.g. across the device-id churn) used a
+  *locally-generated* key the node never stored → it encrypted under a key recipients
+  (and itself on reload) couldn't fetch → AEAD `invalid tag`. `establishMyKey` now
+  does a **FWW read-back**: after publishing it re-fetches its own key and **adopts
+  whatever the node serves**, so it always encrypts with the key everyone will fetch.
+
+### Added
+
+- **`reKeyConversation(recipient)` / `window.__ogmaraE2EReKey('<peer>')`** — a clean
+  **epoch bump**: establishes a fresh `conv_key` at `max(myLatest,peerLatest)+1`,
+  where no envelopes exist yet so one establish wins FWW on *every* device → a single
+  consistent key. Escapes a conversation whose earlier epoch was corrupted by repeated
+  establishes (different keys per device). Both participants re-key once; old-epoch
+  messages remain unreadable (expected — those keys are lost).
+
 ## [0.49.1] - 2026-06-13
 
 ### Added
