@@ -1,6 +1,6 @@
 {
   "name": "@ogmara/web",
-  "version": "0.48.1",
+  "version": "0.48.2",
   "private": true,
   "description": "Ogmara web application — decentralized chat and news PWA",
   "scripts": {
@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "typescript": "^5.8.3",
-    "vite": "^6.4.2",
+    "vite": "^7.3.2",
     "vite-plugin-solid": "^2.11.6"
   },
   "overrides": {

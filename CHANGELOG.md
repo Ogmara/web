@@ -5,6 +5,20 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.48.2] - 2026-06-13
+
+### Fixed
+
+- **Dev server broken by the 0.48.1 esbuild pin.** Forcing `esbuild 0.28.1` under
+  Vite 6 made `vite dev`'s dependency pre-bundle fail ("Transforming destructuring
+  to the configured target environment is not supported yet") because esbuild 0.28
+  changed syntax-lowering and Vite 6's dev target tripped it. Bumped Vite to `^7.3.2`
+  (which natively uses the patched esbuild 0.28.1 and handles it correctly); the
+  esbuild override is retained so the whole tree — incl. the linked SDK's `tsup` —
+  stays on the patched build. `build.target` is unchanged (`esnext`), so the shipped
+  bundle's browser support is identical. `npm audit` stays at 0; dev pre-bundle +
+  production build both verified.
+
 ## [0.48.1] - 2026-06-13
 
 ### Security
