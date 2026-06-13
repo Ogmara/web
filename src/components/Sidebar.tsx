@@ -17,6 +17,7 @@ import {
 } from '@thisbeyond/solid-dnd';
 import { t } from '../i18n/init';
 import { getClient, getCurrentNodeUrl } from '../lib/api';
+import { onWsEvent } from '../lib/ws';
 
 // Per-node cache of the last-seen channel list. Channel logos are already
 // browser-cached (the node serves them immutable), but on every refresh the
@@ -785,6 +786,10 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
       setMentionCounts(unread.mentions ?? {});
       const dmCounts = dmUnread.unread ?? {};
       setDmUnreadTotal(Object.values(dmCounts).reduce((a: number, b: number) => a + b, 0));
+      // Keep the DM conversation list fresh while on the DMs tab — the resource
+      // otherwise only refetches on tab change / mark-read, so a brand-new incoming
+      // conversation wouldn't appear until you navigated away and back.
+      if (activeTab() === 'dms') refetchDmConvs();
       setNotifUnread((notifResp as any).notifications?.length ?? 0);
     } catch { /* ignore */ }
   };
@@ -796,6 +801,16 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     }
   });
   onCleanup(() => { if (pollTimer) clearInterval(pollTimer); });
+
+  // Live: a new incoming DM should surface a brand-new conversation in the list
+  // immediately (not only after the 12s poll or a tab switch).
+  const dmWsCleanup = onWsEvent((event) => {
+    if (event.type === 'dm') {
+      refetchDmConvs();
+      void pollData();
+    }
+  });
+  onCleanup(dmWsCleanup);
 
   const currentChannelId = () => {
     const r = route();
