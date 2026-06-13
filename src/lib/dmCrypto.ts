@@ -319,12 +319,19 @@ export async function ensureConvKeyForSend(
     return { convKey: fetched.key, epoch: fetched.epoch, conversationId };
   }
 
-  // 3) Establish my key (deduped against a concurrent send).
+  // 3) Establish my key at a FRESH epoch above anything either side has — never
+  // re-establish an existing epoch (that re-collides with a polluted epoch and the
+  // read-back adopts a stale key). (Deduped against a concurrent send.)
   let inflight = establishing.get(convIdHex);
   if (!inflight) {
-    inflight = establishMyKey(ctx, conversationId, convIdHex, recipient).finally(() =>
-      establishing.delete(convIdHex),
-    );
+    inflight = (async () => {
+      const [mine, theirs] = await Promise.all([
+        latestEpochFor(ctx, conversationId, convIdHex, ctx.wallet),
+        latestEpochFor(ctx, conversationId, convIdHex, recipient),
+      ]);
+      const epoch = Math.max(mine, theirs, 0) + 1;
+      return establishMyKey(ctx, conversationId, convIdHex, recipient, epoch);
+    })().finally(() => establishing.delete(convIdHex));
     establishing.set(convIdHex, inflight);
   }
   const res = await inflight;
