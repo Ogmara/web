@@ -24,8 +24,14 @@ export interface Settings {
   channelsExpanded: boolean;
   /** Cached device registration status: "wallet:device" key to avoid re-registration. */
   deviceRegistered: string;
-  /** Cached enc-key binding marker "wallet:enc_pub" to avoid re-publishing (§2.4). */
+  /** Cached enc-key binding marker "v2:wallet:enc_pub" to avoid re-publishing (§2.4). */
   encKeyBound: string;
+  /**
+   * Stable per-install device id (32-byte hex) for the BUILT-IN wallet E2E model
+   * (§2.4). Minted once; the public device identifier other users wrap keys to.
+   * External (Extension/K5) wallets use their delegated device signing key instead.
+   */
+  deviceId: string;
   /** Push gateway URL. Empty = auto-derive from nodeUrl (same host, port 41722). */
   pushGatewayUrl: string;
   /** Default tab to land on when opening the app with no explicit hash route. */
@@ -94,6 +100,7 @@ const defaults: Settings = {
   nodeUrl: '',
   deviceRegistered: '',
   encKeyBound: '',
+  deviceId: '',
   pushGatewayUrl: '',
   defaultLandingView: 'chat',
   defaultFeed: 'global',
