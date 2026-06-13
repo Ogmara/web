@@ -5,6 +5,16 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.50.1] - 2026-06-13
+
+### Fixed
+
+- **Send-path fell back to a corrupted epoch.** When a sender couldn't find its own
+  conv_key on the node, `ensureConvKeyForSend` established at a hardcoded **epoch 1**,
+  which re-collided with a polluted epoch 1 and (via read-back) adopted a stale key →
+  recipients got "can't decrypt". It now establishes at a **fresh epoch**
+  `max(myLatest, peerLatest) + 1`, so a new key never re-collides with an existing one.
+
 ## [0.50.0] - 2026-06-13
 
 ### Fixed
