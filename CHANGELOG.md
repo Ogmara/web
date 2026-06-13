@@ -5,6 +5,31 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.49.0] - 2026-06-13
+
+### Added
+
+- **E2E self-check console diagnostic** — `await window.__ogmaraE2E('klv1…peer')`
+  prints a clear verdict per client (my device_id, local enc_pub, registry match,
+  peer devices, and whether my/peer conv-key fetch is OK / MISSING→"waiting" /
+  CORRUPT→"can't decrypt"). Plus opt-in `[e2e]` lifecycle logging
+  (`localStorage['ogmara.e2eDebug']='1'`). Turns DM-encryption debugging from
+  node-dump guesswork into one command.
+
+### Fixed / Changed
+
+- **Registry-verified enc-key binding** — `ensureDeviceEncBinding` now checks the
+  node's `getEncKeys(self)` and re-publishes if the registry's enc_pub for my
+  device_id ≠ my local enc_pub, instead of trusting only the local marker. Fixes
+  the "can't decrypt" enc_pub divergence that the marker couldn't detect.
+- **429-resilient E2E publishes/fetches** — binding/revoke/key-envelope publishes
+  and key fetches retry with backoff on rate-limit, so a transient 429 no longer
+  leaves the key directory half-healed.
+- **Rewrap-on-send for late devices** — on send, the conv_key is wrapped to any
+  participant device that registered after first establishment (closes the
+  "device joined mid-conversation → waits for key forever" gap).
+- No hardcoded node URL (via sdk-js 0.30.0) — discovery is SC + gossip driven.
+
 ## [0.48.2] - 2026-06-13
 
 ### Fixed
