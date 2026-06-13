@@ -5,6 +5,23 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.49.1] - 2026-06-13
+
+### Added
+
+- **Persistent E2E trace recorder** (`lib/e2eDebug.ts`) — an always-on in-memory
+  ring buffer of every DM-encryption step, immune to console flooding (e.g. the
+  Klever extension's chatter). Console helpers: `__ogmaraE2ETraceSave()` (downloads
+  the full ordered trace as JSON), `__ogmaraE2ETrace()` (console.table),
+  `__ogmaraE2ETraceClear()`. The `ogmara.e2eDebug` flag now only controls live
+  console mirroring; recording is unconditional.
+- **`__ogmaraE2E(peer)` now probes stored messages** — per recent message it
+  reports `payloadType`/`byteLen`/decoded shape (`contentType`/`hasNonce`/
+  `hasConvId`/`keyEpoch`) and the real `decryptResult`.
+- **Traced the decode/shape path** in `decryptDmMessage` (toBytes/msgpack/
+  content-nonce/conversation_id) — previously a "can't decrypt" that bailed before
+  any key fetch produced NO logs; now every bail-out is recorded.
+
 ## [0.49.0] - 2026-06-13
 
 ### Added
