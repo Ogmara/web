@@ -5,6 +5,16 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.50.2] - 2026-06-13
+
+### Fixed
+
+- **New incoming DM conversations now appear in the list immediately.** The DM
+  conversation list only refetched on tab-switch / mark-read, so a DM from a
+  never-seen peer didn't show until you navigated away and back (the unread badge
+  updated, but not the list). Now the list refetches on the live `dm` WS event and
+  on each unread poll while the DMs tab is open.
+
 ## [0.50.1] - 2026-06-13
 
 ### Fixed
