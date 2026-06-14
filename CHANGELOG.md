@@ -5,6 +5,26 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.56.0] - 2026-06-14
+
+### Fixed
+
+- **Private-channel messages no longer stay stuck on "waiting for the channel key".**
+  When a brand-new member joins, an existing member's client wraps the channel key to
+  them moments later — but the decrypt effect only re-ran on message-LIST changes, so
+  the key arrived without the already-rendered messages picking it up (you had to leave
+  and re-open the channel). ChatView now polls every 3s while any message is waiting and
+  re-decrypts as soon as the key lands (bounded to ~60s of waiting, cleared on channel
+  switch). `fetchChannelKey` caches only successes, so the retry resolves once the
+  envelope arrives and is cheap thereafter.
+
+### Changed
+
+- **A brand-new account no longer auto-fills its sidebar with the entire public channel
+  catalogue.** First-time init now seeds only the default `ogmara` channel plus any
+  private channels the node returned (membership-gated); other public channels are
+  discovered and joined explicitly.
+
 ## [0.55.0] - 2026-06-14
 
 ### Added
