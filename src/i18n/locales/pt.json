@@ -281,6 +281,8 @@
   "channel_private_invite_link": "This is a private channel. Click join to request access.",
   "channel_not_found": "Channel not found",
   "channel_not_found_desc": "This channel may have been deleted or the link is invalid.",
+  "channel_on_other_node": "Este canal privado está hospedado em {{node}}. Mude para esse nó para visualizar e entrar.",
+  "channel_switch_and_join": "Mudar e entrar",
   "channel_copy_link": "Copiar link de convite",
   "channel_link_copied": "Link copiado!",
   "channel_view_profile": "Ver perfil",

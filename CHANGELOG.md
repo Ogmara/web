@@ -5,6 +5,22 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.53.0] - 2026-06-14
+
+### Added
+
+- **Cross-node private-channel invite links.** A private channel lives only on its
+  host node, so a recipient on a different node previously hit a dead-end "Channel
+  not found → News". Now:
+  - The invite link (Channel settings → copy link) for a PRIVATE channel embeds the
+    host node (`#/join/{id}?node=<host>`). Public channels omit it (chain-discoverable).
+  - The join page reads the hint: if the channel isn't on the current node, it fetches
+    a **preview from the host node** (name / description / member count — the node
+    serves limited info for private channels) and shows a **"Switch & join"** button
+    that switches the app to the host node and auto-completes the join after reload.
+  - Falls back to the plain "not found" only when there's no usable host hint.
+  New i18n strings (`channel_on_other_node`, `channel_switch_and_join`), all 7 locales.
+
 ## [0.52.1] - 2026-06-14
 
 ### Fixed

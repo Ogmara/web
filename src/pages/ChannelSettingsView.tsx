@@ -8,7 +8,8 @@
 
 import { Component, createResource, createSignal, createEffect, For, Show } from 'solid-js';
 import { t } from '../i18n/init';
-import { getClient } from '../lib/api';
+import { getClient, getCurrentNodeUrl } from '../lib/api';
+import { buildChannelInviteUrl } from '../lib/share';
 import { walletAddress } from '../lib/auth';
 import { navigate, goBack } from '../lib/router';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
@@ -283,7 +284,14 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
   // --- Invite link ---
   const [linkCopied, setLinkCopied] = createSignal(false);
   const handleCopyLink = () => {
-    const url = `${window.location.origin}/app/#/join/${channelIdNum()}`;
+    // Private channels live only on their host node — embed the current node so a
+    // recipient on another node can find + switch to it. Public channels omit it
+    // (they're chain-discoverable everywhere).
+    const url = buildChannelInviteUrl(
+      channelIdNum(),
+      isPrivateChannel() ? getCurrentNodeUrl() : undefined,
+    );
+    if (!url) return;
     navigator.clipboard.writeText(url).then(() => {
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
