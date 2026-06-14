@@ -5,6 +5,29 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.52.0] - 2026-06-14
+
+P2b — **end-to-end-encrypted PRIVATE channels** (web). Private channels now encrypt
+message text client-side; public/read-public channels are unaffected.
+
+### Added
+
+- **`channelCrypto.ts`** — channel group-key orchestration: a single random
+  `channel_key` per epoch, wrapped per member device (`ChannelKeyEnvelope`, channel
+  scope) and fetched author-agnostically (canonical empty author). `ensureChannelKey
+  ForSend` establishes epoch 1 with read-back-adopt — but ONLY for creator/mods;
+  a regular member gets `'waiting'` until a mod seeds/covers the key (matches the
+  node's group-key model, l2-node 0.72.0). `coverChannelMembers` wraps the current
+  key to new joiners (throttled, full member pagination). `decryptChannelMessage`
+  fetches the channel key by epoch and decrypts (number[]→bytes coercion for the
+  server-re-encoded payload).
+- **ChatView**: private channels encrypt the text on send (`buildEncryptedChannelMsg`),
+  decrypt on render with a 🔒 "waiting for the channel key" / "can't decrypt"
+  placeholder (new i18n strings, all 7 locales). Attachments are blocked on private
+  channels (encrypted media is a later phase); message editing is disabled on private
+  channels (encrypted channel edit is a later phase).
+
+## [0.51.3] - 2026-06-14
 ## [0.51.3] - 2026-06-14
 
 ### Changed
