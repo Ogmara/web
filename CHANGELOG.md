@@ -5,6 +5,15 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.1] - 2026-06-14
+
+### Fixed
+
+- **Re-opening a private-channel invite link now refreshes the federated channel's
+  metadata** (logo/display name). `handleJoin` re-federates when the link carries a
+  `?node=` host hint, so an already-federated channel that was missing its logo (federated
+  before l2-node 0.74.2) picks it up. Requires l2-node 0.74.3.
+
 ## [0.54.0] - 2026-06-14
 
 ### Changed
