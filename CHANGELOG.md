@@ -5,6 +5,15 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.51.1] - 2026-06-14
+
+### Fixed
+
+- **DM messages now have a right-click / long-press context menu** (parity with
+  channel chat), exposing Edit / Delete / quick-react. The 0.51.0 DM-edit feature
+  shipped with only hover-reveal buttons, which weren't discoverable — there was
+  no way to edit a DM via right-click as in channels. Hover buttons are retained.
+
 ## [0.51.0] - 2026-06-14
 
 ### Added
