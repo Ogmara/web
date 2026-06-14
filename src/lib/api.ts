@@ -424,6 +424,24 @@ export async function getAvailableNodes(): Promise<NodeWithPing[]> {
   for (const url of bootstrapUrls) pushExtra(url);
   for (const url of getKnownNodes()) pushExtra(url);
 
+  // Presence-joined directory (spec 5 §1.1): `client.getKnownNodes()` merges the
+  // connected node's `/network/nodes` (SC-derived) with `/network/presence`, and
+  // recovers a node's URL from the off-chain presence record when the SC view left
+  // `api_endpoint` null. `discoverAndPingNodes` above only reads the raw
+  // `/network/nodes` and DROPS null-URL peers — so a node that promotes its URL only
+  // via presence (or whose on-chain metadata lacks it) never appeared. Additive +
+  // best-effort: any URL it yields is pinged + merged like the other sources.
+  if (currentUrl) {
+    try {
+      const known = await getClient().getKnownNodes();
+      for (const n of known) {
+        if (n.url && validateNodeUrl(n.url)) pushExtra(n.url);
+      }
+    } catch {
+      /* best-effort — discovery already has the other sources */
+    }
+  }
+
   const extraPings = await Promise.all(
     extras.map(async (url) => ({ url, ping: await pingNode(url) })),
   );

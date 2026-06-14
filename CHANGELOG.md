@@ -5,6 +5,20 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.52.1] - 2026-06-14
+
+### Fixed
+
+- **Node discovery now consults `/network/presence`**, recovering nodes whose URL
+  the raw `/network/nodes` (SC-derived) view leaves null. `getAvailableNodes` fed
+  only `discoverAndPingNodes` (raw `/network/nodes`), which DROPS any peer with a
+  null `api_endpoint` — so a node that promotes its URL only via off-chain presence
+  (or whose on-chain metadata lacks it) never appeared in the picker. Now also feeds
+  the presence-joined `client.getKnownNodes()` URLs (spec 5 §1.1) into the ping/merge.
+  (Additive + best-effort; the connected node must still have *some* record of the
+  peer — a node whose URL hasn't propagated to the connected node at all still needs
+  the node-side fix: publish its api_endpoint on-chain or fix outbound gossip.)
+
 ## [0.52.0] - 2026-06-14
 
 P2b — **end-to-end-encrypted PRIVATE channels** (web). Private channels now encrypt
