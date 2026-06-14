@@ -5,6 +5,19 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.58.0] - 2026-06-14
+
+### Added
+
+- **P2d private-channel key rotation.** When a member is removed (kick/ban/leave), the
+  channel's key is rotated so the removed member can't read FUTURE messages. The node
+  publishes a `key_epoch_floor` (raised on each removal); clients re-key to it — wrapping
+  a fresh key to the remaining members only — and refuse to send under a below-floor
+  (compromised) epoch. Rotation triggers on the membership-change event (any remaining
+  member, app-wide) and on opening a channel whose floor is ahead (catch-up when nobody
+  was online at removal time). New members get only the current epoch (forward-only
+  history). Requires l2-node 0.77.0 + sdk-js 0.36.0.
+
 ## [0.57.0] - 2026-06-14
 
 ### Fixed

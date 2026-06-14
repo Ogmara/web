@@ -10,7 +10,7 @@ import { avatarUrl } from '../lib/ownAvatar';
 import { authStatus, getSigner, walletAddress, isRegistered } from '../lib/auth';
 import { onWsEvent, wsSubscribeChannels, wsUnsubscribeChannels } from '../lib/ws';
 import { canPost, CHANNEL_TYPE_READ_PUBLIC, CHANNEL_TYPE_PRIVATE } from '@ogmara/sdk';
-import { buildEncryptedChannelMsg, decryptChannelMessage, coverChannelMembers } from '../lib/channelCrypto';
+import { buildEncryptedChannelMsg, decryptChannelMessage, coverChannelMembers, rotateChannelKey } from '../lib/channelCrypto';
 import type { DmDisplay } from '../lib/dmCrypto';
 import { MentionPopover } from '../components/MentionPopover';
 import { navigate } from '../lib/router';
@@ -441,7 +441,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     },
   );
 
-  const [channelInfo] = createResource(
+  const [channelInfo, { refetch: refetchChannelInfo }] = createResource(
     () => ({ channelId: props.channelId, auth: authStatus() }),
     async ({ channelId }) => {
       if (!channelId) return null;
@@ -476,6 +476,16 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   });
 
   const isMod = () => myRole() === 'moderator' || myRole() === 'creator';
+
+  // P2d: opening a private channel whose key-epoch floor is ahead of our key means a
+  // removal happened while we (or all mods) were offline and no one has re-keyed yet.
+  // Rotate to the floor (any member may; no-op once someone has). This is the
+  // catch-up path that makes rotation robust to nobody being online at removal time.
+  createEffect(() => {
+    if (!isPrivate() || !props.channelId) return;
+    const floor = channelInfo()?.channel?.key_epoch_floor ?? 0;
+    if (floor > 0) void rotateChannelKey(props.channelId, floor);
+  });
 
   // Whether the current viewer may post in this channel under the runtime
   // posting policy (protocol spec §3.6). False in `ReadPublic` (broadcast)
@@ -593,6 +603,13 @@ export const ChatView: Component<ChatViewProps> = (props) => {
 
   // Subscribe to channel WebSocket events
   const wsCleanup = onWsEvent((event) => {
+    // A membership change on THIS channel may have bumped the key-epoch floor
+    // (P2d rotation). Refetch the channel so the send path uses the new floor.
+    // The actual re-key is driven app-wide by the Sidebar handler.
+    if (event.type === 'channel_members_changed' && event.channel_id === props.channelId) {
+      void refetchChannelInfo();
+      return;
+    }
     if (event.type === 'message' && props.channelId) {
       // WS envelopes are loose JSON: `msg_type` is the variant NAME (string) and
       // `channel_id` may arrive as number or string. Widen locally so the
@@ -951,7 +968,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         // isn't available yet (a non-mod member before a mod has seeded/covered it).
         const built = await buildEncryptedChannelMsg(props.channelId, isMod(), text, {
           replyTo: options.replyTo, mentions: options.mentions,
-        });
+        }, channelInfo()?.channel?.key_epoch_floor ?? 0);
         if (built === 'waiting') {
           setSendError(t('channel_waiting_for_key'));
           setTimeout(() => setSendError(null), 6000);
