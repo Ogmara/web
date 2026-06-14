@@ -281,7 +281,7 @@
   "channel_private_invite_link": "This is a private channel. Click join to request access.",
   "channel_not_found": "Channel not found",
   "channel_not_found_desc": "This channel may have been deleted or the link is invalid.",
-  "channel_on_other_node": "此私密频道托管在 {{node}} 上。切换到该节点以查看并加入。",
+  "channel_on_other_node": "此私密频道托管在 {{node}} 上。加入以在你的节点上接收它。",
   "channel_switch_and_join": "切换并加入",
   "channel_copy_link": "复制邀请链接",
   "channel_link_copied": "链接已复制！",
@@ -396,5 +396,6 @@
   "channel_cannot_decrypt": "无法解密此消息",
   "dm_attachments_not_encrypted_yet": "加密私信附件即将推出 — 目前请仅发送文本。",
   "dm_recipient_no_encryption": "对方尚未启用加密，因此无法接收加密消息。",
-  "dm_encrypted_preview": "加密消息"
+  "dm_encrypted_preview": "加密消息",
+  "channel_federate_failed": "无法联邦此频道 — 请重试。"
 }

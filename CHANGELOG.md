@@ -5,6 +5,20 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.0] - 2026-06-14
+
+### Changed
+
+- **Cross-node private-channel join now FEDERATES instead of switching nodes.**
+  Opening a private-channel invite link on a different node previously offered
+  "Switch & join" (switched the whole app to the host node). It now previews the
+  channel from the host and, on join, calls `federateChannel` so the member's HOME
+  node replicates the channel (subscribes + records membership) — the channel's
+  encrypted messages/keys then flow to the home node live and the member stays put
+  (requires l2-node 0.74.x). Removed the node-switch + reload + auto-join dance.
+  `channel_on_other_node` reworded; new `channel_federate_failed` (all 7 locales).
+
+## [0.53.0] - 2026-06-14
 ## [0.53.0] - 2026-06-14
 
 ### Added
