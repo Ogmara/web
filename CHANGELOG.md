@@ -5,6 +5,19 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.55.0] - 2026-06-14
+
+### Added
+
+- **Live private-channel key delivery + removal handling.** The sidebar now handles the
+  `channel_members_changed` WebSocket event (l2-node 0.75.0, sdk-js 0.34.0): when someone
+  joins a private channel I'm a member of, my client wraps the channel epoch key to them
+  (`coverChannelMembers`) — reliable key delivery that no longer requires me to be
+  actively viewing the channel. If I'm kicked/banned, the channel is dropped from my
+  sidebar and I'm navigated out of its view. The wrap target list is always re-fetched
+  from the node's authoritative member/enc-key list (the event payload is a trigger only),
+  so a forged `join` event cannot leak the key to a non-member.
+
 ## [0.54.1] - 2026-06-14
 
 ### Fixed
