@@ -394,6 +394,8 @@
   "dm_cannot_decrypt": "no se puede descifrar",
   "channel_waiting_for_key": "🔒 esperando la clave del canal…",
   "channel_cannot_decrypt": "no se puede descifrar el mensaje",
+  "channel_encrypted_private": "Cifrado",
+  "channel_encrypted_public": "Cifrado · público por diseño",
   "dm_attachments_not_encrypted_yet": "Los adjuntos cifrados en MD llegarán pronto — por ahora envía solo texto.",
   "dm_recipient_no_encryption": "Esta persona aún no ha activado el cifrado, por lo que no puede recibir mensajes cifrados.",
   "dm_encrypted_preview": "Mensaje cifrado",

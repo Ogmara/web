@@ -5,6 +5,49 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.60.0] - 2026-06-14
+
+### Added
+
+- **Encrypted public/ReadPublic channels (P4 / protocol §8.1).** New channels are created
+  E2E-encrypted (forced on, no toggle) via `encryptionEnabled: true`; the P2 channel-crypto
+  machinery is reused. The encrypt/decrypt decision is now driven by the channel's
+  `encryption_enabled` flag (`isEncrypted()`), not `channel_type === private`, so legacy
+  plaintext channels stay v1 (dual-read).
+  - Permissionless key establishment: in a public encrypted channel **any member** may seed/
+    cover the epoch key (`canEstablishKey()`), vs mods-only for private; the rotation floor
+    applies to private channels only (public has no removal-rotation — anti-bulk-readout, not
+    member-confidential).
+  - **Auto-join on open** for encrypted public channels — you must be a member to receive the
+    epoch key (permissionless join; private channels still use the invite/join flow).
+  - Attachments ride as plaintext metadata in encrypted public channels (media-file encryption
+    is P5); they remain blocked in **private** channels (IPFS media would leak to non-members).
+  - Requires l2-node 0.79.0+ / `@ogmara/sdk` 0.38.0+.
+- **Honest-claims encryption indicator** in the channel header (🔒) — "Encrypted" for private,
+  "Encrypted · public by design" for public/ReadPublic (per spec §13: public channels are never
+  labelled "private"/"confidential"). New `channel_encrypted_private` / `channel_encrypted_public`
+  strings in all 7 locales.
+
+## [0.59.0] - 2026-06-14
+
+### Added
+
+- **E2E key-recovery vault (P3 / protocol §2.5).** DM `conv_key`s and private-channel
+  epoch keys now persist to the node sealed under a wallet-derived backup key, so a
+  fresh install / new device can restore full encrypted history. New `keyVault.ts`:
+  - **Backup:** any newly-cached content key debounces (4 s) a `sealKeyVault` →
+    `syncKeyVault` publish (one last-write-wins record per wallet). `dmCrypto` /
+    `channelCrypto` notify via a callback registry — no import cycle.
+  - **Restore:** a decrypt-miss (key wrapped only to a prior device, or a forward-only
+    channel joiner) triggers a **session-once background** vault pull → `openKeyVault`
+    → merge into the in-memory caches; the next decrypt retry succeeds.
+  - The backup key derives once per session from `signMessage("ogmara-keyvault-v1")`
+    (silent for built-in wallets; one popup for Extension/K5), cached in memory with
+    concurrent-call dedup so restore + backup share a single popup.
+  - `disconnectWallet()` now also clears the DM/channel key caches and the cached vault
+    backup key, so a different account on the same device can't read the prior keys.
+  - Requires l2-node 0.78.0+ / `@ogmara/sdk` 0.37.0+.
+
 ## [0.58.0] - 2026-06-14
 
 ### Added

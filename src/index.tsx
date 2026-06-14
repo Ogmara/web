@@ -10,6 +10,9 @@ import { detectK5, checkK5Callback } from './lib/k5';
 import { getActiveSigner } from './lib/signerRef';
 import { getClient, bootstrapNodeSelection } from './lib/api';
 import { installNetworkActivityTracker } from './lib/network-activity';
+// Side-effect import: registers the E2E key-recovery vault (P3) backup/restore hooks
+// into the DM + channel key caches.
+import './lib/keyVault';
 import './styles/global.css';
 import './styles/design-styles.css';
 import './styles/chat-view.css';

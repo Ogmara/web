@@ -79,7 +79,7 @@ function currentDeviceId(): string | null {
  *   - external wallet → `signMessage` (Extension/K5 signs as the wallet);
  *   - built-in wallet → the active signer IS the wallet key, sign directly.
  */
-function walletSignFn(): WalletSignFn {
+export function walletSignFn(): WalletSignFn {
   if (isExternalWallet()) {
     return (claim) => signMessage(claim);
   }
