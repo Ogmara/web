@@ -494,6 +494,8 @@ export async function disconnectWallet(): Promise<void> {
     import('./dmCrypto').then(({ clearDmKeyCache }) => clearDmKeyCache()),
     import('./channelCrypto').then(({ clearChannelKeyCache }) => clearChannelKeyCache()),
     import('./keyVault').then(({ clearKeyVaultSession }) => clearKeyVaultSession()),
+    // Revoke decrypted-media object URLs so another account can't read them.
+    import('./mediaCrypto').then(({ clearMediaUrlCache }) => clearMediaUrlCache()),
   ]).catch(() => {});
 }
 

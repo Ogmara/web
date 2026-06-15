@@ -24,6 +24,7 @@ import {
   encPublicKeyHex,
   KeyScopeKind,
   type WrappedKey,
+  type MediaDescriptor,
 } from '@ogmara/sdk';
 import { decode } from '@msgpack/msgpack';
 import { getClient } from './api';
@@ -427,11 +428,14 @@ export async function ensureConvKeyForSend(
   return { convKey: res.key, epoch: res.epoch, conversationId };
 }
 
-/** Build a signed, encrypted DirectMessage envelope for `recipient`. */
+/** Build a signed, encrypted DirectMessage envelope for `recipient`. Any `media`
+ *  descriptors (P5) are sealed inside the content; only stripped `{cid,size}`
+ *  attachments reach the wire. */
 export async function buildEncryptedDm(
   recipient: string,
   text: string,
   replyTo?: string,
+  media?: MediaDescriptor[],
 ): Promise<Uint8Array> {
   const established = await ensureConvKeyForSend(recipient);
   if (!established) throw new Error('device not ready for encrypted DMs');
@@ -443,6 +447,7 @@ export async function buildEncryptedDm(
     epoch: established.epoch,
     text,
     replyTo,
+    media,
   });
 }
 
@@ -490,9 +495,10 @@ export function toBytes(payload: number[] | Uint8Array | string): Uint8Array | n
   return payload instanceof Uint8Array ? payload : new Uint8Array(payload);
 }
 
-/** Display outcome for a DM message. */
+/** Display outcome for a DM message. `media` (P5) rides inside the decrypted
+ *  content for `kind: 'text'` — encrypted attachments to render via mediaCrypto. */
 export type DmDisplay =
-  | { kind: 'text'; text: string }
+  | { kind: 'text'; text: string; media?: MediaDescriptor[] }
   | { kind: 'plain'; text: string } // legacy/optimistic plaintext
   | { kind: 'waiting' }
   | { kind: 'error' };
@@ -578,7 +584,7 @@ export async function decryptDmMessage(
   }
   try {
     const pt = decryptDmContent(key, conversationId, epoch, contentBytes, nonceBytes);
-    return { kind: 'text', text: pt.text };
+    return { kind: 'text', text: pt.text, media: pt.media };
   } catch (e) {
     e2elog('decrypt: AEAD failed', { author: keyAuthor, epoch, err: (e as Error)?.message });
     return { kind: 'error' };

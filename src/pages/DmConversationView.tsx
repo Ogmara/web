@@ -10,9 +10,12 @@ import { onWsEvent } from '../lib/ws';
 import { navigate } from '../lib/router';
 import { showMobileList } from '../lib/mobile-nav';
 import { isModernStyle } from '../lib/theme';
+import type { MediaDescriptor } from '@ogmara/sdk';
 import { FormattedText } from '../components/FormattedText';
+import { EncryptedAttachments } from '../components/EncryptedAttachments';
 import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
-import { getPayloadAttachments, buildOptimisticChatPayload } from '../lib/payload';
+import { buildOptimisticChatPayload } from '../lib/payload';
+import { uploadEncryptedFile } from '../lib/mediaCrypto';
 import { EmojiPicker } from '../components/EmojiPicker';
 import { buildEncryptedDm, buildEncryptedDmEditEnvelope, decryptDmMessage, coverPeerDevices, type DmDisplay } from '../lib/dmCrypto';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
@@ -239,6 +242,14 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
     return `🔒 ${t('dm_cannot_decrypt')}`;
   };
 
+  /** Encrypted-media descriptors (P5) for a DM bubble. Optimistic local echoes
+   *  carry them directly (`_media`); server-echoed DMs surface them via decrypt. */
+  const dmMedia = (msg: any): MediaDescriptor[] => {
+    if (msg._media) return msg._media as MediaDescriptor[];
+    const d = dmDisplays()[msg.msg_id];
+    return d && d.kind === 'text' && d.media ? d.media : [];
+  };
+
   // Mark conversation as read on mount
   onMount(async () => {
     if (authStatus() === 'ready' && props.peerAddress) {
@@ -263,6 +274,19 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
     dmWasAtBottom = atBottom;
   };
 
+  // Encrypt a picked/pasted file and append it as a pending attachment. DMs are
+  // always E2E-encrypted, so the bytes are sealed before upload (P5) and the
+  // composer preview uses a local object URL of the original file.
+  const attachFile = async (file: File) => {
+    try {
+      const descriptor = await uploadEncryptedFile(file);
+      setAttachments((p) => [...p, {
+        cid: descriptor.cid, mime_type: descriptor.mime, size_bytes: descriptor.size,
+        filename: descriptor.name, descriptor, previewUrl: URL.createObjectURL(file),
+      }]);
+    } catch { /* best-effort; MediaUpload surfaces its own errors */ }
+  };
+
   const handleSend = async () => {
     if (editingMsg()) { await handleEdit(); return; }
 
@@ -273,37 +297,32 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
     const signer = getSigner();
     if (!signer || !walletAddress()) return;
 
-    // DMs are E2E-encrypted (P1). Encrypted media is P5 — rather than silently
-    // downgrade the whole message (text body included) to plaintext, block sending
-    // attachments and tell the user. Text-only DMs encrypt normally.
-    if (atts.length > 0) {
-      setSendError(t('dm_attachments_not_encrypted_yet'));
-      setTimeout(() => setSendError(null), 6000);
-      return;
-    }
-
     setSending(true);
     setSendError(null);
     try {
       const client = getClient();
-      const envelope = await buildEncryptedDm(props.peerAddress, text);
+      // P5: file bytes were already encrypted on pick — the per-file descriptors
+      // ride INSIDE the sealed DM content via `media` (the wire attachments are
+      // opaque ciphertext), so the node never sees the plaintext bytes or mime/name.
+      const media = atts.map((a) => a.descriptor).filter((d): d is MediaDescriptor => !!d);
+      const envelope = await buildEncryptedDm(props.peerAddress, text, undefined, media.length > 0 ? media : undefined);
       await client.sendDm(props.peerAddress, envelope);
       setMessageInput('');
-      setAttachments([]);
 
-      // Optimistic: show sent message immediately. Wrap as msgpack so any
-      // attachments preview in the bubble right away — a plain string
-      // payload would cause `getPayloadAttachments` to return [] and the
-      // image/video would only appear after the server echo arrived.
+      // Optimistic: show sent message immediately. The encrypted-media descriptors
+      // render via `_media` (the wire attachments would be ciphertext), and the
+      // body is plain text in the optimistic payload.
       setLocalMessages((prev) => [...prev, {
         msg_id: `local-${Date.now()}`,
         author: walletAddress(),
         timestamp: Date.now(),
-        payload: buildOptimisticChatPayload({
-          content: text,
-          attachments: atts,
-        }),
+        payload: buildOptimisticChatPayload({ content: text }),
+        ...(media.length > 0 ? { _media: media } : {}),
       }]);
+
+      // Composer previews are local object URLs of the originals — revoke on send.
+      for (const a of atts) if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+      setAttachments([]);
 
       setTimeout(() => {
         inputRef?.focus();
@@ -463,7 +482,11 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
                   fallback={<div class="dm-msg-body dm-msg-deleted">{t('message_deleted')}</div>}
                 >
                   <div class="dm-msg-body">
-                    <FormattedText content={dmText(msg)} attachments={getPayloadAttachments(msg.payload)} />
+                    {/* DMs are always E2E-encrypted, so the on-wire attachments are
+                        opaque ciphertext — render the sealed `media` descriptors
+                        (P5) instead of the plaintext attachment path. */}
+                    <FormattedText content={dmText(msg)} attachments={[]} />
+                    <EncryptedAttachments media={dmMedia(msg)} />
                   </div>
                 </Show>
                 <span class="dm-msg-time">
@@ -575,7 +598,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
           <>
             <Show when={!editingMsg()}>
               <div class="dm-media-bar">
-                <MediaUpload attachments={attachments()} onAttach={(a) => setAttachments((prev) => [...prev, a])} onRemove={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))} disabled={sending()} />
+                <MediaUpload attachments={attachments()} encrypted={true} onAttach={(a) => setAttachments((prev) => [...prev, a])} onRemove={(i) => setAttachments((prev) => { const a = prev[i]; if (a?.previewUrl) URL.revokeObjectURL(a.previewUrl); return prev.filter((_, idx) => idx !== i); })} disabled={sending()} />
               </div>
             </Show>
             <div class="dm-input-area">
@@ -583,7 +606,7 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
                 <textarea ref={inputRef} class="dm-textarea" rows={3} placeholder={t('chat_placeholder')} value={messageInput()}
                   onInput={(e) => setMessageInput(e.currentTarget.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && (messageInput().trim() || attachments().length > 0)) { e.preventDefault(); handleSend(); } }}
-                  onPaste={(e) => { const items = e.clipboardData?.items; if (!items || !walletAddress()) return; const img = Array.from(items).find((i) => i.type.startsWith('image/')); if (!img) return; e.preventDefault(); const file = img.getAsFile(); if (!file) return; getClient().uploadMedia(file, `paste.${file.type.split('/')[1] || 'png'}`).then((r) => { setAttachments((p) => [...p, { cid: r.cid, mime_type: file.type, size_bytes: file.size, filename: `paste.${file.type.split('/')[1] || 'png'}`, thumbnail_cid: r.thumbnail_cid }]); }).catch(() => {}); }}
+                  onPaste={(e) => { const items = e.clipboardData?.items; if (!items || !walletAddress()) return; const img = Array.from(items).find((i) => i.type.startsWith('image/')); if (!img) return; e.preventDefault(); const raw = img.getAsFile(); if (!raw) return; void attachFile(new File([raw], `paste-${Date.now()}.${raw.type.split('/')[1] || 'png'}`, { type: raw.type })); }}
                   disabled={sending() || !walletAddress()} />
                 <div class="dm-input-actions">
                   <div class="dm-emoji-container">
@@ -603,13 +626,13 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
                 <button class="input-icon-btn" onClick={() => walletAddress() && setShowEmoji(!showEmoji())} disabled={!walletAddress()}>😊</button>
                 <Show when={showEmoji()}><EmojiPicker onSelect={insertEmoji} onClose={() => setShowEmoji(false)} /></Show>
               </div>
-              <button class="input-icon-btn" onClick={() => { const inp = document.createElement('input'); inp.type = 'file'; inp.onchange = (ev) => { const file = (ev.target as HTMLInputElement).files?.[0]; if (file) getClient().uploadMedia(file, file.name).then((r) => { setAttachments((p) => [...p, { cid: r.cid, mime_type: file.type || 'application/octet-stream', size_bytes: file.size, filename: file.name, thumbnail_cid: r.thumbnail_cid }]); }).catch(() => {}); }; inp.click(); }} disabled={!walletAddress()}>
+              <button class="input-icon-btn" onClick={() => { const inp = document.createElement('input'); inp.type = 'file'; inp.onchange = (ev) => { const file = (ev.target as HTMLInputElement).files?.[0]; if (file) void attachFile(file); }; inp.click(); }} disabled={!walletAddress()}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
               </button>
               <textarea ref={inputRef} class="dm-textarea" rows={1} placeholder={t('chat_placeholder')} value={messageInput()}
                 onInput={(e) => { setMessageInput(e.currentTarget.value); e.currentTarget.style.height = 'auto'; e.currentTarget.style.height = Math.min(e.currentTarget.scrollHeight, 160) + 'px'; }}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && (messageInput().trim() || attachments().length > 0)) { e.preventDefault(); handleSend(); } }}
-                onPaste={(e) => { const items = e.clipboardData?.items; if (!items || !walletAddress()) return; const img = Array.from(items).find((i) => i.type.startsWith('image/')); if (!img) return; e.preventDefault(); const file = img.getAsFile(); if (!file) return; getClient().uploadMedia(file, `paste.${file.type.split('/')[1] || 'png'}`).then((r) => { setAttachments((p) => [...p, { cid: r.cid, mime_type: file.type, size_bytes: file.size, filename: `paste.${file.type.split('/')[1] || 'png'}`, thumbnail_cid: r.thumbnail_cid }]); }).catch(() => {}); }}
+                onPaste={(e) => { const items = e.clipboardData?.items; if (!items || !walletAddress()) return; const img = Array.from(items).find((i) => i.type.startsWith('image/')); if (!img) return; e.preventDefault(); const raw = img.getAsFile(); if (!raw) return; void attachFile(new File([raw], `paste-${Date.now()}.${raw.type.split('/')[1] || 'png'}`, { type: raw.type })); }}
                 disabled={sending() || !walletAddress()} />
               <button class="dm-send-btn" onClick={handleSend} disabled={sending() || (!messageInput().trim() && attachments().length === 0) || !walletAddress()} title={t('chat_send')}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" /></svg>

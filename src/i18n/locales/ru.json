@@ -397,6 +397,8 @@
   "channel_encrypted_private": "Зашифровано",
   "channel_encrypted_public": "Зашифровано · публичный по замыслу",
   "dm_attachments_not_encrypted_yet": "Зашифрованные вложения в ЛС скоро появятся — пока отправляйте только текст.",
+  "encrypted_attachment": "зашифрованное вложение",
+  "media_decrypting": "расшифровка…",
   "dm_recipient_no_encryption": "Этот пользователь ещё не включил шифрование, поэтому не может получать зашифрованные сообщения.",
   "dm_encrypted_preview": "Зашифрованное сообщение",
   "channel_federate_failed": "Не удалось федерировать канал — попробуйте снова."

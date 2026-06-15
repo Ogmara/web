@@ -397,6 +397,8 @@
   "channel_encrypted_private": "Cifrado",
   "channel_encrypted_public": "Cifrado · público por diseño",
   "dm_attachments_not_encrypted_yet": "Los adjuntos cifrados en MD llegarán pronto — por ahora envía solo texto.",
+  "encrypted_attachment": "adjunto cifrado",
+  "media_decrypting": "descifrando…",
   "dm_recipient_no_encryption": "Esta persona aún no ha activado el cifrado, por lo que no puede recibir mensajes cifrados.",
   "dm_encrypted_preview": "Mensaje cifrado",
   "channel_federate_failed": "No se pudo federar este canal — inténtalo de nuevo."

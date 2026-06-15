@@ -9,15 +9,17 @@ import { getClient } from '../lib/api';
 import { avatarUrl } from '../lib/ownAvatar';
 import { authStatus, getSigner, walletAddress, isRegistered } from '../lib/auth';
 import { onWsEvent, wsSubscribeChannels, wsUnsubscribeChannels } from '../lib/ws';
-import { canPost, CHANNEL_TYPE_READ_PUBLIC, CHANNEL_TYPE_PRIVATE } from '@ogmara/sdk';
+import { canPost, CHANNEL_TYPE_READ_PUBLIC, CHANNEL_TYPE_PRIVATE, type MediaDescriptor } from '@ogmara/sdk';
 import { buildEncryptedChannelMsg, decryptChannelMessage, coverChannelMembers, rotateChannelKey } from '../lib/channelCrypto';
 import type { DmDisplay } from '../lib/dmCrypto';
 import { MentionPopover } from '../components/MentionPopover';
 import { navigate } from '../lib/router';
 import { setSetting } from '../lib/settings';
 import { FormattedText } from '../components/FormattedText';
+import { EncryptedAttachments } from '../components/EncryptedAttachments';
 import { EmojiPicker } from '../components/EmojiPicker';
 import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
+import { uploadEncryptedFile } from '../lib/mediaCrypto';
 import { getPayloadContent, getPayloadAttachments, getPayloadMentions, decodePayload, buildOptimisticChatPayload, rewriteContentInPayload } from '../lib/payload';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
 import { showMobileList } from '../lib/mobile-nav';
@@ -611,6 +613,20 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     return `🔒 ${t('channel_cannot_decrypt')}`;
   };
 
+  // Attachment rendering split (P5): on an ENCRYPTED channel the wire `attachments`
+  // are opaque ciphertext CIDs (must NOT be shown via the plaintext path); the real
+  // attachments are the `media` descriptors sealed inside the decrypted content,
+  // rendered by <EncryptedAttachments>. On a plaintext channel it's the reverse.
+  const msgAttachments = (msg: any) => (isEncrypted() ? [] : getPayloadAttachments(msg.payload));
+  const msgMedia = (msg: any): MediaDescriptor[] => {
+    if (!isEncrypted()) return [];
+    // Optimistic local echo carries descriptors directly; server-echoed messages
+    // surface them via the decrypt wrapper (chanDisplays).
+    if (msg._media) return msg._media as MediaDescriptor[];
+    const d = chanDisplays()[msg.msg_id];
+    return d && d.kind === 'text' && d.media ? d.media : [];
+  };
+
   const MAX_LOCAL_MESSAGES = 200;
 
   // Apply an in-place update (reaction/edit/delete) to the target message
@@ -959,6 +975,27 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     }, 100);
   });
 
+  // Upload a picked/pasted file and append it as a pending attachment. On an
+  // encrypted channel the bytes are encrypted before upload (descriptor + local
+  // preview URL); else it's a plaintext upload. Used by the paste + picker paths.
+  const attachFile = async (file: File) => {
+    try {
+      if (isEncrypted()) {
+        const descriptor = await uploadEncryptedFile(file);
+        setAttachments((p) => [...p, {
+          cid: descriptor.cid, mime_type: descriptor.mime, size_bytes: descriptor.size,
+          filename: descriptor.name, descriptor, previewUrl: URL.createObjectURL(file),
+        }]);
+      } else {
+        const result = await getClient().uploadMedia(file, file.name);
+        setAttachments((p) => [...p, {
+          cid: result.cid, mime_type: file.type || 'application/octet-stream',
+          size_bytes: file.size, filename: file.name, thumbnail_cid: result.thumbnail_cid,
+        }]);
+      }
+    } catch { /* surfaced by MediaUpload's own error path; paste is best-effort */ }
+  };
+
   const handleSend = async () => {
     // Route to edit handler when in edit mode
     if (editingMsg()) { await handleEdit(); return; }
@@ -967,14 +1004,6 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const atts = attachments();
     if ((!text && atts.length === 0) || !props.channelId) return;
     if (!getSigner() || !walletAddress()) { navigate('/wallet'); return; }
-
-    // P2: encrypted media is a fast-follow (P5) — block attachments on private
-    // channels rather than silently leaking them plaintext.
-    if (isPrivate() && atts.length > 0) {
-      setSendError(t('dm_attachments_not_encrypted_yet'));
-      setTimeout(() => setSendError(null), 6000);
-      return;
-    }
 
     setSending(true);
     setSendError(null);
@@ -994,10 +1023,12 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       if (isEncrypted()) {
         // Encrypt the text under the channel epoch key. `'waiting'` means the key
         // isn't available yet (a non-mod member of a PRIVATE channel before a mod has
-        // seeded/covered it). Attachments ride as plaintext metadata (media-file
-        // encryption is P5). canEstablishKey(): any member may seed a PUBLIC channel.
+        // seeded/covered it). P5: file bytes were already encrypted on pick — the
+        // per-file descriptors ride INSIDE the content via `media` (NOT plaintext
+        // `attachments`). canEstablishKey(): any member may seed a PUBLIC channel.
+        const media = atts.map((a) => a.descriptor).filter((d): d is NonNullable<typeof d> => !!d);
         const built = await buildEncryptedChannelMsg(props.channelId, canEstablishKey(), text, {
-          replyTo: options.replyTo, mentions: options.mentions, attachments: atts,
+          replyTo: options.replyTo, mentions: options.mentions, media,
         }, encFloor());
         if (built === 'waiting') {
           setSendError(t('channel_waiting_for_key'));
@@ -1017,19 +1048,31 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       // `getPayloadAttachments` return [], hiding any image/video the
       // user just attached until the WebSocket update arrived.
       const addr = walletAddress() || '';
+      const enc = isEncrypted();
+      // On an encrypted channel the wire attachments are opaque ciphertext, so the
+      // optimistic bubble renders the descriptors (`_media`) via the decrypt path,
+      // NOT plaintext `attachments`.
       const optimisticPayload = buildOptimisticChatPayload({
         content: text,
-        attachments: atts,
+        attachments: enc ? undefined : atts,
         mentions: options.mentions,
         replyTo: replyTo()?.msgId ?? null,
       });
+      const optMedia = enc
+        ? atts.map((a) => a.descriptor).filter((d): d is MediaDescriptor => !!d)
+        : undefined;
       setLocalMessages((prev) => [...prev, {
         msg_id: `local-${Date.now()}`,
         author: addr,
         timestamp: Date.now(),
         payload: optimisticPayload,
         _optimistic: true,
+        ...(optMedia && optMedia.length > 0 ? { _media: optMedia } : {}),
       }]);
+
+      // Composer previews are local object URLs of the original files — revoke them
+      // now that the message is sent (the rendered bubble decrypts from IPFS).
+      for (const a of atts) if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
 
       setMessageInput('');
       setReplyTo(null);
@@ -1353,7 +1396,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                           <Show when={!msg.muted || expandedMuted().has(msgHex)} fallback={
                             <div class="message-body message-muted-text" onClick={() => setExpandedMuted(prev => { const next = new Set(prev); next.add(msgHex); return next; })}>{t('message_muted_show')}</div>
                           }>
-                            <div class="message-body"><FormattedText content={displayContent(msg)} attachments={getPayloadAttachments(msg.payload)} /></div>
+                            <div class="message-body"><FormattedText content={displayContent(msg)} attachments={msgAttachments(msg)} /><EncryptedAttachments media={msgMedia(msg)} /></div>
                           </Show>
                         </Show>
                         <Show when={walletAddress() && !msg.deleted}>
@@ -1411,7 +1454,8 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                               <div class="message-body message-muted-text" onClick={() => setExpandedMuted(prev => { const next = new Set(prev); next.add(msgHex); return next; })}>{t('message_muted_show')}</div>
                             }>
                               <div class="message-body">
-                                <FormattedText content={displayContent(msg)} attachments={getPayloadAttachments(msg.payload)} />
+                                <FormattedText content={displayContent(msg)} attachments={msgAttachments(msg)} />
+                                <EncryptedAttachments media={msgMedia(msg)} />
                                 <span class="message-meta-inline">
                                   <Show when={msg.edited}><span class="edited-indicator">{t('message_edited')}</span></Show>
                                   <span class="message-time">{formatMessageTime(msg.timestamp)}</span>
@@ -1480,8 +1524,13 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           <div class="chat-media-bar">
             <MediaUpload
               attachments={attachments()}
+              encrypted={isEncrypted()}
               onAttach={(a) => setAttachments((prev) => [...prev, a])}
-              onRemove={(i) => setAttachments((prev) => prev.filter((_, idx) => idx !== i))}
+              onRemove={(i) => setAttachments((prev) => {
+                const a = prev[i];
+                if (a?.previewUrl) URL.revokeObjectURL(a.previewUrl);
+                return prev.filter((_, idx) => idx !== i);
+              })}
               disabled={sending()}
             />
           </div>
@@ -1546,12 +1595,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                   const imageItem = Array.from(items).find((i) => i.type.startsWith('image/'));
                   if (!imageItem) return;
                   e.preventDefault();
-                  const file = imageItem.getAsFile();
-                  if (!file) return;
-                  getClient().uploadMedia(file, `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`)
-                    .then((result) => {
-                      setAttachments((prev) => [...prev, { cid: result.cid, mime_type: file.type, size_bytes: file.size, filename: `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`, thumbnail_cid: result.thumbnail_cid }]);
-                    }).catch(() => {});
+                  const raw = imageItem.getAsFile();
+                  if (!raw) return;
+                  const named = new File([raw], `paste-${Date.now()}.${raw.type.split('/')[1] || 'png'}`, { type: raw.type });
+                  void attachFile(named);
                 }}
                 disabled={sending() || !walletAddress()}
               />
@@ -1577,11 +1624,7 @@ export const ChatView: Component<ChatViewProps> = (props) => {
               </button>
               <input type="file" class="modern-attach-input" style="display:none" onChange={(e) => {
                 const file = e.currentTarget.files?.[0];
-                if (file && walletAddress()) {
-                  getClient().uploadMedia(file, file.name).then((result) => {
-                    setAttachments((p) => [...p, { cid: result.cid, mime_type: file.type || 'application/octet-stream', size_bytes: file.size, filename: file.name, thumbnail_cid: result.thumbnail_cid }]);
-                  }).catch(() => {});
-                }
+                if (file && walletAddress()) void attachFile(file);
                 e.currentTarget.value = '';
               }} />
               <textarea
@@ -1600,10 +1643,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                   const imageItem = Array.from(items).find((i) => i.type.startsWith('image/'));
                   if (!imageItem) return;
                   e.preventDefault();
-                  const file = imageItem.getAsFile();
-                  if (!file) return;
-                  getClient().uploadMedia(file, `paste-${Date.now()}.${file.type.split('/')[1] || 'png'}`)
-                    .then((r) => { setAttachments((p) => [...p, { cid: r.cid, mime_type: file.type, size_bytes: file.size, filename: `paste.${file.type.split('/')[1] || 'png'}`, thumbnail_cid: r.thumbnail_cid }]); }).catch(() => {});
+                  const raw = imageItem.getAsFile();
+                  if (!raw) return;
+                  const named = new File([raw], `paste-${Date.now()}.${raw.type.split('/')[1] || 'png'}`, { type: raw.type });
+                  void attachFile(named);
                 }}
                 disabled={sending() || !walletAddress()}
               />

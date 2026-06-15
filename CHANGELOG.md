@@ -5,6 +5,39 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.61.0] - 2026-06-15
+
+### Added
+
+- **Encrypted media (P5 / protocol §8.x, spec 04 §9).** File attachments now work in
+  E2E-encrypted contexts (every DM, private channels, and public *encrypted* channels).
+  File bytes are encrypted with a fresh per-file key BEFORE the IPFS upload
+  (`encryptFile` → `uploadMedia(cipher, { encrypted: true })`); the per-file key + real
+  MIME/filename ride INSIDE the message's sealed content as a `MediaDescriptor`, and only a
+  stripped `{ cid, size, mime: application/octet-stream }` reaches the wire. The node never
+  sees plaintext bytes, the real type, or the filename.
+  - New `src/lib/mediaCrypto.ts`: `uploadEncryptedFile(file)` and a CID-keyed
+    `decryptedMediaUrl(descriptor)` with an object-URL cache (revoked on logout / view
+    teardown to avoid leaks and redundant refetch/redecrypt).
+  - New `src/components/EncryptedAttachments.tsx`: renders the sealed `media[]` descriptors
+    by fetching the ciphertext, `decryptMedia`-ing it, and showing a plaintext `blob:` URL
+    (image/video/download). Shows a "decrypting…" placeholder while async work runs and a
+    "🔒 encrypted attachment" fallback on decrypt failure / missing key.
+  - `MediaUpload` gained an `encrypted` prop: in an encrypted context it encrypts-then-uploads
+    on pick and shows the composer preview from a LOCAL object URL of the original file (the
+    CID is ciphertext), revoking those URLs on removal/unmount/send.
+  - Crypto wrappers extended: `buildEncryptedChannelMsg` (new `media` opt) and `buildEncryptedDm`
+    (new `media` param) seal descriptors via the SDK; `decryptChannelMessage`/`decryptDmMessage`
+    now surface `media` on the `DmDisplay`.
+  - i18n: `encrypted_attachment`, `media_decrypting` added to all 7 locales.
+  - Requires `@ogmara/sdk` 0.40.0+.
+
+### Removed
+
+- The `dm_attachments_not_encrypted_yet` block that rejected attachments on private channels
+  (`ChatView`) and DMs (`DmConversationView`) — attachments are now encrypted there instead of
+  refused. (The i18n key is retained but unused.)
+
 ## [0.60.0] - 2026-06-14
 
 ### Added

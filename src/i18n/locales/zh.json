@@ -397,6 +397,8 @@
   "channel_encrypted_private": "已加密",
   "channel_encrypted_public": "已加密 · 公开设计",
   "dm_attachments_not_encrypted_yet": "加密私信附件即将推出 — 目前请仅发送文本。",
+  "encrypted_attachment": "加密附件",
+  "media_decrypting": "正在解密…",
   "dm_recipient_no_encryption": "对方尚未启用加密，因此无法接收加密消息。",
   "dm_encrypted_preview": "加密消息",
   "channel_federate_failed": "无法联邦此频道 — 请重试。"
