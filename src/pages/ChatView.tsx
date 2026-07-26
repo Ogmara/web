@@ -544,6 +544,10 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   // the side and render from this map (mirrors the DM view).
   const [chanDisplays, setChanDisplays] = createSignal<Record<string, DmDisplay>>({});
   const decodedEditStamp = new Map<string, number>();
+  // Shared with the late-key-arrival poll below and the `channel_members_changed`
+  // WS handler: a fresh membership change renews the give-up budget, since that
+  // event is exactly the signal that a cover is likely in flight.
+  let waitTicks = 0;
   // Reset the per-channel decrypt caches when switching channels (prevents stale
   // display + unbounded growth across a long session).
   createEffect(() => {
@@ -577,16 +581,19 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   // "waiting" until the channel is re-opened. Poll while anything is waiting: re-fetch
   // the key (fetchChannelKey caches only successes, so a retry resolves once the
   // envelope lands) and re-decrypt. Stops once nothing is waiting, on channel switch,
-  // or after a bounded number of still-waiting ticks.
+  // or after a bounded number of still-waiting ticks (renewed by the
+  // `channel_members_changed` WS handler below, since a cross-node cold topic-mesh
+  // + host-notify-mod + gossip-back round trip observed in testnet bake-in can run
+  // well past a naive ~1 minute cutoff).
   createEffect(() => {
     const cid = props.channelId;
     if (!isEncrypted() || !cid) return;
-    let waitTicks = 0;
+    waitTicks = 0;
     const timer = setInterval(() => {
       const displays = untrack(() => chanDisplays());
       const waitingIds = Object.keys(displays).filter((id) => displays[id]?.kind === 'waiting');
       if (waitingIds.length === 0) return; // nothing to retry this tick
-      if (++waitTicks > 20) { clearInterval(timer); return; } // ~60s of waiting → give up
+      if (++waitTicks > 100) { clearInterval(timer); return; } // ~5min of waiting → give up
       const msgs = untrack(() => allMessages());
       for (const id of waitingIds) {
         const msg = msgs.find((m) => m.msg_id === id);
@@ -652,6 +659,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     // The actual re-key is driven app-wide by the Sidebar handler.
     if (event.type === 'channel_members_changed' && event.channel_id === props.channelId) {
       void refetchChannelInfo();
+      // Renew the late-key-arrival poll's give-up budget: a membership change is
+      // exactly the signal that a key cover may be in flight for a waiting message.
+      waitTicks = 0;
       return;
     }
     if (event.type === 'message' && props.channelId) {

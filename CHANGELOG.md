@@ -5,6 +5,31 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.61.2] - 2026-07-26
+
+### Fixed
+
+- **Private-channel "waiting for the channel key" could stick forever after a cross-node
+  join.** The late-key-arrival poll (`ChatView`) gave up after ~60s (20 ticks × 3s) with
+  nothing to resume it short of reopening the channel. Live testnet diagnosis (darkw0rld +
+  freeweb) showed the real cross-node round trip — joiner's `ChannelJoin` reaching the host,
+  the host WS-notifying the mod, the mod's client covering, the key envelope gossiping back
+  to the joiner's node over a topic-mesh that may need to graft for the first time — can
+  legitimately run past a minute; the node-side federation stack (F1/F-complete) itself was
+  confirmed working (identical `CHANNEL_KEYS` storage observed on both nodes). Extended the
+  give-up budget to ~5 minutes and, since the client already listens for `channel_members_changed`
+  on the open channel, reuse that event to renew the budget — a membership change is exactly
+  the signal that a cover may be in flight. No new subsystem; reuses existing signals.
+
+### Security
+
+- **Dependency scan (`npm audit fix`).** Resolved 3 dev/build-tooling advisories (1 critical:
+  `seroval` promise-resolver type confusion during deserialization; 1 high: `postcss`
+  sourcemap path traversal; 1 low: `@babel/core` arbitrary file read via sourceMappingURL) —
+  all transitive build-tooling deps, not shipped in the production bundle. `npm audit` now
+  reports 0 vulnerabilities. Re-verified: `tsc --noEmit` clean, production build clean, dev
+  dependency pre-bundling (`vite optimize --force`) clean.
+
 ## [0.61.1] - 2026-06-15
 
 ### Removed
