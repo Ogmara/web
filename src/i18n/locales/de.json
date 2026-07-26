@@ -396,7 +396,6 @@
   "channel_cannot_decrypt": "Nachricht kann nicht entschlüsselt werden",
   "channel_encrypted_private": "Verschlüsselt",
   "channel_encrypted_public": "Verschlüsselt · öffentlich",
-  "dm_attachments_not_encrypted_yet": "Verschlüsselte DM-Anhänge kommen bald — bitte vorerst nur Text senden.",
   "encrypted_attachment": "verschlüsselter Anhang",
   "media_decrypting": "wird entschlüsselt…",
   "dm_recipient_no_encryption": "Diese Person hat die Verschlüsselung noch nicht aktiviert und kann daher keine verschlüsselten Nachrichten empfangen.",

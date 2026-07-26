@@ -396,7 +396,6 @@
   "channel_cannot_decrypt": "このメッセージを復号できません",
   "channel_encrypted_private": "暗号化",
   "channel_encrypted_public": "暗号化 · 公開仕様",
-  "dm_attachments_not_encrypted_yet": "暗号化されたDM添付は近日対応予定です。今はテキストのみ送信してください。",
   "encrypted_attachment": "暗号化された添付ファイル",
   "media_decrypting": "復号中…",
   "dm_recipient_no_encryption": "この相手はまだ暗号化を有効にしていないため、暗号化されたメッセージを受信できません。",

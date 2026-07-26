@@ -5,6 +5,15 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.61.1] - 2026-06-15
+
+### Removed
+
+- Dead i18n key `dm_attachments_not_encrypted_yet` from all 7 locale files. The string's
+  only callers (the pre-P5 "attachments coming soon" block in `ChatView`/`DmConversationView`)
+  were deleted when P5 enabled encrypted attachments everywhere; the orphaned translations
+  are now swept. No behavior change.
+
 ## [0.61.0] - 2026-06-15
 
 ### Added
