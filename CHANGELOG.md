@@ -5,6 +5,16 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.62.0] - 2026-07-27
+
+### Added
+
+- **React to channel deletion live.** A deleted private channel used to just sit in the sidebar
+  forever — "joined channels" is a client-local list with no server resync, and unlike kick/ban
+  there was no WS event for deletion at all. New `channel_deleted` WS handler in `Sidebar.tsx`
+  (bundled SDK 0.41.0) drops the channel from the local list and bounces out of its view if
+  currently open, mirroring the existing kick/ban handling.
+
 ## [0.61.2] - 2026-07-26
 
 ### Fixed
