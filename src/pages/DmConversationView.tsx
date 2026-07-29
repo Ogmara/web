@@ -14,7 +14,7 @@ import type { MediaDescriptor } from '@ogmara/sdk';
 import { FormattedText } from '../components/FormattedText';
 import { EncryptedAttachments } from '../components/EncryptedAttachments';
 import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
-import { buildOptimisticChatPayload } from '../lib/payload';
+import { buildOptimisticChatPayload, safeAttachmentName } from '../lib/payload';
 import { uploadEncryptedFile } from '../lib/mediaCrypto';
 import { EmojiPicker } from '../components/EmojiPicker';
 import { buildEncryptedDm, buildEncryptedDmEditEnvelope, decryptDmMessage, coverPeerDevices, type DmDisplay } from '../lib/dmCrypto';
@@ -621,6 +621,44 @@ export const DmConversationView: Component<DmConversationProps> = (props) => {
         }>
           {/* Modern DM input: [emoji] [attach] [textarea] [send] */}
           <div class="dm-input-area">
+            {/* Attachment preview strip — same fix as ChatView's modern
+                input. `.dm-media-bar` is hidden in modern, so without
+                this strip the upload looks like a no-op to the user. */}
+            <Show when={attachments().length > 0}>
+              <div class="modern-attachments-preview">
+                <For each={attachments()}>
+                  {(att, i) => (
+                    <div class="modern-attach-chip">
+                      <Show
+                        when={att.mime_type.startsWith('image/')}
+                        fallback={<span class="modern-attach-icon">{att.mime_type.startsWith('video/') ? '🎬' : '📎'}</span>}
+                      >
+                        <img
+                          class="modern-attach-thumb"
+                          src={att.previewUrl || getClient().getMediaUrl(att.thumbnail_cid || att.cid)}
+                          alt={att.filename || ''}
+                          loading="lazy"
+                        />
+                      </Show>
+                      <span class="modern-attach-name">{safeAttachmentName(att, 10)}</span>
+                      <button
+                        class="modern-attach-remove"
+                        onClick={() =>
+                          setAttachments((prev) => {
+                            const gone = prev[i()];
+                            if (gone?.previewUrl) URL.revokeObjectURL(gone.previewUrl);
+                            return prev.filter((_, idx) => idx !== i());
+                          })
+                        }
+                        title={t('cancel')}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
             <div class="dm-input-row">
               <div class="dm-emoji-container">
                 <button class="input-icon-btn" onClick={() => walletAddress() && setShowEmoji(!showEmoji())} disabled={!walletAddress()}>😊</button>

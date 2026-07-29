@@ -661,6 +661,65 @@
 [data-style="modern"] .msg-react-hover { display: none !important; }
 [data-style="modern"] .chat-media-bar { display: none !important; }
 
+/* Modern attachment-preview chips. Sit above the chat/DM input row when
+ * there are pending uploads. Each chip shows a thumbnail (image) or a
+ * type icon (video/file) plus the filename and a remove button. */
+.modern-attachments-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-md) 0;
+}
+.modern-attach-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 4px 6px 4px 4px;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  max-width: 220px;
+}
+.modern-attach-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.modern-attach-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-primary);
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.modern-attach-name {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+.modern-attach-remove {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.modern-attach-remove:hover {
+  background: var(--color-error);
+  color: white;
+}
+
 /* Fix horizontal overflow + images inside bubbles */
 [data-style="modern"] .chat-messages {
   overflow-x: hidden;

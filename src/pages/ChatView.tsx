@@ -20,7 +20,7 @@ import { EncryptedAttachments } from '../components/EncryptedAttachments';
 import { EmojiPicker } from '../components/EmojiPicker';
 import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
 import { uploadEncryptedFile } from '../lib/mediaCrypto';
-import { getPayloadContent, getPayloadAttachments, getPayloadMentions, decodePayload, buildOptimisticChatPayload, rewriteContentInPayload } from '../lib/payload';
+import { getPayloadContent, getPayloadAttachments, getPayloadMentions, decodePayload, buildOptimisticChatPayload, rewriteContentInPayload, safeAttachmentName } from '../lib/payload';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
 import { showMobileList } from '../lib/mobile-nav';
 import { isModernStyle } from '../lib/theme';
@@ -1624,6 +1624,47 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         }>
           {/* Modern input: [emoji] [attach] [textarea] [send] */}
           <div class="chat-input-area">
+            {/* Attachment preview strip. The `.chat-media-bar` (which
+                holds the classic MediaUpload preview) is hidden in
+                modern via design-styles.css, so without this strip the
+                user sees no feedback after picking a file or pasting
+                an image — the upload succeeds silently and the message
+                looks empty. Each chip can be removed individually. */}
+            <Show when={attachments().length > 0}>
+              <div class="modern-attachments-preview">
+                <For each={attachments()}>
+                  {(att, i) => (
+                    <div class="modern-attach-chip">
+                      <Show
+                        when={att.mime_type.startsWith('image/')}
+                        fallback={<span class="modern-attach-icon">{att.mime_type.startsWith('video/') ? '🎬' : '📎'}</span>}
+                      >
+                        <img
+                          class="modern-attach-thumb"
+                          src={att.previewUrl || getClient().getMediaUrl(att.thumbnail_cid || att.cid)}
+                          alt={att.filename || ''}
+                          loading="lazy"
+                        />
+                      </Show>
+                      <span class="modern-attach-name">{safeAttachmentName(att, 10)}</span>
+                      <button
+                        class="modern-attach-remove"
+                        onClick={() =>
+                          setAttachments((prev) => {
+                            const gone = prev[i()];
+                            if (gone?.previewUrl) URL.revokeObjectURL(gone.previewUrl);
+                            return prev.filter((_, idx) => idx !== i());
+                          })
+                        }
+                        title={t('cancel')}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
             <div class="chat-input">
               <div class="emoji-container">
                 <button class="input-icon-btn" onClick={() => walletAddress() && setShowEmoji(!showEmoji())} disabled={!walletAddress()}>😊</button>

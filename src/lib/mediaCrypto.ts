@@ -74,11 +74,46 @@ function evictIfNeeded(): void {
   }
 }
 
+// A freshly-uploaded cross-node CID can 404 for a few seconds while it
+// propagates over IPFS bitswap to the node the receiving client is talking to.
+// Retry a 404/network error on a flat poll (mirrors the channel-key-arrival
+// poll in ChatView) instead of failing permanently on the first attempt.
+const MEDIA_FETCH_RETRY_MS = 3000;
+const MEDIA_FETCH_MAX_WAIT_MS = 45000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Fetch the ciphertext for `cid`, retrying a 404 or network error until it
+ *  resolves or `MEDIA_FETCH_MAX_WAIT_MS` elapses. Other error statuses fail
+ *  immediately (not transient). */
+async function fetchCipherWithRetry(cid: string): Promise<Uint8Array> {
+  const start = Date.now();
+  for (;;) {
+    let resp: Response;
+    try {
+      resp = await fetch(getClient().getMediaUrl(cid));
+    } catch (err) {
+      if (Date.now() - start >= MEDIA_FETCH_MAX_WAIT_MS) throw err;
+      await sleep(MEDIA_FETCH_RETRY_MS);
+      continue;
+    }
+    if (resp.ok) return new Uint8Array(await resp.arrayBuffer());
+    if (resp.status !== 404 || Date.now() - start >= MEDIA_FETCH_MAX_WAIT_MS) {
+      throw new Error(`media fetch ${resp.status}`);
+    }
+    await sleep(MEDIA_FETCH_RETRY_MS);
+  }
+}
+
 /**
  * Fetch + decrypt an encrypted-media descriptor and return a `blob:` object URL
  * for the PLAINTEXT (typed with the real mime so `<img>`/`<video>` render it).
  * Cached by CID + key fingerprint; concurrent calls for the same descriptor share
- * one fetch/decrypt. Throws on fetch/decrypt failure so callers can show the
+ * one fetch/decrypt. A 404/network error is retried for up to
+ * `MEDIA_FETCH_MAX_WAIT_MS` (the caller's existing "decrypting…" placeholder
+ * covers the wait); throws on final failure so callers can show the
  * locked-attachment fallback.
  */
 export async function decryptedMediaUrl(m: MediaDescriptor): Promise<string> {
@@ -94,9 +129,7 @@ export async function decryptedMediaUrl(m: MediaDescriptor): Promise<string> {
   if (existing) return existing;
 
   const p = (async () => {
-    const resp = await fetch(getClient().getMediaUrl(m.cid));
-    if (!resp.ok) throw new Error(`media fetch ${resp.status}`);
-    const cipher = new Uint8Array(await resp.arrayBuffer());
+    const cipher = await fetchCipherWithRetry(m.cid);
     const plain = decryptMedia(cipher, m.key, m.nonce);
     const url = URL.createObjectURL(new Blob([plain as BlobPart], { type: m.mime || 'application/octet-stream' }));
     urlCache.set(ck, url);

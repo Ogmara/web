@@ -5,6 +5,24 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.63.1] - 2026-07-29
+
+### Fixed
+
+- **Cross-node encrypted media 404s permanently.** A freshly-uploaded CID can
+  404 for a few seconds on a receiving client talking to a different node,
+  while it propagates over IPFS bitswap. `decryptedMediaUrl` (`src/lib/mediaCrypto.ts`)
+  now retries a 404 or network error on a flat 3s poll for up to 45s (mirrors
+  the existing channel-key-arrival poll in `ChatView`) before falling back to
+  the "🔒 encrypted attachment" state — previously it failed permanently on
+  the first attempt. Non-transient error statuses still fail immediately.
+- **Web composer showed no attachment preview in modern style.** The classic
+  `.chat-media-bar` (which hosts `MediaUpload`'s preview) is CSS-hidden in
+  modern style, and unlike desktop, web never had a substitute — picking a
+  file or pasting an image gave no visible feedback even though the upload
+  succeeded. Added the same `.modern-attachments-preview` chip strip desktop
+  already has, to both `ChatView.tsx` and `DmConversationView.tsx`.
+
 ## [0.63.0] - 2026-07-27
 
 ### Added
