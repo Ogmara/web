@@ -29,6 +29,7 @@ import { StatusBar } from './components/StatusBar';
 import { NoNodeLandingPage } from './components/NoNodeLandingPage';
 import { activeNodeUrl } from './lib/api';
 import { DeviceMappingBanner } from './components/DeviceMappingBanner';
+import { ImageLightbox } from './components/ImageLightbox';
 import { route } from './lib/router';
 
 export const App: Component = () => {
@@ -139,6 +140,7 @@ export const App: Component = () => {
       </div>
       </Show>
       <StatusBar />
+      <ImageLightbox />
     </div>
   );
 };

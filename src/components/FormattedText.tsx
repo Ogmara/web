@@ -12,6 +12,7 @@ import { getClient } from '../lib/api';
 import { navigate } from '../lib/router';
 import { getSetting } from '../lib/settings';
 import { MediaImage } from './MediaImage';
+import { openLightbox } from './ImageLightbox';
 import { safeAttachmentName } from '../lib/payload';
 
 interface Props {
@@ -165,9 +166,9 @@ export const FormattedText: Component<Props> = (props) => {
                     src={att.thumbnail_cid
                       ? getClient().getMediaUrl(att.thumbnail_cid)
                       : mediaUrl}
-                    href={mediaUrl}
                     alt={safeName}
                     class="msg-image"
+                    onOpen={() => openLightbox(mediaUrl, safeName)}
                   />
                 );
               }

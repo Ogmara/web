@@ -14,6 +14,7 @@ import { Component, For, Show, createSignal, createEffect, onCleanup } from 'sol
 import type { MediaDescriptor } from '@ogmara/sdk';
 import { t } from '../i18n/init';
 import { decryptedMediaUrl } from '../lib/mediaCrypto';
+import { openLightbox } from './ImageLightbox';
 import { safeAttachmentName } from '../lib/payload';
 
 /** Image MIME types rendered inline. SVG excluded — can carry scripts. */
@@ -58,9 +59,14 @@ const EncryptedItem: Component<{ media: MediaDescriptor }> = (props) => {
         }
       >
         {isImage() ? (
-          <a href={url()!} target="_blank" rel="noopener noreferrer">
-            <img class="msg-image" src={url()!} alt={name()} loading="lazy" />
-          </a>
+          <img
+            class="msg-image"
+            src={url()!}
+            alt={name()}
+            loading="lazy"
+            onClick={() => openLightbox(url()!, name())}
+            style="cursor: zoom-in"
+          />
         ) : isVideo() ? (
           <video class="msg-video" controls preload="metadata" src={url()!}>
             <a href={url()!} target="_blank" rel="noopener noreferrer">{name()}</a>

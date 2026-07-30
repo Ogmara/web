@@ -5,6 +5,21 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.64.0] - 2026-07-29
+
+### Added
+
+- **Image lightbox with zoom, pan, and download.** Tapping an image in a
+  message, news post, or comment previously either did nothing or opened the
+  raw CID URL in a new browser tab. New `ImageLightbox` component
+  (`src/components/ImageLightbox.tsx`), mounted globally, replaces both:
+  mouse wheel / pinch (2-pointer) zoom anchored to the cursor/pinch midpoint,
+  drag-to-pan once zoomed, double-click to toggle zoom, Escape/click-outside
+  to close, and a download button that re-fetches the image as a blob so the
+  saved file gets its real filename instead of the CID. Wired into
+  `FormattedText` (plaintext attachments — channels, DMs, news, comments)
+  and `EncryptedAttachments` (P5 encrypted media).
+
 ## [0.63.1] - 2026-07-29
 
 ### Fixed
