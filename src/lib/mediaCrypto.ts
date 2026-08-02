@@ -90,29 +90,83 @@ function evictIfNeeded(): void {
 const MEDIA_FETCH_RETRY_MS = 5000;
 const MEDIA_FETCH_MAX_WAIT_MS = 180000;
 
+// The node's per-IP media limiter caps concurrent in-flight ciphertext GETs
+// per client to 4 by default (l2-node `api/media_limiter.rs`). A browser tab
+// throttles same-origin concurrency itself on HTTP/1.1, but that guarantee
+// doesn't hold over HTTP/2 (effectively unbounded multiplexed streams) — a
+// message list with many encrypted images/thumbnails can still burst past
+// the server's cap and get `429 too many concurrent media requests` back.
+// Cap comfortably under the default so opening a heavy channel never trips
+// it (found live on desktop, 2026-08, where the lack of any browser-level
+// throttling made this immediately reproducible; applying the same
+// defensive cap here for consistency across clients).
+const MAX_CONCURRENT_MEDIA_FETCHES = 3;
+let activeMediaFetches = 0;
+const mediaFetchWaiters: Array<() => void> = [];
+
+function acquireMediaFetchSlot(): Promise<() => void> {
+  return new Promise((resolve) => {
+    const attempt = () => {
+      if (activeMediaFetches < MAX_CONCURRENT_MEDIA_FETCHES) {
+        activeMediaFetches++;
+        resolve(() => {
+          activeMediaFetches--;
+          const next = mediaFetchWaiters.shift();
+          if (next) next();
+        });
+      } else {
+        mediaFetchWaiters.push(attempt);
+      }
+    };
+    attempt();
+  });
+}
+
+/** Parse a `Retry-After` header (seconds, per the node's 429 response) into
+ *  ms, falling back to the flat retry interval if absent/malformed. */
+function retryAfterMs(res: Response): number {
+  const header = res.headers.get('retry-after');
+  const secs = header ? Number(header) : NaN;
+  return Number.isFinite(secs) && secs > 0 ? secs * 1000 : MEDIA_FETCH_RETRY_MS;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Fetch the ciphertext for `cid`, retrying a 404 or network error until it
- *  resolves or `MEDIA_FETCH_MAX_WAIT_MS` elapses. Other error statuses fail
- *  immediately (not transient). */
+/** Fetch the ciphertext for `cid`, retrying a 404, 429, or network error
+ *  until it resolves or `MEDIA_FETCH_MAX_WAIT_MS` elapses. Other error
+ *  statuses fail immediately (not transient). Concurrency is capped at
+ *  `MAX_CONCURRENT_MEDIA_FETCHES` so a burst of attachments queues instead
+ *  of self-triggering the node's per-IP rate limit. */
 async function fetchCipherWithRetry(cid: string): Promise<Uint8Array> {
   const start = Date.now();
   for (;;) {
+    const release = await acquireMediaFetchSlot();
     let resp: Response;
     try {
       resp = await fetch(getClient().getMediaUrl(cid));
     } catch (err) {
+      release();
       if (Date.now() - start >= MEDIA_FETCH_MAX_WAIT_MS) throw err;
       await sleep(MEDIA_FETCH_RETRY_MS);
       continue;
     }
-    if (resp.ok) return new Uint8Array(await resp.arrayBuffer());
-    if (resp.status !== 404 || Date.now() - start >= MEDIA_FETCH_MAX_WAIT_MS) {
+    if (resp.ok) {
+      release();
+      return new Uint8Array(await resp.arrayBuffer());
+    }
+    const retryable = resp.status === 404 || resp.status === 429;
+    const remaining = MEDIA_FETCH_MAX_WAIT_MS - (Date.now() - start);
+    release();
+    if (!retryable || remaining <= 0) {
       throw new Error(`media fetch ${resp.status}`);
     }
-    await sleep(MEDIA_FETCH_RETRY_MS);
+    // Clamp to the remaining budget — a node-supplied `Retry-After` (429) is
+    // untrusted input; without this an oversized value could stall this one
+    // attachment well past the documented wait budget (audit finding, 2026-08).
+    const wait = Math.min(resp.status === 429 ? retryAfterMs(resp) : MEDIA_FETCH_RETRY_MS, remaining);
+    await sleep(wait);
   }
 }
 
