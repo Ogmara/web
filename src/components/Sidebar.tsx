@@ -26,15 +26,32 @@ import { coverChannelMembers, rotateChannelKey } from '../lib/channelCrypto';
 // blank → then the (cached) logos pop in once the list resolves = flicker.
 // Seeding the resource from this cache renders the sidebar — and its logos —
 // instantly on boot; the live fetch then reconciles in the background.
+// Keyed by node AND wallet: channel visibility (private channels) and DM
+// conversations are both wallet-specific, so a cache keyed on node alone
+// would leak the previous wallet's private channels/DMs into a freshly
+// connected different wallet's sidebar (same node, same browser profile)
+// until the first successful refetch overwrites it.
 const CHANNELS_CACHE_PREFIX = 'channelsCache:';
 function channelsCacheKey(): string {
-  try { return CHANNELS_CACHE_PREFIX + (getCurrentNodeUrl() || ''); } catch { return CHANNELS_CACHE_PREFIX; }
+  try { return CHANNELS_CACHE_PREFIX + (getCurrentNodeUrl() || '') + ':' + (walletAddress() || ''); } catch { return CHANNELS_CACHE_PREFIX; }
 }
 function getCachedChannels(): any[] {
   try { const raw = localStorage.getItem(channelsCacheKey()); return raw ? JSON.parse(raw) : []; } catch { return []; }
 }
 function setCachedChannels(channels: any[]): void {
   try { localStorage.setItem(channelsCacheKey(), JSON.stringify(channels)); } catch { /* quota/private mode — ignore */ }
+}
+// Same idea for DM conversations: a transient fetch failure (dead node
+// connection right after a restart, etc.) shouldn't read as "no DMs".
+const DM_CACHE_PREFIX = 'dmConvsCache:';
+function dmCacheKey(): string {
+  try { return DM_CACHE_PREFIX + (getCurrentNodeUrl() || '') + ':' + (walletAddress() || ''); } catch { return DM_CACHE_PREFIX; }
+}
+function getCachedDmConvs(): any[] {
+  try { const raw = localStorage.getItem(dmCacheKey()); return raw ? JSON.parse(raw) : []; } catch { return []; }
+}
+function setCachedDmConvs(convs: any[]): void {
+  try { localStorage.setItem(dmCacheKey(), JSON.stringify(convs)); } catch { /* quota/private mode — ignore */ }
 }
 import { authStatus, walletAddress } from '../lib/auth';
 import { navigate, route } from '../lib/router';
@@ -266,9 +283,13 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
             });
           }
         }
+        setCachedDmConvs(resp.conversations);
         return resp.conversations;
-      } catch { return []; }
+      } catch {
+        return getCachedDmConvs();
+      }
     },
+    { initialValue: getCachedDmConvs() },
   );
 
   // Conversations hidden via "Delete conversation" — filtered out until the

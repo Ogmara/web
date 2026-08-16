@@ -5,6 +5,12 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.65.3] - 2026-08-16
+
+### Fixed
+
+- **DM conversation list could go blank in the sidebar on a transient REST failure** (e.g. right after the connected l2-node restarts). `dmConversations`'s `createResource` fetcher in `Sidebar.tsx` treated any fetch error as "no conversations" (`catch { return []; }`); the channel list already had a `localStorage` cache-fallback for this exact failure mode, but DMs didn't. Fixed by giving DM conversations the same per-(node, wallet) cache-and-fallback treatment. Also scoped the existing channel-list cache key by wallet address (previously node-only) — private channel membership is wallet-specific, so a node-only cache key could otherwise show a previously-connected wallet's channels to a newly-connected different wallet on the same node+browser profile until the next successful refetch. Same class of bug (and same fix) shipped for desktop in its 1.50.4.
+
 ## [0.65.2] - 2026-08-02
 
 ### Fixed
