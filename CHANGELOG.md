@@ -5,6 +5,35 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.66.0] - 2026-08-17
+
+### Security
+
+- **Cross-network envelope replay (l2-node final pre-mainnet audit C1) —
+  coordinated wire-format cutover.** Bumped `@ogmara/sdk` to 0.42.0, which
+  binds every signed envelope's msg_id/signature to the target Klever
+  network — matches l2-node 0.83.0's `PROTOCOL_VERSION` 1 → 2 hard cutover.
+  No app-level call-site changes needed for the normal `OgmaraClient` path
+  (network resolution is internal to the SDK); `src/lib/deviceEnc.ts`'s two
+  direct `buildDeviceEncBinding`/`buildDeviceEncRevoke` calls (these build
+  wallet-authored envelopes outside `OgmaraClient`) now pass the new
+  required `network` parameter via the SDK's new `OgmaraClient.getNetwork()`.
+- **Breaking:** hard wire-format cutover — this build only works against
+  l2-node 0.83.0+; a pre-0.83.0 node rejects every envelope it sends.
+  Ships together with matching bumps in `desktop` and `mobile`.
+- **Same finding, second signing scheme (post-fix internal audit).** The
+  device-key-registration claim (`ogmara-device-claim:...`, built by
+  `registerDeviceOnNode` in `src/lib/auth.ts` via the SDK's
+  `buildDeviceClaim`) signs a fixed string, not a msg_id, so it needed its
+  own network binding — now passes `network` from
+  `getClient().getNetwork()`.
+
+### Fixed
+
+- `npm audit`: bumped a transitive `nanoid` (via `vite` → `postcss`,
+  build-tooling only, not shipped) past a high-severity infinite-loop
+  advisory (GHSA-2v37-7h3g-55p8) via `npm audit fix`.
+
 ## [0.65.3] - 2026-08-16
 
 ### Fixed

@@ -412,7 +412,7 @@ if (typeof window !== 'undefined' && import.meta.env.DEV) {
 /**
  * Register a device key on the L2 node under a wallet address.
  *
- * 1. Builds the claim string: "ogmara-device-claim:{pubkey}:{wallet}:{ts}"
+ * 1. Builds the claim string: "ogmara-device-claim:{network}:{pubkey}:{wallet}:{ts}"
  * 2. Klever Extension signs it (Klever message format)
  * 3. Submits to the node via POST /api/v1/devices/register
  */
@@ -423,6 +423,7 @@ async function registerDeviceOnNode(
   const { claimString, timestamp } = buildDeviceClaim(
     signer.publicKeyHex,
     walletAddress,
+    await getClient().getNetwork(),
   );
 
   // Try wallet signature first (desktop Klever Extension), then device-signed fallback
