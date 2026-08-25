@@ -11,6 +11,7 @@ import { navigate, queryParam } from '../lib/router';
 import { getSetting, setSetting } from '../lib/settings';
 import { FormattedText } from '../components/FormattedText';
 import { MediaImage } from '../components/MediaImage';
+import { openLightbox } from '../components/ImageLightbox';
 import { getPayloadContent, getPayloadTitle, getPayloadAttachments, decodePayload, safeAttachmentName } from '../lib/payload';
 import { sendTip, kleverAvailable } from '../lib/klever';
 import { ex } from '../lib/klever-explorer-links';
@@ -613,6 +614,7 @@ const NewsCard: Component<{ post: any }> = (props) => {
                   <MediaImage
                     src={getClient().getMediaUrl(att.thumbnail_cid || att.cid)}
                     href={mediaUrl}
+                    onOpen={() => openLightbox(mediaUrl, safeAttachmentName(att))}
                     alt={safeAttachmentName(att)}
                     class="news-attachment-img"
                   />

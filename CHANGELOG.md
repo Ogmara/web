@@ -5,6 +5,22 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.68.0] - 2026-08-25
+
+### Fixed
+
+- **Clicking an image in a news post opened a new tab instead of the zoom
+  viewer.** `ImageLightbox` — wheel/pinch/double-click zoom, pan, download — is
+  mounted at the app root and already used by chat through `FormattedText`, but
+  the news views never called it. They passed `MediaImage` an `href` and no
+  `onOpen`, and that exact combination is what makes `MediaImage` fall back to
+  rendering a plain `<a target="_blank">`. So the lightbox was present the whole
+  time and news simply never opened it.
+
+  Fixed at all three news sites: the feed card, the post in the detail view, and
+  comment attachments. The inline thumbnail still uses `thumbnail_cid` while the
+  lightbox opens the full-size `cid`.
+
 ## [0.67.0] - 2026-08-25
 
 ### Fixed
