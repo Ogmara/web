@@ -210,6 +210,7 @@
   "bookmarks_empty": "没有收藏的帖子",
   "news_view_thread": "查看帖子",
   "news_commented_on": "评论了",
+  "news_original_unavailable": "原始帖子不可用",
   "channel_mark_read": "标记为已读",
   "news_back_to_feed": "返回动态",
   "news_reply": "回复",
