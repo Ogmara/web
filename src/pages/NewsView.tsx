@@ -6,7 +6,7 @@ import { Component, createResource, createSignal, createEffect, createMemo, onCl
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { avatarUrl } from '../lib/ownAvatar';
-import { authStatus, getSigner, l2Address, walletAddress } from '../lib/auth';
+import { authStatus, getSigner, l2Address, walletAddress, walletSource } from '../lib/auth';
 import { navigate, queryParam } from '../lib/router';
 import { getSetting, setSetting } from '../lib/settings';
 import { FormattedText } from '../components/FormattedText';
@@ -549,7 +549,7 @@ const NewsCard: Component<{ post: any }> = (props) => {
 
   const handleTip = async () => {
     if (!requireAuthOrRedirect()) return;
-    if (!kleverAvailable()) {
+    if (walletSource() !== 'builtin' && !kleverAvailable()) {
       setActionError('Klever Extension required for tipping');
       return;
     }

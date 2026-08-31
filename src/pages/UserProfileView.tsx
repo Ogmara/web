@@ -7,7 +7,7 @@ import { JSX } from 'solid-js/jsx-runtime';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { avatarUrl } from '../lib/ownAvatar';
-import { authStatus, walletAddress, l2Address, getSigner } from '../lib/auth';
+import { authStatus, walletAddress, walletSource, l2Address, getSigner } from '../lib/auth';
 import { kleverAvailable, registerUser, addressToPubkeyHex } from '../lib/klever';
 import { navigate, goBack } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
@@ -310,7 +310,7 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
             <button class="profile-action-btn" onClick={startEditing}>
               {profile()?.user?.display_name ? 'Edit Profile' : 'Set Up Profile'}
             </button>
-            <Show when={!isVerified() && kleverAvailable()}>
+            <Show when={!isVerified() && (walletSource() === 'builtin' || kleverAvailable())}>
               <button
                 class="profile-action-btn verify"
                 onClick={handleRegister}

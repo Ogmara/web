@@ -5,6 +5,40 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.70.0] - 2026-08-31
+
+### Fixed
+
+- **Built-in (vault) wallets could not register or transact on-chain at all**
+  — every on-chain SC call (`register`, `createChannel`, `delegateDevice`,
+  `revokeDevice`, `updatePublicKey`) and tipping went through
+  `window.kleverWeb` unconditionally, so a user who created/restored a
+  wallet in the app's own vault (no Klever Browser Extension) saw
+  "Install Klever Extension for on-chain features" even though the vault
+  is a fully capable Ed25519 signer — desktop and mobile already sign
+  these transactions directly via the vault, web never got the same path.
+- **False "Already registered" error for an unregistered vault wallet** —
+  a knock-on effect of the same bug: if the browser happened to have the
+  Klever Extension installed (regardless of which wallet source the app
+  was actively using), the register button appeared and silently signed
+  the transaction with the *extension's own connected wallet* rather than
+  the vault wallet shown in the UI. If that extension wallet had been
+  registered previously, the SC correctly rejected the TX as
+  `Already registered` — for the wrong address entirely, with no
+  indication to the user that the signer didn't match the displayed
+  wallet.
+
+### Added
+
+- Built-in wallets now build, sign (`WalletSigner.signRawHash`), and
+  broadcast Klever transactions directly against the network's public
+  node REST API (`/transaction/send` → `/transaction/decode` →
+  `/transaction/broadcast`), mirroring desktop's and mobile's standalone
+  signer. The Klever Extension path is kept for `klever-extension`
+  wallet sessions. Verified against testnet: an unfunded vault wallet's
+  register call now reaches the real node and fails with a genuine
+  on-chain validation error instead of "Extension not available".
+
 ## [0.69.1] - 2026-08-30
 
 ### Fixed

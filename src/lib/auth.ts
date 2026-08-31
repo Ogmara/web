@@ -22,7 +22,7 @@ import {
 } from './vault';
 import { getClient, awaitNodeUrl, getCurrentNodeUrl } from './api';
 import { getSetting, setSetting } from './settings';
-import { signMessage } from './klever';
+import { signMessage, setBuiltinWalletActive } from './klever';
 import { setActiveSigner, getActiveSigner } from './signerRef';
 import { ensureDeviceEncBinding } from './deviceEnc';
 
@@ -81,6 +81,7 @@ export async function initAuth(): Promise<void> {
         setL2Address(deviceAddr);
         setWalletAddress(savedAddress);
         setWalletSource(savedSource);
+        setBuiltinWalletActive(false);
         setAuthStatus('ready');
         // Re-register if the cache key was lost (e.g. localStorage cleared).
         ensureDeviceRegistered(deviceSigner, savedAddress, deviceAddr);
@@ -110,6 +111,7 @@ export async function initAuth(): Promise<void> {
           setL2Address(address);
           setWalletAddress(address);
           setWalletSource('builtin');
+          setBuiltinWalletActive(true);
           setAuthStatus('ready');
           checkRegistrationStatus();
           // Publish/repair this built-in wallet's enc-key binding on restore.
@@ -137,6 +139,7 @@ export async function connectWithKey(hexKey: string): Promise<string> {
   setWalletAddress(address);
   setL2Address(address);
   setWalletSource('builtin');
+  setBuiltinWalletActive(true);
   setSetting('walletSource', 'builtin');
   setSetting('walletAddress', address);
   setAuthStatus('ready');
@@ -157,6 +160,7 @@ export async function generateWallet(): Promise<string> {
   setWalletAddress(address);
   setL2Address(address);
   setWalletSource('builtin');
+  setBuiltinWalletActive(true);
   setSetting('walletSource', 'builtin');
   setSetting('walletAddress', address);
   setAuthStatus('ready');
@@ -310,6 +314,7 @@ export async function connectKleverExtension(extensionAddress: string): Promise<
   setWalletAddress(extensionAddress);
   setL2Address(deviceAddress);
   setWalletSource('klever-extension');
+  setBuiltinWalletActive(false);
   setSetting('walletSource', 'klever-extension');
   setSetting('walletAddress', extensionAddress);
   setAuthStatus('ready');
@@ -485,6 +490,7 @@ export async function disconnectWallet(): Promise<void> {
   setWalletAddress(null);
   setL2Address(null);
   setWalletSource(null);
+  setBuiltinWalletActive(false);
   setAuthStatus('none');
   setIsRegistered(false);
   // Drop the cached own avatar so a different account doesn't inherit it.

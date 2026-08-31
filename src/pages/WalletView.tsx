@@ -231,7 +231,7 @@ export const WalletView: Component = () => {
           >
             <p class="wallet-desc">{t('wallet_register_description')}</p>
             <Show
-              when={kleverAvailable() || walletSource() === 'klever-extension'}
+              when={walletSource() === 'builtin' || kleverAvailable() || walletSource() === 'klever-extension'}
               fallback={
                 <p class="wallet-desc muted">{t('wallet_klever_not_installed')}</p>
               }

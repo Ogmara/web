@@ -8,7 +8,7 @@
 import { Component, createSignal, Show } from 'solid-js';
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
-import { authStatus, walletAddress, getSigner, isRegistered } from '../lib/auth';
+import { authStatus, walletAddress, walletSource, getSigner, isRegistered } from '../lib/auth';
 import { navigate, goBack } from '../lib/router';
 import { kleverAvailable, createChannelOnChain, getChannelIdFromTx } from '../lib/klever';
 import { addJoinedChannel } from '../components/Sidebar';
@@ -32,8 +32,9 @@ export const ChannelCreateView: Component = () => {
 
     const isPrivate = channelType() === 2;
 
-    // Public/ReadOnly channels require Klever Extension for SC call
-    if (!isPrivate && !kleverAvailable()) {
+    // Public/ReadOnly channels require an on-chain SC call — either the
+    // built-in wallet (signs directly) or the Klever Extension.
+    if (!isPrivate && walletSource() !== 'builtin' && !kleverAvailable()) {
       setError('Klever Extension required for public channel creation');
       return;
     }
@@ -152,7 +153,7 @@ export const ChannelCreateView: Component = () => {
             <option value={2}>{t('channel_type_private')}</option>
           </select>
 
-          <Show when={channelType() !== 2 && !kleverAvailable()}>
+          <Show when={channelType() !== 2 && walletSource() !== 'builtin' && !kleverAvailable()}>
             <div class="create-warning">
               Klever Extension required for public/read-only channels.
               Private channels can be created without it.
@@ -170,7 +171,7 @@ export const ChannelCreateView: Component = () => {
           <button
             class="create-submit"
             onClick={handleCreate}
-            disabled={submitting() || !slug().trim() || (channelType() !== 2 && !kleverAvailable())}
+            disabled={submitting() || !slug().trim() || (channelType() !== 2 && walletSource() !== 'builtin' && !kleverAvailable())}
           >
             {submitting() ? status() || t('loading') : t('channel_create')}
           </button>

@@ -12,6 +12,7 @@
 import { createSignal } from 'solid-js';
 import { getSetting, setSetting } from './settings';
 import { getClient } from './api';
+import { vaultGetSigner } from './vault';
 
 // --- TypeScript declarations for Klever Extension ---
 
@@ -109,6 +110,18 @@ const [kleverConnecting, setKleverConnecting] = createSignal(false);
 
 export { kleverAvailable, kleverAddress, kleverConnecting };
 
+/**
+ * Set by auth.ts whenever the active wallet source changes. When true, all
+ * on-chain SC calls below sign directly with the vault's WalletSigner via
+ * the Klever node's public REST API (same approach as desktop/mobile) rather
+ * than routing through window.kleverWeb — a built-in wallet is its own
+ * signer and must never depend on the browser extension being installed.
+ */
+let builtinWalletActive = false;
+export function setBuiltinWalletActive(active: boolean): void {
+  builtinWalletActive = active;
+}
+
 // --- Detection ---
 
 /** Detect the Klever Extension or K5 wallet browser. Polls for up to 3 seconds. */
@@ -194,11 +207,200 @@ interface ScInvokeParams {
   value?: number;
 }
 
+// --- Vault-based transaction building (built-in wallet, no extension) ---
+
+function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
+/** Minimum 2 seconds between TX submissions. */
+let lastTxTime = 0;
+function checkTxRateLimit(): void {
+  const now = Date.now();
+  if (now - lastTxTime < 2000) {
+    throw new Error('Please wait a moment before sending another transaction');
+  }
+  lastTxTime = now;
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  if (hex.length % 2 !== 0) throw new Error('Invalid hex string');
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
+
+/** Parse Klever node error responses into user-friendly messages. */
+function parseKleverError(rawText: string, status: number): string {
+  const lower = rawText.toLowerCase();
+  if (lower.includes('insufficient') || lower.includes('balance') || lower.includes('not enough')) {
+    return 'Insufficient KLV balance for this transaction';
+  }
+  if (
+    lower.includes('nil address')
+    || lower.includes('getexistingaccount')
+    || lower.includes('account not found')
+    || lower.includes('account was not found')
+    || status === 404
+  ) {
+    return 'Account not found on-chain. Send KLV to this address first.';
+  }
+  if (lower.includes('nonce')) {
+    return 'Nonce mismatch — try again in a few seconds';
+  }
+  if (lower.includes('signature')) {
+    return 'Signature verification failed';
+  }
+  try {
+    const parsed = JSON.parse(rawText);
+    const msg = parsed?.error || parsed?.data?.error || parsed?.message;
+    if (msg) return String(msg).slice(0, 200);
+  } catch { /* not JSON */ }
+  return rawText.slice(0, 200) || `Transaction failed (HTTP ${status})`;
+}
+
+/** Locally-tracked nonces so consecutive TXs in the same session don't collide
+ *  with the API's ~4s indexing lag. */
+const nonceCache: Record<string, { nonce: number; ts: number }> = {};
+
+async function getAccountNonce(address: string): Promise<number> {
+  const resp = await fetchWithTimeout(`${kleverProvider.api}/v1.0/address/${address}`);
+  if (resp.status === 404) return 0;
+  if (!resp.ok) throw new Error(`Failed to fetch account nonce (HTTP ${resp.status})`);
+  const rawBody = await resp.text();
+  let data: any;
+  try { data = JSON.parse(rawBody); } catch { data = null; }
+  const apiNonce: number = data?.data?.account?.nonce ?? data?.data?.account?.Nonce ?? 0;
+
+  const cached = nonceCache[address];
+  if (cached && cached.ts > Date.now() - 30_000) {
+    return Math.max(apiNonce, cached.nonce + 1);
+  }
+  return apiNonce;
+}
+
+function recordUsedNonce(address: string, nonce: number): void {
+  nonceCache[address] = { nonce, ts: Date.now() };
+}
+
+function requireVaultSigner() {
+  const signer = vaultGetSigner();
+  if (!signer) throw new Error('Wallet not available — unlock your vault first');
+  return signer;
+}
+
+/**
+ * Build, sign, and broadcast a transaction directly via the Klever node's
+ * public REST API, signed with the built-in vault's Ed25519 key. Mirrors
+ * desktop/mobile's standalone signer — no browser extension involved.
+ *
+ * Flow: POST /transaction/send (unsigned TX) -> /transaction/decode (hash)
+ * -> Ed25519-sign the hash -> POST /transaction/broadcast.
+ */
+async function buildSignBroadcastViaVault(
+  contracts: Array<{ type: number; payload: Record<string, unknown> }>,
+  data?: string[],
+): Promise<string> {
+  checkTxRateLimit();
+  const signer = requireVaultSigner();
+  const nodeBase = kleverProvider.node;
+
+  const kleverContracts = contracts.map((c) => ({
+    ...c.payload,
+    contractType: c.type,
+  }));
+  const senderAddr = signer.walletAddress || signer.address;
+  const usedNonce = await getAccountNonce(senderAddr);
+  const sendBody: Record<string, unknown> = {
+    type: contracts[0].type,
+    sender: senderAddr,
+    nonce: usedNonce,
+    contracts: kleverContracts,
+  };
+  if (data && data.length > 0) {
+    sendBody.data = data;
+  }
+
+  const sendResp = await fetchWithTimeout(`${nodeBase}/transaction/send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sendBody),
+  });
+  const sendText = await sendResp.text().catch(() => '');
+  let sendData: any;
+  try { sendData = JSON.parse(sendText); } catch { sendData = null; }
+
+  const rawTx = sendData?.data?.result;
+  if (!rawTx?.RawData && !rawTx?.rawData) {
+    if (!sendResp.ok || sendData?.error) {
+      throw new Error(parseKleverError(sendText, sendResp.status));
+    }
+    throw new Error('Node did not return a transaction to sign');
+  }
+
+  let txHash = sendData?.data?.txHash || '';
+  if (!txHash) {
+    const decodeResp = await fetchWithTimeout(`${nodeBase}/transaction/decode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rawTx),
+    });
+    if (decodeResp.ok) {
+      const decodeData = await decodeResp.json();
+      txHash = decodeData?.data?.tx?.hash || '';
+    }
+  }
+  if (!txHash) {
+    throw new Error('Could not obtain TX hash for signing');
+  }
+
+  const hashRawBytes = hexToBytes(txHash);
+  const sigBytes = await signer.signRawHash(hashRawBytes);
+  const sigBase64 = btoa(String.fromCharCode(...sigBytes));
+
+  rawTx.Signature = [sigBase64];
+  const broadcastResp = await fetchWithTimeout(`${nodeBase}/transaction/broadcast`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tx: rawTx }),
+  });
+  const broadcastText = await broadcastResp.text().catch(() => '');
+  let broadcastData: any;
+  try { broadcastData = JSON.parse(broadcastText); } catch { broadcastData = {}; }
+
+  if (!broadcastResp.ok || broadcastData?.error) {
+    throw new Error(parseKleverError(broadcastText, broadcastResp.status));
+  }
+  const broadcastHash = broadcastData?.data?.txsHashes?.[0]
+    || broadcastData?.data?.txHash
+    || txHash;
+
+  recordUsedNonce(senderAddr, usedNonce);
+  return broadcastHash;
+}
+
+async function invokeContractViaVault(params: ScInvokeParams): Promise<string> {
+  if (!scAddress) {
+    throw new Error('Smart contract address not configured');
+  }
+  const callData = [params.functionName, ...params.args].join('@');
+  const payload: Record<string, unknown> = {
+    scType: 0, // InvokeContract
+    address: scAddress,
+    callValue: params.value ? { KLV: params.value.toString() } : {},
+  };
+  return buildSignBroadcastViaVault([{ type: 63, payload }], [btoa(callData)]);
+}
+
 /**
  * Build, sign, and broadcast a smart contract invocation via Klever Extension.
  * Returns the transaction hash.
  */
-async function invokeContract(params: ScInvokeParams): Promise<string> {
+async function invokeContractViaExtension(params: ScInvokeParams): Promise<string> {
   if (!window.kleverWeb) {
     throw new Error('Klever Extension not available');
   }
@@ -230,6 +432,17 @@ async function invokeContract(params: ScInvokeParams): Promise<string> {
     console.error('[Klever SC]', { scAddress, callData, payload, error: detail });
     throw new Error(detail);
   }
+}
+
+/**
+ * Build, sign, and broadcast a smart contract invocation.
+ * Routes to the vault's own signer for built-in wallets (no extension
+ * required), or the Klever Extension when that's the active wallet source.
+ */
+async function invokeContract(params: ScInvokeParams): Promise<string> {
+  return builtinWalletActive
+    ? invokeContractViaVault(params)
+    : invokeContractViaExtension(params);
 }
 
 /** Decode a bech32 address (klv1... or ogd1...) to its 32-byte public key as hex. */
@@ -351,16 +564,23 @@ export async function sendTip(
   note: string,
   amountKlv: number,
 ): Promise<string> {
+  const amountAtomic = Math.floor(amountKlv * 1_000_000); // KLV has 6 decimal places
+  const txData = note ? [btoa(note.slice(0, 128))] : undefined;
+
+  if (builtinWalletActive) {
+    return buildSignBroadcastViaVault(
+      [{ type: 0, payload: { receiver: recipient, amount: amountAtomic, kda: 'KLV' } }],
+      txData,
+    );
+  }
+
   if (!window.kleverWeb) {
     throw new Error('Klever Extension not available');
   }
   window.kleverWeb.provider = kleverProvider;
   await window.kleverWeb.initialize();
 
-  const amountAtomic = Math.floor(amountKlv * 1_000_000); // KLV has 6 decimal places
-
   // Build a direct KLV transfer (type 0)
-  const txData = note ? [btoa(note.slice(0, 128))] : undefined;
   try {
     const unsignedTx = await window.kleverWeb.buildTransaction([{
       type: 0, // Transfer

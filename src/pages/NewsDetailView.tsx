@@ -10,7 +10,7 @@ import { Component, createResource, createSignal, createEffect, onCleanup, For, 
 import { t } from '../i18n/init';
 import { getClient } from '../lib/api';
 import { avatarUrl } from '../lib/ownAvatar';
-import { authStatus, getSigner, l2Address, walletAddress, isRegistered } from '../lib/auth';
+import { authStatus, getSigner, l2Address, walletAddress, walletSource, isRegistered } from '../lib/auth';
 import { navigate, goBack, routeParam } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { MediaImage } from '../components/MediaImage';
@@ -305,7 +305,7 @@ export const NewsDetailView: Component = () => {
 
   const handleTip = async () => {
     if (!requireAuthOrRedirect()) return;
-    if (!kleverAvailable()) {
+    if (walletSource() !== 'builtin' && !kleverAvailable()) {
       setActionError('Klever Extension required for tipping');
       return;
     }
