@@ -5,6 +5,20 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.71.1] - 2026-09-01
+
+### Fixed
+
+- **Sidebar right-click menus no longer run off-screen.** With enough channels
+  or DM conversations to fill the sidebar, right-clicking one near the bottom
+  opened the context menu past the viewport edge, where its lower items were
+  clipped or unreachable. Every sidebar floating menu (channel, DM, member, and
+  channel-group) is now measured after it opens and pulled back into view —
+  flipped above / left of the pointer when there is no room below / right, and
+  clamped to an 8px margin from each edge. A menu taller than the viewport
+  (many "move to group" targets) pins to the top and scrolls. Right-clicking a
+  different row while a menu is open re-runs the repositioning.
+
 ## [0.71.0] - 2026-09-01
 
 ### Added
