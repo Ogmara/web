@@ -5,6 +5,21 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.73.0] - 2026-09-01
+
+### Fixed
+
+- **Followed topics, channel groups and hidden DMs now sync across nodes, not
+  just across devices on the same node.** Needs l2-node 0.125.0+ (which gossips
+  the encrypted settings blob on the profile topic) and `@ogmara/sdk` 0.54.0.
+  The settings upload now carries a cleartext `updated_at` (the max `updatedAt`
+  across the synced objects) as the node's last-writer-wins key, and on
+  connecting to a node the client re-uploads its copy once when it is newer than
+  the node's (or the node has none) — seeding that node, which then gossips it
+  on. Switching home node (failover, best-ping, or by hand) now surfaces the
+  same followed topics / groups / hidden conversations instead of a different
+  set per node.
+
 ## [0.72.2] - 2026-09-01
 
 ### Changed
