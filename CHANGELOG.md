@@ -5,6 +5,40 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.72.0] - 2026-09-01
+
+### Added
+
+- **Follow news topics by hashtag, with subgroups.** Below Global / Following
+  in the News Feed sidebar: a **Followed Topics** entry (the union of every
+  followed hashtag) plus user-named groups. Follow/unfollow from the manage
+  panel or any post's tag chip; create groups, rename/delete them, and add
+  hashtags to a group. Selecting an entry filters the feed to those tags
+  (`?topics=all` / `?group=<id>` → `listNews({ tags })`). The whole
+  `topicGroups` object syncs across devices through the existing encrypted
+  settings blob (last-writer-wins, debounced upload), and re-pulls on the new
+  `settings_changed` WebSocket nudge (l2-node 0.124.0+) so a second device
+  picks up an edit immediately. Needs l2-node 0.124.0+ for the server-side
+  tag filter; against an older node the filter simply returns nothing.
+- **Hot Topics ("Trending").** A list below the topic groups of the network's
+  most-used news hashtags over a rolling 24h window, each with a usage count
+  (`Intl.NumberFormat` compact). Click one to filter the feed to that tag.
+  Refreshes every 60s and on window focus; hidden entirely against a node too
+  old to expose the endpoint; a fresh/partitioned node's `scope: "local"`
+  result shows a muted "network view warming up" hint.
+- **Active-filter chip.** When the feed is filtered by a topic, group, or a
+  trending tag, the header shows a `Filtered by #tag ✕` chip that clears back
+  to Global. In-post tag chips now filter the feed in place instead of
+  opening the search page.
+- New i18n keys for all of the above, across all 7 locales.
+
+### Note
+
+- The SDK dependency (`@ogmara/sdk`, `file:../sdk-js`) must be built with
+  `@noble/*` correctly resolved for `tsc` to see its types — see the sdk-js
+  0.53.0 notes. CI builds it fresh; a local `npm run build` may trip on a
+  pre-existing `@noble` hoisting issue that also affects the current `main`.
+
 ## [0.71.1] - 2026-09-01
 
 ### Fixed

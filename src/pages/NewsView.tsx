@@ -21,7 +21,9 @@ import { ensureHexMsgId, formatLocalTime, truncateAddress } from '../lib/news-ut
 import { ReactionPicker } from '../components/ReactionPicker';
 import { buildNewsShareUrl, copyToClipboard } from '../lib/share';
 import { onWsEvent } from '../lib/ws';
-import { isNewsEnvelope } from '@ogmara/sdk';
+import { isNewsEnvelope, normalizeHashtag } from '@ogmara/sdk';
+import { getPayloadTags } from '../lib/payload';
+import { getTopicGroups, allFollowedTags } from '../lib/topic-groups';
 
 type FeedMode = 'global' | 'following';
 
@@ -37,19 +39,69 @@ function resolveFeedMode(): FeedMode {
   return saved === 'following' ? 'following' : 'global';
 }
 
+/** An active hashtag filter overlaying the feed, or null. */
+type TagFilter = { tags: string[]; label: string } | null;
+
+/**
+ * Resolve a hashtag filter from the URL — orthogonal to `feedMode`. A filter
+ * always runs against the GLOBAL feed (`listNews({ tags })`), never the
+ * personal/following feed (l2-node only accepts tag params on `/news`).
+ *  - `?tag=<t>`       — one hashtag
+ *  - `?tags=t1,t2`    — OR-set (normalized, deduped, capped at 50)
+ *  - `?group=<id>`    — a saved topic group's tags
+ *  - `?topics=all`    — the union of every followed hashtag
+ */
+function resolveTagFilter(): TagFilter {
+  const clean = (raw: string[]): string[] => {
+    const out: string[] = [];
+    for (const s of raw) {
+      const n = normalizeHashtag(s);
+      if (n && !out.includes(n)) out.push(n);
+      if (out.length >= 50) break;
+    }
+    return out;
+  };
+  const group = queryParam('group');
+  if (group) {
+    const g = getTopicGroups().groups.find((x) => x.id === group);
+    const tags = clean(g?.tags ?? []);
+    return tags.length ? { tags, label: g!.name } : null;
+  }
+  if (queryParam('topics') === 'all') {
+    const tags = clean(allFollowedTags());
+    return tags.length ? { tags, label: t('news_topics_followed') } : null;
+  }
+  const tags = queryParam('tags');
+  if (tags) {
+    const list = clean(tags.split(','));
+    return list.length
+      ? { tags: list, label: list.map((x) => '#' + x).join('  ') }
+      : null;
+  }
+  const tag = queryParam('tag');
+  if (tag) {
+    const n = normalizeHashtag(tag);
+    if (n) return { tags: [n], label: '#' + n };
+  }
+  return null;
+}
+
 export const NewsView: Component = () => {
   // Reactive feed-mode signal — reads from URL/settings on every change.
   // The accumulator effect below keys off it, so a sidebar click that
   // updates `?feed=` re-runs `initFeed()` for the new mode.
   const feedMode = createMemo<FeedMode>(() => resolveFeedMode());
+  // Reactive tag filter (URL-driven). A change re-runs `initFeed` via the
+  // `on([...])` effect below. `tagKey()` is a stable string so the effect
+  // compares by value.
+  const tagFilter = createMemo<TagFilter>(() => resolveTagFilter());
+  const tagKey = createMemo(() => tagFilter()?.tags.join(',') ?? '');
 
-  // Auto-save the resolved mode as the user's new default on change.
-  // The `defer`-style guard via `prev !== undefined` skips the initial
-  // run so we don't overwrite the saved preference with itself on
-  // first mount.
+  // Auto-save the resolved mode as the user's new default on change — but NOT
+  // while a tag filter is active (that's transient browsing, not a preference).
   createEffect((prev?: FeedMode) => {
     const m = feedMode();
-    if (prev !== undefined && prev !== m) {
+    if (!tagFilter() && prev !== undefined && prev !== m) {
       setSetting('defaultFeed', m);
     }
     return m;
@@ -112,8 +164,11 @@ export const NewsView: Component = () => {
     opts: { before?: string; after?: string },
   ): Promise<{ posts: any[]; hasMore: boolean }> => {
     const client = getClient();
-    const resp =
-      feedMode() === 'following'
+    const tf = tagFilter();
+    const resp = tf
+      ? // A tag filter always runs against the global feed.
+        await client.listNews({ limit: PAGE, tags: tf.tags, ...opts })
+      : feedMode() === 'following'
         ? await client.getFeed({ limit: PAGE, ...opts })
         : await client.listNews({ limit: PAGE, ...opts });
     const posts = resp.posts ?? [];
@@ -166,7 +221,9 @@ export const NewsView: Component = () => {
 
       const savedId = getSetting(lastReadKey());
       const viewedAt = getSetting('newsLastViewedAt');
-      const stale = !savedId || Date.now() - viewedAt > RESUME_WINDOW_MS;
+      // A tag-filtered view is transient — always open at the newest matching
+      // page rather than restoring a resume anchor from the unfiltered feed.
+      const stale = !!tagFilter() || !savedId || Date.now() - viewedAt > RESUME_WINDOW_MS;
 
       if (stale) {
         const { posts, hasMore } = await fetchPage({});
@@ -337,6 +394,17 @@ export const NewsView: Component = () => {
 
     if (type === 'NewsPost' || type === 'NewsRepost') {
       if (mine) return; // our optimistic post/repost is already shown
+      // When a tag filter is active, only react to a post whose tags
+      // intersect it — `prependLatest` re-fetches with the filter so a
+      // non-matching post never enters the list either way, but this keeps
+      // the "show new posts" pill count honest.
+      const tf = tagFilter();
+      if (tf) {
+        const postTags = new Set(
+          getPayloadTags(env?.payload ?? []).map((x) => normalizeHashtag(x)).filter(Boolean),
+        );
+        if (!tf.tags.some((x) => postTags.has(x))) return;
+      }
       if (atNewest()) void prependLatest();
       else setNewPosts((n) => n + 1);
       return;
@@ -388,7 +456,7 @@ export const NewsView: Component = () => {
   // skips the initial run — `onMount` does the first load once `scrollEl` is set.
   createEffect(
     on(
-      () => [feedMode(), authStatus() === 'ready'] as const,
+      () => [feedMode(), tagKey(), authStatus() === 'ready'] as const,
       () => {
         void initFeed();
       },
@@ -432,7 +500,11 @@ export const NewsView: Component = () => {
   };
 
   const headerTitle = () =>
-    feedMode() === 'following' ? t('news_feed_following') : t('news_title');
+    tagFilter()
+      ? tagFilter()!.label
+      : feedMode() === 'following'
+        ? t('news_feed_following')
+        : t('news_title');
 
   return (
     <div class="news-view" ref={scrollEl} onScroll={onScroll}>
@@ -440,6 +512,16 @@ export const NewsView: Component = () => {
         <h2>{headerTitle()}</h2>
         <button class="new-post-btn" onClick={handleNewPost}>{t('news_new_post')}</button>
       </div>
+      <Show when={tagFilter()}>
+        <button
+          class="news-filter-chip"
+          onClick={() => navigate('/news?feed=global')}
+          title={t('news_filter_clear')}
+        >
+          {t('news_filter_active', { tag: tagFilter()!.tags.join(', ') })}
+          <span aria-hidden="true" style="margin-left:8px; font-weight:700">✕</span>
+        </button>
+      </Show>
       <Show when={newPosts() > 0}>
         <button class="news-new-pill" onClick={() => void jumpToNewest()}>
           ↑ {t('news_show_new_posts')}
@@ -525,6 +607,21 @@ export const NewsView: Component = () => {
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         }
         .news-new-pill:hover { opacity: 0.92; }
+        .news-filter-chip {
+          display: inline-flex;
+          align-items: center;
+          align-self: flex-start;
+          margin-bottom: var(--spacing-md);
+          padding: 4px 12px;
+          background: var(--color-accent-bg, var(--color-bg-secondary));
+          color: var(--color-accent-primary);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-full);
+          font-size: var(--font-size-sm);
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .news-filter-chip:hover { background: var(--color-bg-tertiary); }
         .news-comment-context {
           padding: var(--spacing-xs) var(--spacing-md);
           font-size: var(--font-size-xs);
@@ -1094,11 +1191,19 @@ const NewsCard: Component<{
       <Show when={!isComment() && postTags().length > 0}>
         <div class="news-tags">
           <For each={postTags()}>
-            {(tag) => (
-              <button class="news-tag" onClick={() => navigate(`/search?q=${encodeURIComponent('#' + tag)}`)}>
-                #{tag}
-              </button>
-            )}
+            {(tag) => {
+              const n = normalizeHashtag(tag);
+              return (
+                <button
+                  class="news-tag"
+                  onClick={() =>
+                    navigate(n ? `/news?tag=${encodeURIComponent(n)}` : `/search?q=${encodeURIComponent('#' + tag)}`)
+                  }
+                >
+                  #{tag}
+                </button>
+              );
+            }}
           </For>
         </div>
       </Show>
