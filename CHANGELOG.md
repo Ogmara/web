@@ -5,6 +5,17 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.72.2] - 2026-09-01
+
+### Changed
+
+- News Feed sidebar: the follow / unfollow controls are now always visible under
+  **Followed Topics** instead of hidden behind a "Manage topics" toggle — an
+  add-a-hashtag field plus every followed tag as a chip with a ✕ to unfollow.
+  Each group's hashtags are likewise shown as ✕-removable chips under the group
+  row. Removes the last remaining discoverability gap (there was no visible way
+  to unfollow a topic).
+
 ## [0.72.1] - 2026-09-01
 
 ### Fixed
