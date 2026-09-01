@@ -46,6 +46,16 @@ export interface Settings {
    */
   defaultFeed: 'global' | 'following';
   /**
+   * News Feed resume-position state (v0.71.0+). The client persists the hex
+   * `msg_id` of the topmost visible post per feed mode, plus a "last viewed"
+   * wall-clock ms timestamp. On reopening the feed within 24h it restores that
+   * post as the scroll anchor so the user scrolls up for what's new; idle > 24h
+   * (or no saved id) opens at the newest post. Empty string / 0 = none.
+   */
+  newsLastReadGlobal: string;
+  newsLastReadFollowing: string;
+  newsLastViewedAt: number;
+  /**
    * User-known L2 node URLs the picker should always remember.
    *
    * Auto-populated every time the user successfully `switchNode`s to a
@@ -104,6 +114,9 @@ const defaults: Settings = {
   pushGatewayUrl: '',
   defaultLandingView: 'chat',
   defaultFeed: 'global',
+  newsLastReadGlobal: '',
+  newsLastReadFollowing: '',
+  newsLastViewedAt: 0,
   knownNodes: [],
   defaultNodeUrl: '',
   kleverNetwork: 'mainnet',

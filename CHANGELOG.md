@@ -5,6 +5,32 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.71.0] - 2026-09-01
+
+### Added
+
+- **News Feed history + resume position.** The feed is now an accumulator, not
+  a fixed 20-post page. Scrolling to the oldest loaded post autoloads the
+  next-older page; scrolling back to the top autoloads posts that arrived
+  since, with the viewport anchored so nothing jumps. Reopening the feed within
+  24h restores the post you were last looking at as the scroll anchor (a page
+  is fetched each side of it) so you scroll **up** for what's new; idle over
+  24h — or a first visit — opens at the newest post. Applies to both the global
+  and Following feeds (needs l2-node 0.123.0+ / `@ogmara/sdk` 0.52.0+ for the
+  `before`/`after` cursors; older nodes degrade to a single newest page).
+- "Show new posts" pill when a live post arrives while you're scrolled away
+  from the top.
+
+### Fixed
+
+- **The feed jumped to the newest post whenever any reaction, comment, edit or
+  delete arrived over the WebSocket — including the echo of your own reaction.**
+  Every news WS frame triggered a full `refetchNews()` that rebuilt every card
+  and reset the scroll position. Live news envelopes are now applied in place to
+  the one affected card (reaction ±1, comment count, edited/deleted flags), the
+  echo of the user's own action is skipped, and a genuinely new post prepends
+  (when at the top) or increments the pill instead of reloading the list.
+
 ## [0.70.0] - 2026-08-31
 
 ### Fixed
