@@ -9,6 +9,9 @@ import { getClient } from '../lib/api';
 import { avatarUrl } from '../lib/ownAvatar';
 import { authStatus, walletAddress, walletSource, l2Address, getSigner } from '../lib/auth';
 import { kleverAvailable, registerUser, addressToPubkeyHex } from '../lib/klever';
+import { loadRegistrationCost } from '../lib/registration';
+import { RegistrationCostPanel } from '../components/RegistrationCostPanel';
+import type { RegistrationCost } from '../lib/registration';
 import { navigate, goBack } from '../lib/router';
 import { FormattedText } from '../components/FormattedText';
 import { getPayloadContent } from '../lib/payload';
@@ -44,6 +47,8 @@ interface UserProfileProps {
 }
 
 export const UserProfileView: Component<UserProfileProps> = (props) => {
+  // The cost the panel actually displayed, so the signed amount matches it.
+  const [shownCost, setShownCost] = createSignal<RegistrationCost | null>(null);
   const [following, setFollowing] = createSignal(false);
   const [followingCount, setFollowingCount] = createSignal(0);
   const [editing, setEditing] = createSignal(false);
@@ -227,7 +232,16 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
     try {
       // Use the on-chain wallet address (extension), not the device key
       const pubkeyHex = addressToPubkeyHex(walletAddress()!);
-      const txHash = await registerUser(pubkeyHex);
+      // Fee read at confirm time — see WalletView.handleRegister for why.
+      // Use the SAME cost the panel displayed. Re-fetching here would let a
+      // node show one amount and charge another, and on the builtin-vault
+      // path there is no wallet prompt to reveal the difference. Falls back to
+      // a fetch only if the panel has not resolved yet.
+      const cost = shownCost() ?? (await loadRegistrationCost());
+      const txHash = await registerUser(pubkeyHex, {
+        feeAtomic: cost.known ? cost.feeAtomic : undefined,
+        viaNode: cost.operatorAddress ?? undefined,
+      });
       setEditSuccess(`Registered on-chain! TX: ${txHash.slice(0, 16)}...`);
       // Refetch to get the public_key set by chain scanner
       setTimeout(() => refetchProfile(), 5000);
@@ -323,6 +337,11 @@ export const UserProfileView: Component<UserProfileProps> = (props) => {
               <span class="profile-verified-status">✓ On-chain verified</span>
             </Show>
           </div>
+          {/* Below the button row, not inside it — the panel is a block and
+              would break the horizontal action layout. */}
+          <Show when={!isVerified() && (walletSource() === 'builtin' || kleverAvailable())}>
+            <RegistrationCostPanel onLoaded={setShownCost} />
+          </Show>
           <Show when={editError()}>
             <div class="edit-error">{editError()}</div>
           </Show>

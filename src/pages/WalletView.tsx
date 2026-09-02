@@ -10,6 +10,9 @@
 
 import { Component, createSignal, Show } from 'solid-js';
 import { t } from '../i18n/init';
+import { RegistrationCostPanel } from '../components/RegistrationCostPanel';
+import type { RegistrationCost } from '../lib/registration';
+import { loadRegistrationCost } from '../lib/registration';
 import {
   authStatus,
   walletAddress,
@@ -35,6 +38,8 @@ import {
 import { navigate } from '../lib/router';
 
 export const WalletView: Component = () => {
+  // The cost the panel actually displayed, so the signed amount matches it.
+  const [shownCost, setShownCost] = createSignal<RegistrationCost | null>(null);
   const [importKey, setImportKey] = createSignal('');
   const [showExport, setShowExport] = createSignal(false);
   const [exportedKey, setExportedKey] = createSignal('');
@@ -94,7 +99,15 @@ export const WalletView: Component = () => {
     try {
       const signer = getSigner();
       if (!signer) throw new Error('No signer available');
-      const txHash = await registerUser(signer.publicKeyHex);
+      // Use the SAME cost the panel displayed. Re-fetching here would let a
+      // node show one amount and charge another, and on the builtin-vault
+      // path there is no wallet prompt to reveal the difference. Falls back to
+      // a fetch only if the panel has not resolved yet.
+      const cost = shownCost() ?? (await loadRegistrationCost());
+      const txHash = await registerUser(signer.publicKeyHex, {
+        feeAtomic: cost.known ? cost.feeAtomic : undefined,
+        viaNode: cost.operatorAddress ?? undefined,
+      });
       setTxResult(txHash);
       setRegistrationStatus(true);
     } catch (e: any) {
@@ -230,6 +243,7 @@ export const WalletView: Component = () => {
             }
           >
             <p class="wallet-desc">{t('wallet_register_description')}</p>
+            <RegistrationCostPanel onLoaded={setShownCost} />
             <Show
               when={walletSource() === 'builtin' || kleverAvailable() || walletSource() === 'klever-extension'}
               fallback={
