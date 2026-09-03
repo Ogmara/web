@@ -5,6 +5,35 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.75.1] - 2026-09-03
+
+### Security
+
+- **The device encryption key could still be minted into the shared global
+  slot.** `getOrCreateEncKeypair` resolved its slot across IndexedDB awaits and
+  fell back to the legacy device-global key when no wallet was scoped — so a
+  disconnect landing in that window wrote one wallet's fresh secret where the
+  NEXT wallet's adoption path would claim it as its own identity. That
+  reintroduces the shared `enc_pub`, and with it cross-account envelope
+  decryption, which 0.75.0 exists to remove. It now refuses to mint with no
+  wallet active, matching desktop.
+- **The E2E cache teardown on disconnect was fire-and-forget.** The DM,
+  channel, key-vault and decrypted-media clears ran un-awaited at the very end,
+  after the scope had already been cleared. On the extension path — where
+  disconnect-then-reconnect IS the account-switch gesture — the next wallet
+  could start while the previous one's content keys and decrypted-media object
+  URLs were still live, and a late-resolving clear could then wipe the new
+  wallet's fresh caches.
+- `decryptAndApplySettings` now re-checks the active wallet after its decrypt,
+  matching the guard its sibling `downloadChannelOrg` already had. It awaits
+  `deriveKey` and `crypto.subtle.decrypt` before writing pinned/muted channels
+  and news read positions through the scoped setters and then re-uploading — a
+  switch inside that window filed one account's settings under another's
+  namespace and pushed them to the node.
+
+Found by the full audit pipeline run over the multi-account work; the desktop
+equivalents shipped in desktop 1.70.0.
+
 ## [0.75.0] - 2026-09-03
 
 ### Fixed

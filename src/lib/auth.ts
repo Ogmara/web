@@ -539,16 +539,21 @@ export async function disconnectWallet(): Promise<void> {
   // lists in the same tick instead of at the next reload.
   setWalletScope(null);
   // Drop the cached own avatar so a different account doesn't inherit it.
-  import('./ownAvatar').then(({ clearOwnAvatar }) => clearOwnAvatar()).catch(() => {});
-  // Clear E2E session state so a different account can't read this one's keys:
-  // the in-memory DM/channel content-key caches and the cached vault backup key.
-  Promise.all([
+  await import('./ownAvatar').then(({ clearOwnAvatar }) => clearOwnAvatar()).catch(() => {});
+  // AWAITED, not fire-and-forget. These ran un-awaited at the very end, after
+  // the scope had already been cleared — so on the extension path, where
+  // disconnect-then-reconnect IS the account-switch gesture, account B could
+  // start while A's content-key caches and decrypted-media object URLs were
+  // still live, and a late-resolving clear could then wipe B's fresh caches.
+  await Promise.all([
     import('./dmCrypto').then(({ clearDmKeyCache }) => clearDmKeyCache()),
     import('./channelCrypto').then(({ clearChannelKeyCache }) => clearChannelKeyCache()),
     import('./keyVault').then(({ clearKeyVaultSession }) => clearKeyVaultSession()),
     // Revoke decrypted-media object URLs so another account can't read them.
     import('./mediaCrypto').then(({ clearMediaUrlCache }) => clearMediaUrlCache()),
-  ]).catch(() => {});
+  ]).catch(() => {
+    /* a cache that refuses to clear must not strand the user mid-disconnect */
+  });
 }
 
 /** Update on-chain registration status. */

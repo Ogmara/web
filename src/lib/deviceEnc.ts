@@ -99,6 +99,19 @@ export async function getOrCreateEncKeypair(): Promise<{ privateKey: Uint8Array;
   if (existing) {
     return { privateKey: existing, publicKeyHex: encPublicKeyHex(existing) };
   }
+  // Reading the legacy device-global slot is fine — it is the pre-scoping key,
+  // adopted by the first wallet that looks. CREATING into it is not: with no
+  // wallet scoped there is no account to own the key, and the next wallet's
+  // adoption path would claim it as its own identity, reintroducing the shared
+  // `enc_pub` (and therefore cross-account envelope decryption) that scoping
+  // exists to remove.
+  //
+  // The slot is resolved across IndexedDB awaits, so a disconnect landing
+  // mid-call is exactly how this happened. Refuse; the caller retries once a
+  // wallet is active.
+  if (!getWalletScope()) {
+    throw new Error('No wallet is active — refusing to create a device encryption key');
+  }
   const kp = generateDeviceEncKeypair();
   await encVaultStore(kp.privateKey);
   return kp;
