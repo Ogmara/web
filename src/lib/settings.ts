@@ -4,6 +4,8 @@
  * Keys and defaults from spec 06-frontend.md section 4.1.
  */
 
+import { scopedKey } from './walletScope';
+
 export interface Settings {
   lang: string;
   theme: string;
@@ -122,9 +124,54 @@ const defaults: Settings = {
   kleverNetwork: 'mainnet',
 };
 
+/**
+ * Settings that belong to the ACCOUNT, not the browser.
+ *
+ * These are namespaced per wallet (see `walletScope.ts`). Everything else —
+ * language, theme, node URL, font size, sidebar width, push — belongs to the
+ * browser profile and stays global, so connecting a different wallet does not
+ * reset the user's app preferences.
+ *
+ * `walletAddress` and `walletSource` are deliberately NOT here: they identify
+ * WHICH wallet is active, so scoping them to that wallet would be circular.
+ */
+const PER_WALLET: ReadonlySet<keyof Settings> = new Set([
+  'pinnedChannels',
+  'mutedChannels',
+  'mutedUsers',
+  'lastChannel',
+  'newsLastReadGlobal',
+  'newsLastReadFollowing',
+  'newsLastViewedAt',
+  // Registration and E2E binding state are per account: `deviceRegistered`
+  // holds `${externalAddress}:${deviceAddr}`, and a shared `deviceId` would
+  // publish one identifier for two wallets, publicly linking them.
+  'deviceRegistered',
+  'encKeyBound',
+  'deviceId',
+] as (keyof Settings)[]);
+
+/** Whether a key is account-scoped rather than browser-scoped. */
+export function isPerWalletSetting(key: keyof Settings): boolean {
+  return PER_WALLET.has(key);
+}
+
+/**
+ * Resolve a key to its actual storage location.
+ *
+ * Per-wallet keys resolve to `<base>::<address>`; with no wallet active they
+ * fall back to the bare key, which is only reachable before connect and holds
+ * nothing after the one-time migration has run.
+ */
+function storageKey(key: keyof Settings): string {
+  const base = `ogmara.${key}`;
+  if (!PER_WALLET.has(key)) return base;
+  return scopedKey(base) ?? base;
+}
+
 /** Load a setting from localStorage with fallback to default. */
 export function getSetting<K extends keyof Settings>(key: K): Settings[K] {
-  const stored = localStorage.getItem(`ogmara.${key}`);
+  const stored = localStorage.getItem(storageKey(key));
   if (stored === null) return defaults[key];
   try {
     return JSON.parse(stored);
@@ -135,5 +182,5 @@ export function getSetting<K extends keyof Settings>(key: K): Settings[K] {
 
 /** Save a setting to localStorage. */
 export function setSetting<K extends keyof Settings>(key: K, value: Settings[K]): void {
-  localStorage.setItem(`ogmara.${key}`, JSON.stringify(value));
+  localStorage.setItem(storageKey(key), JSON.stringify(value));
 }

@@ -6,6 +6,7 @@
 
 import { getSetting, setSetting, type Settings } from './settings';
 import { getClient } from './api';
+import { walletAddress } from './auth';
 import { getChannelOrg, applyRemoteOrg } from './channel-org';
 import { addJoinedChannels } from './joined-channels';
 import { getHiddenDms, applyRemoteHiddenDms } from './dm-hide';
@@ -189,8 +190,12 @@ export async function uploadSettings(hexKey: string): Promise<void> {
 /** Download and apply settings from L2 node. */
 export async function downloadSettings(hexKey: string): Promise<boolean> {
   const client = getClient();
+  const forWallet = walletAddress();
   const resp = await client.getSettings();
-  if (!resp) return false;
+  // Same guard as `downloadChannelOrg`: this applies per-wallet settings
+  // (pinned/muted channels, news read positions), which must never land in a
+  // different account's namespace.
+  if (!resp || walletAddress() !== forWallet) return false;
   await decryptAndApplySettings(
     hexKey,
     new Uint8Array(resp.encrypted_settings),
@@ -212,7 +217,15 @@ export async function downloadSettings(hexKey: string): Promise<boolean> {
  */
 export async function downloadChannelOrg(hexKey: string): Promise<boolean> {
   try {
+    // Which account this pull belongs to. The fetch and the decrypt below are
+    // both awaits, and a disconnect-then-connect-another-wallet can land in
+    // that window — applying afterwards would write THIS account's channel
+    // organisation, hidden DMs and followed topics into the OTHER account's
+    // namespace, then upload them under that account's key, linking the two
+    // accounts' interest graphs on the server.
+    const forWallet = walletAddress();
     const resp = await getClient().getSettings();
+    if (walletAddress() !== forWallet) return false;
     if (!resp) {
       // Fresh node with nothing for this wallet. If THIS device holds real
       // synced state, seed the node once — it then gossips it to the mesh so
@@ -229,6 +242,8 @@ export async function downloadChannelOrg(hexKey: string): Promise<boolean> {
       new Uint8Array(resp.encrypted_settings),
     );
     const settings = JSON.parse(new TextDecoder().decode(plaintext));
+    // Re-checked after the decrypt, immediately before the first write.
+    if (walletAddress() !== forWallet) return false;
     let applied = false;
     const org = settings?.[CHANNEL_ORG_KEY];
     if (org && typeof org === 'object') {

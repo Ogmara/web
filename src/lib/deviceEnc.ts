@@ -29,6 +29,7 @@ import { getSetting, setSetting } from './settings';
 import { signMessage } from './klever';
 import { getActiveSigner } from './signerRef';
 import { getClient } from './api';
+import { getWalletScope } from './walletScope';
 import { e2elog, withRetry } from './e2eDebug';
 
 const bytesToHex = (b: Uint8Array): string =>
@@ -156,6 +157,13 @@ export async function ensureDeviceEncBinding(walletAddress: string): Promise<voi
   if (!deviceId) return; // external wallet without a device signer yet — retry later
 
   const kp = await getOrCreateEncKeypair();
+  // The keypair is resolved from the CURRENT wallet scope, which may have
+  // changed while that await was outstanding — this runs un-awaited on connect,
+  // and a disconnect/reconnect can land in the middle. Publishing then binds
+  // the NEW account's enc_pub to the OLD account's wallet, and the revoke
+  // below retires the old account's real key, making every envelope already
+  // wrapped to it permanently undecryptable.
+  if (getWalletScope() !== walletAddress) return;
   const marker = `v2:${walletAddress}:${kp.publicKeyHex}`;
 
   // Registry-verified (not just the local marker): the marker only records what
@@ -189,6 +197,9 @@ export async function ensureDeviceEncBinding(walletAddress: string): Promise<voi
   });
   await withRetry(() => getClient().publishEncKeyEnvelope(walletAddress, envelope), 'publish binding');
   e2elog('published binding', { deviceId, encPub: kp.publicKeyHex });
+  // Re-checked before the DESTRUCTIVE step: revocation is not reversible and
+  // the publish above may itself have taken a while.
+  if (getWalletScope() !== walletAddress) return;
   // Retire any stale enc_pub for this device AFTER the new key is registered, so
   // there is never a window with zero active keys for the device.
   await revokeStaleEncKeys(walletAddress, deviceId, kp.publicKeyHex, sign);

@@ -25,6 +25,12 @@ import { getSetting, setSetting } from './settings';
 import { signMessage, setBuiltinWalletActive } from './klever';
 import { setActiveSigner, getActiveSigner } from './signerRef';
 import { ensureDeviceEncBinding } from './deviceEnc';
+import {
+  setWalletScope,
+  wipeWalletScope,
+  runWalletScopeMigrationOnce,
+  runWalletSwitchResets,
+} from './walletScope';
 
 /** Attach a signer to the API client AND record it as the active L2 signer so
  *  non-auth modules (api/ws/boot) can read it without an import cycle. */
@@ -61,8 +67,20 @@ export function getSigner(): WalletSigner | null {
 export async function initAuth(): Promise<void> {
   setAuthStatus('loading');
   try {
+    // BEFORE any per-wallet read. The migration claims the pre-namespacing
+    // global keys for whoever last owned them and must run exactly once, while
+    // no wallet is active — running it later, with a different wallet
+    // connected, would adopt the old account's channels and topic groups into
+    // the new account's namespace irreversibly.
+    runWalletScopeMigrationOnce();
+
+    // `walletSource` / `walletAddress` are deliberately NOT per-wallet (they
+    // say WHICH wallet is active), so they are readable before the scope is
+    // set. Everything per-wallet below depends on the scope, so it is set
+    // first.
     const savedSource = getSetting('walletSource') as WalletSource;
     const savedAddress = getSetting('walletAddress');
+    setWalletScope(savedAddress || null);
 
     // Extension / K5: the L2 signer is the DEVICE key in its OWN vault slot.
     // Adopt a legacy device key from the shared KEY_PRIVATE slot if this user
@@ -110,6 +128,9 @@ export async function initAuth(): Promise<void> {
         if (savedSource === 'builtin' && savedAddress) {
           setL2Address(address);
           setWalletAddress(address);
+          // The vault's own address is authoritative here — it can differ from
+          // the persisted one if the stored key changed.
+          setWalletScope(address);
           setWalletSource('builtin');
           setBuiltinWalletActive(true);
           setAuthStatus('ready');
@@ -137,6 +158,7 @@ export async function connectWithKey(hexKey: string): Promise<string> {
   const signer = vaultGetSigner()!;
   attachSigner(signer);
   setWalletAddress(address);
+  setWalletScope(address);
   setL2Address(address);
   setWalletSource('builtin');
   setBuiltinWalletActive(true);
@@ -158,6 +180,7 @@ export async function generateWallet(): Promise<string> {
   const signer = vaultGetSigner()!;
   attachSigner(signer);
   setWalletAddress(address);
+  setWalletScope(address);
   setL2Address(address);
   setWalletSource('builtin');
   setBuiltinWalletActive(true);
@@ -232,6 +255,11 @@ async function ensureDeviceRegistered(
  * all data produced by this device is indexed under the wallet address.
  */
 export async function connectKleverExtension(extensionAddress: string): Promise<void> {
+  // Point per-wallet storage at this account FIRST. Registration below writes
+  // `deviceRegistered`, which is per-wallet — setting the scope afterwards
+  // would file it under whichever account was active before, or under the bare
+  // key with none, and this account would re-register on every connect.
+  setWalletScope(extensionAddress);
   // The extension provides the wallet; L2 ops are signed by a DEVICE key kept
   // in its OWN vault slot (separate from any built-in wallet in KEY_PRIVATE).
   // Load the existing device key or mint a fresh one. `signer`/`deviceAddress`
@@ -472,6 +500,14 @@ async function registerDeviceOnNode(
 /** Disconnect wallet and wipe vault. */
 export async function disconnectWallet(): Promise<void> {
   const source = walletSource();
+  // Capture BEFORE anything clears it — the wipe below needs to know which
+  // namespace to remove, and `walletAddress()` is nulled part-way through.
+  const leaving = walletAddress();
+  // Cancel armed settings-sync uploads before tearing anything down. A timer
+  // that fires mid-teardown resolves the key via `vaultExportKey()` and would
+  // seal this account's topic groups / channel org under whatever key is
+  // current by then, or upload them after the vault is gone.
+  runWalletSwitchResets();
   if (source === 'klever-extension' || source === 'k5-delegation') {
     // Keep the device key — only clear the extension/delegation association
     // so the same L2 identity is reused on reconnect
@@ -486,6 +522,11 @@ export async function disconnectWallet(): Promise<void> {
   // enc key itself follows the device key: kept for extension/K5, dropped by the
   // built-in vaultWipe above.
   setSetting('encKeyBound', '');
+  // Wipe this account's namespaced data. Namespacing alone would keep it
+  // addressable in the browser forever; this is what makes a deliberate
+  // disconnect actually leave nothing behind — the reported bug was topic
+  // groups and channel lists surviving into the next wallet.
+  if (leaving) wipeWalletScope(leaving);
   setActiveSigner(null);
   setWalletAddress(null);
   setL2Address(null);
@@ -493,6 +534,10 @@ export async function disconnectWallet(): Promise<void> {
   setBuiltinWalletActive(false);
   setAuthStatus('none');
   setIsRegistered(false);
+  // Clear the scope LAST: it fires the store resets, which reload each signal
+  // from the (now empty) namespace, so the UI drops the previous account's
+  // lists in the same tick instead of at the next reload.
+  setWalletScope(null);
   // Drop the cached own avatar so a different account doesn't inherit it.
   import('./ownAvatar').then(({ clearOwnAvatar }) => clearOwnAvatar()).catch(() => {});
   // Clear E2E session state so a different account can't read this one's keys:

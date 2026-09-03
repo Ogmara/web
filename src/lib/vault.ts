@@ -9,6 +9,7 @@
  */
 
 import { WalletSigner } from '@ogmara/sdk';
+import { getWalletScope } from './walletScope';
 
 const DB_NAME = 'ogmara-vault';
 const STORE_NAME = 'keys';
@@ -265,20 +266,66 @@ export function deviceVaultGetSigner(): WalletSigner | null {
 // is P1); the wallet-encrypted key vault (P3, §2.5) supersedes raw storage.
 const KEY_DEVICE_ENC_PRIVATE = 'device_enc_private_key';
 
-/** Load the stored device X25519 encryption secret (32 bytes), or null. */
+/**
+ * The enc secret's slot for the ACTIVE wallet.
+ *
+ * Per wallet, not per browser. `enc_pub` is published to the node's directory
+ * in the clear, so one secret shared across wallets publishes the SAME
+ * `enc_pub` for both — proving to the node, and to anyone who reads the
+ * directory, that they are the same person. It also means a ciphertext wrapped
+ * to wallet A is decryptable by wallet B on this browser, which is a
+ * cross-account key exposure rather than merely a privacy leak.
+ *
+ * This matters most on the extension/K5 path, where disconnect deliberately
+ * KEEPS the device key so the same L2 identity is reused on reconnect — so
+ * without scoping, the next wallet inherits the previous one's enc identity.
+ *
+ * Falls back to the legacy device-global slot only when no wallet is active.
+ * See protocol spec §2.4 ("Multi-account clients mint the `device_id` PER
+ * ACCOUNT").
+ */
+/** Marker so the legacy secret is adopted by exactly one wallet, ever. */
+const LEGACY_ENC_ADOPTED = 'device_enc_private_key.adopted';
+
+function encSlot(): string {
+  const addr = getWalletScope();
+  return addr ? `${KEY_DEVICE_ENC_PRIVATE}::${addr}` : KEY_DEVICE_ENC_PRIVATE;
+}
+
+/**
+ * Load this wallet's X25519 encryption secret (32 bytes), or null.
+ *
+ * One-time adoption: a browser that predates per-wallet slots has its secret
+ * in the legacy global slot. The FIRST wallet to look claims it by COPY —
+ * never a move — so an interrupted adoption can never destroy the only copy of
+ * a key that existing envelopes are wrapped to. Later wallets find their own
+ * slot empty and mint a fresh secret, which is the intended behaviour.
+ */
 export async function encVaultGet(): Promise<Uint8Array | null> {
-  const hex = await dbGet<string>(KEY_DEVICE_ENC_PRIVATE);
-  return hex ? hexToBytes(hex) : null;
+  const slot = encSlot();
+  const hex = await dbGet<string>(slot);
+  if (hex) return hexToBytes(hex);
+  if (slot === KEY_DEVICE_ENC_PRIVATE) return null;
+  // Adopt the legacy secret for whichever wallet is active when this first
+  // runs — that wallet is the one whose published enc_pub it already is.
+  const legacyAdopted = await dbGet<string>(LEGACY_ENC_ADOPTED);
+  if (legacyAdopted) return null;
+  const legacy = await dbGet<string>(KEY_DEVICE_ENC_PRIVATE);
+  if (!legacy) return null;
+  await dbPut(slot, legacy);
+  await dbPut(LEGACY_ENC_ADOPTED, '1');
+  return hexToBytes(legacy);
 }
 
-/** Persist the device X25519 encryption secret (32 bytes). */
+
+/** Persist this wallet's X25519 encryption secret (32 bytes). */
 export async function encVaultStore(secret: Uint8Array): Promise<void> {
-  await dbPut(KEY_DEVICE_ENC_PRIVATE, bytesToHex(secret));
+  await dbPut(encSlot(), bytesToHex(secret));
 }
 
-/** Wipe the device encryption secret (whole-DB wipe also drops it). */
+/** Wipe this wallet's encryption secret (whole-DB wipe also drops it). */
 export async function encVaultWipe(): Promise<void> {
-  await dbDelete(KEY_DEVICE_ENC_PRIVATE);
+  await dbDelete(encSlot());
 }
 
 /** One-time migration for users created before the device slot existed: their

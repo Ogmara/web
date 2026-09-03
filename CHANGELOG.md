@@ -5,6 +5,67 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.75.0] - 2026-09-03
+
+### Fixed
+
+- **Disconnecting a wallet left the previous account's data in the browser.**
+  Topic groups, channel organisation, collapsed groups, joined channels, hidden
+  DMs, the cached own-avatar, pinned/muted channels and users, news read
+  positions and the notification read marker all lived under GLOBAL
+  localStorage keys. Connecting a different wallet showed the previous
+  account's lists — confusing, and a privacy leak between accounts on a shared
+  browser. Reported against mobile first; the web client had it too, from the
+  same pattern.
+
+  Per-wallet data is now namespaced `<key>::<address>` and wiped on disconnect.
+  Namespacing alone would keep the data addressable in the browser forever;
+  wiping alone would lose it whenever the extension switched away and back —
+  doing both means an account's data survives a switch but not a deliberate
+  disconnect. Device-level preferences (language, theme, node URL, font size,
+  sidebar width, push) stay global, so connecting a different wallet does not
+  reset the app.
+
+  A one-time migration claims the pre-namespacing keys for the wallet that
+  owned them — the last persisted `walletAddress`. It runs exactly once, before
+  any wallet is connected: doing it later, with a different wallet active,
+  would irreversibly adopt the old account's channels and topic groups into the
+  new account's namespace, which is the reported bug made worse.
+
+- **The device encryption key was shared across wallets.** `enc_pub` is
+  published to the node's directory in the clear, so one secret served two
+  wallets published the SAME `enc_pub` for both — proving to the node, and to
+  anyone reading the directory, that they are the same person. Worse, a
+  ciphertext wrapped to wallet A was decryptable by wallet B in the same
+  browser. This bit hardest on the extension path, where disconnect
+  deliberately keeps the device key so the L2 identity is reused on reconnect.
+  The secret is now per wallet, with the legacy one adopted by COPY (never a
+  move) for the first wallet to look, so an interrupted adoption cannot destroy
+  a key that existing envelopes are wrapped to. Matches protocol spec §2.4.
+
+### Security
+
+- **Settings sync could write one account's data into another's namespace.**
+  `downloadChannelOrg` and `downloadSettings` had no wallet guard, and there
+  are several awaits between fetching the blob and applying it. A
+  disconnect-then-connect-another-wallet landing in that window wrote the first
+  account's channel organisation, hidden DMs and followed topics into the
+  second account's storage — and then uploaded them under that account's key,
+  linking the two accounts' interest graphs on the server. Both now capture the
+  wallet up front and re-check it after every await, before any write.
+
+- **The enc-key binding could revoke the wrong account's key.**
+  `ensureDeviceEncBinding` runs un-awaited on connect and resolves its keypair
+  from the current wallet scope. A switch mid-flight bound the new account's
+  `enc_pub` to the old account's wallet, and the follow-up revoke retired the
+  old account's real key — making every envelope already wrapped to it
+  permanently undecryptable. Guarded after the keypair resolves and again
+  immediately before the irreversible revoke.
+
+- Armed settings-sync upload timers are cancelled before teardown. A timer
+  firing mid-disconnect resolves the key via `vaultExportKey()` and would have
+  sealed the departing account's data under whatever key was current by then.
+
 ## [0.74.0] - 2026-09-02
 
 Verification now pays the on-chain registration fee and credits the node the

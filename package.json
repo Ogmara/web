@@ -1,8 +1,8 @@
 {
   "name": "@ogmara/web",
-  "version": "0.74.0",
+  "version": "0.75.0",
   "private": true,
-  "description": "Ogmara web application — decentralized chat and news PWA",
+  "description": "Ogmara web application \u2014 decentralized chat and news PWA",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
