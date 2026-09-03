@@ -522,22 +522,6 @@ export async function disconnectWallet(): Promise<void> {
   // enc key itself follows the device key: kept for extension/K5, dropped by the
   // built-in vaultWipe above.
   setSetting('encKeyBound', '');
-  // Wipe this account's namespaced data. Namespacing alone would keep it
-  // addressable in the browser forever; this is what makes a deliberate
-  // disconnect actually leave nothing behind — the reported bug was topic
-  // groups and channel lists surviving into the next wallet.
-  if (leaving) wipeWalletScope(leaving);
-  setActiveSigner(null);
-  setWalletAddress(null);
-  setL2Address(null);
-  setWalletSource(null);
-  setBuiltinWalletActive(false);
-  setAuthStatus('none');
-  setIsRegistered(false);
-  // Clear the scope LAST: it fires the store resets, which reload each signal
-  // from the (now empty) namespace, so the UI drops the previous account's
-  // lists in the same tick instead of at the next reload.
-  setWalletScope(null);
   // Drop the cached own avatar so a different account doesn't inherit it.
   await import('./ownAvatar').then(({ clearOwnAvatar }) => clearOwnAvatar()).catch(() => {});
   // AWAITED, not fire-and-forget. These ran un-awaited at the very end, after
@@ -554,6 +538,23 @@ export async function disconnectWallet(): Promise<void> {
   ]).catch(() => {
     /* a cache that refuses to clear must not strand the user mid-disconnect */
   });
+
+  // Wipe this account's namespaced data. Namespacing alone would keep it
+  // addressable in the browser forever; this is what makes a deliberate
+  // disconnect actually leave nothing behind — the reported bug was topic
+  // groups and channel lists surviving into the next wallet.
+  if (leaving) wipeWalletScope(leaving);
+  setActiveSigner(null);
+  setWalletAddress(null);
+  setL2Address(null);
+  setWalletSource(null);
+  setBuiltinWalletActive(false);
+  setAuthStatus('none');
+  setIsRegistered(false);
+  // Clear the scope LAST: it fires the store resets, which reload each signal
+  // from the (now empty) namespace, so the UI drops the previous account's
+  // lists in the same tick instead of at the next reload.
+  setWalletScope(null);
 }
 
 /** Update on-chain registration status. */

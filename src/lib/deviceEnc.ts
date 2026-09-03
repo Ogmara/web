@@ -24,7 +24,7 @@ import {
   buildDeviceEncRevoke,
   type WalletSignFn,
 } from '@ogmara/sdk';
-import { encVaultGet, encVaultStore, deviceVaultGetSigner } from './vault';
+import { encVaultGet, encVaultStoreAt, encSlotName, deviceVaultGetSigner } from './vault';
 import { getSetting, setSetting } from './settings';
 import { signMessage } from './klever';
 import { getActiveSigner } from './signerRef';
@@ -95,9 +95,18 @@ export { currentDeviceId };
 
 /** Load or create the device X25519 encryption keypair, persisting the secret. */
 export async function getOrCreateEncKeypair(): Promise<{ privateKey: Uint8Array; publicKeyHex: string }> {
+  // Captured ONCE, before any await, and written to explicitly below. Checking
+  // only that a scope exists is not enough: `encVaultStore` re-resolved the
+  // slot after the IndexedDB round-trip, so a wallet switch mid-call made the
+  // mint land in the NEW wallet's slot and overwrite its live secret.
+  const slot = encSlotName();
+  const scopeAtEntry = getWalletScope();
   const existing = await encVaultGet();
   if (existing) {
     return { privateKey: existing, publicKeyHex: encPublicKeyHex(existing) };
+  }
+  if (!scopeAtEntry || getWalletScope() !== scopeAtEntry) {
+    throw new Error('The active wallet changed — refusing to create a device encryption key');
   }
   // Reading the legacy device-global slot is fine — it is the pre-scoping key,
   // adopted by the first wallet that looks. CREATING into it is not: with no
@@ -113,7 +122,7 @@ export async function getOrCreateEncKeypair(): Promise<{ privateKey: Uint8Array;
     throw new Error('No wallet is active — refusing to create a device encryption key');
   }
   const kp = generateDeviceEncKeypair();
-  await encVaultStore(kp.privateKey);
+  await encVaultStoreAt(slot, kp.privateKey);
   return kp;
 }
 

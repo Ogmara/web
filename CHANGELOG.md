@@ -5,6 +5,30 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.75.2] - 2026-09-03
+
+Second audit pass, against the tree 0.75.1 fixed.
+
+### Fixed
+
+- **The enc-key guard turned key sharing into key destruction.** 0.75.1 stopped
+  `getOrCreateEncKeypair` minting into the shared device-global slot by checking
+  that a wallet scope existed — but not that it was UNCHANGED, while
+  `encVaultStore` re-resolved the slot after the IndexedDB round-trip. A wallet
+  switch mid-call therefore landed the freshly minted secret in the OTHER
+  wallet's slot, overwriting its live X25519 key: every envelope wrapped to that
+  `enc_pub` permanently undecryptable, and `revokeStaleEncKeys` then retiring it.
+  A narrower blast radius than the sharing bug, but a worse outcome.
+
+  The slot is now captured once before any await and written through
+  `encVaultStoreAt`, which refuses a slot that already holds a secret — minting
+  only ever follows an empty read, so a non-empty slot means the target moved.
+
+- The disconnect teardown now runs BEFORE the wallet scope is cleared, matching
+  desktop. Awaiting it (0.75.1) fixed the late-resolution hazard; running it
+  after every signal had been nulled still left the previous account's content
+  keys and decrypted-media object URLs live for the duration of the teardown.
+
 ## [0.75.1] - 2026-09-03
 
 ### Security

@@ -318,9 +318,35 @@ export async function encVaultGet(): Promise<Uint8Array | null> {
 }
 
 
+/** The slot name for the active wallet, so callers can capture it once. */
+export function encSlotName(): string {
+  return encSlot();
+}
+
+/**
+ * Persist an X25519 encryption secret into an EXPLICIT slot.
+ *
+ * Taking the slot rather than re-resolving it is the point: `getOrCreateEncKeypair`
+ * resolves a slot, awaits IndexedDB, then stores. Re-resolving after those
+ * awaits meant a wallet switch in the window made the store land in the NEW
+ * wallet's slot, overwriting its live secret — every envelope wrapped to that
+ * `enc_pub` permanently undecryptable.
+ *
+ * Refuses to overwrite a slot that already holds a secret: minting only ever
+ * happens for a slot found empty, so a non-empty slot here means the target
+ * moved under us.
+ */
+export async function encVaultStoreAt(slot: string, secret: Uint8Array): Promise<void> {
+  const existing = await dbGet<string>(slot);
+  if (existing) {
+    throw new Error('refusing to overwrite an existing device encryption key');
+  }
+  await dbPut(slot, bytesToHex(secret));
+}
+
 /** Persist this wallet's X25519 encryption secret (32 bytes). */
 export async function encVaultStore(secret: Uint8Array): Promise<void> {
-  await dbPut(encSlot(), bytesToHex(secret));
+  await encVaultStoreAt(encSlot(), secret);
 }
 
 /** Wipe this wallet's encryption secret (whole-DB wipe also drops it). */
