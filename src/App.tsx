@@ -13,6 +13,7 @@ import { ChatView } from './pages/ChatView';
 import { NewsView } from './pages/NewsView';
 import { BookmarksView } from './pages/BookmarksView';
 import { SettingsView } from './pages/SettingsView';
+import { TopicsSettingsView } from './pages/TopicsSettingsView';
 import { WalletView } from './pages/WalletView';
 import { ComposeView } from './pages/ComposeView';
 import { DmListView } from './pages/DmListView';
@@ -78,7 +79,7 @@ export const App: Component = () => {
               but NOT on views that have their own back button (chat, dm-conversation) */}
           {/* Global mobile back — only for views without their own header/back button */}
           <Show when={isModernStyle() && isMobileViewport() && !mobileListOpen()
-            && ['news', 'bookmarks', 'search', 'settings', 'wallet', 'notifications', 'compose', 'user', 'follow-list'].includes(route().view)}>
+            && ['news', 'bookmarks', 'search', 'settings', 'topics-settings', 'wallet', 'notifications', 'compose', 'user', 'follow-list'].includes(route().view)}>
             <div style="display:flex; align-items:center; padding:8px 12px; background:var(--color-bg-secondary); border-bottom:1px solid var(--color-border)">
               <button style="width:38px; height:38px; border-radius:50%; color:var(--color-text-secondary); display:flex; align-items:center; justify-content:center; cursor:pointer"
                 onClick={() => goBack('/chat')}>
@@ -104,6 +105,9 @@ export const App: Component = () => {
             </Match>
             <Match when={route().view === 'settings'}>
               <SettingsView />
+            </Match>
+            <Match when={route().view === 'topics-settings'}>
+              <TopicsSettingsView />
             </Match>
             <Match when={route().view === 'wallet'}>
               <WalletView />

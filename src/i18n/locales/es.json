@@ -435,5 +435,8 @@
   "verification_fee_network": "Tarifa de red (estimada)",
   "verification_fee_loading": "Comprobando el coste de la verificación…",
   "verification_fee_unknown": "Este nodo no puede informar de la tarifa actual. Tu monedero mostrará el importe exacto antes de confirmar.",
-  "verification_fee_unlocks": "Verificar desbloquea la edición de tus publicaciones y mensajes, la creación y gestión de canales, y la moderación."
+  "verification_fee_unlocks": "Verificar desbloquea la edición de tus publicaciones y mensajes, la creación y gestión de canales, y la moderación.",
+  "news_topics_manage_hint": "Sigue hashtags individuales o agrúpalos para que un grupo de temas funcione como su propio feed.",
+  "news_topic_add_button": "Añadir",
+  "news_topic_group_empty": "Aún no hay temas en este grupo."
 }

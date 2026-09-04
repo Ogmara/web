@@ -33,6 +33,7 @@ export type ViewName =
   | 'search'
   | 'bookmarks'
   | 'settings'
+  | 'topics-settings'
   | 'wallet'
   | 'compose'
   | 'channel-create'
@@ -115,6 +116,10 @@ function parseHash(hash: string): Route {
       return { view: 'notifications', params: {}, query };
 
     case 'settings':
+      // `/settings/topics` is its own view rather than an inline sidebar
+      // panel — see `TopicsSettingsView` — so managing topics can be linked
+      // to and backed out of like everything else.
+      if (second === 'topics') return { view: 'topics-settings', params: {}, query };
       return { view: 'settings', params: {}, query };
 
     case 'wallet':

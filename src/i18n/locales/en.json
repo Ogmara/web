@@ -435,5 +435,8 @@
   "verification_fee_network": "Network fee (estimated)",
   "verification_fee_loading": "Checking what verification costs…",
   "verification_fee_unknown": "This node can't report the current fee. Your wallet will show the exact amount before you confirm.",
-  "verification_fee_unlocks": "Verifying unlocks editing your posts and messages, creating and managing channels, and moderation."
+  "verification_fee_unlocks": "Verifying unlocks editing your posts and messages, creating and managing channels, and moderation.",
+  "news_topics_manage_hint": "Follow individual hashtags, or group them so a topic group behaves like its own feed.",
+  "news_topic_add_button": "Add",
+  "news_topic_group_empty": "No topics in this group yet."
 }

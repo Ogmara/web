@@ -5,6 +5,39 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.76.0] - 2026-09-04
+
+### Changed
+
+- **Followed Topics moved out of the News sidebar and into its own settings
+  page**, ported from desktop (1.74.0). The sidebar section used to be an
+  always-expanded management panel — an add-topic input, per-tag ✕ buttons,
+  inline rename, a floating context menu — sitting in a list of feeds that
+  otherwise looks like Global and Following: an icon, a label, a description,
+  click to switch. It read as a settings panel bolted onto the sidebar.
+
+  The sidebar now shows exactly two kinds of entry — Followed Topics and one
+  row per topic group — styled identically to Global/Following, with the
+  description line listing the hashtags each one covers. All editing lives on
+  a new page at `/settings/topics` (`TopicsSettingsView`), reached via a
+  "Manage topics" link. Unlike desktop, this keeps `window.confirm` for the
+  delete-group prompt — desktop had to replace it because Tauri's dialog
+  plugin hijacks `window.confirm` to call an IPC command that throws instead
+  of showing anything; a real browser has no such problem, and `window.confirm`
+  is what every other destructive action in this app already uses.
+
+### Fixed
+
+- **The sidebar's active tab did not follow "Default Landing View."** Setting
+  it to News opened the News pane correctly (`index.tsx` already rewrites the
+  boot URL from that setting before the router parses it), but the modern
+  sidebar's Chat/News Feed/Messages tab strip always initialized to Chat — the
+  two were never connected. `activeTab` is now seeded from the real initial
+  route, and a `createEffect` keeps it in sync with any navigation that
+  doesn't go through the sidebar's own tab buttons.
+- The classic sidebar's "Settings" row now also highlights while on
+  `/settings/topics`, matching how it already covers `/settings`.
+
 ## [0.75.2] - 2026-09-03
 
 Second audit pass, against the tree 0.75.1 fixed.

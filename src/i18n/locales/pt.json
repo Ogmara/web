@@ -435,5 +435,8 @@
   "verification_fee_network": "Taxa de rede (estimada)",
   "verification_fee_loading": "A verificar o custo da verificação…",
   "verification_fee_unknown": "Este nó não consegue indicar a taxa atual. A tua carteira mostrará o valor exato antes de confirmares.",
-  "verification_fee_unlocks": "Verificar desbloqueia a edição das tuas publicações e mensagens, a criação e gestão de canais, e a moderação."
+  "verification_fee_unlocks": "Verificar desbloqueia a edição das tuas publicações e mensagens, a criação e gestão de canais, e a moderação.",
+  "news_topics_manage_hint": "Siga hashtags individuais ou agrupe-os para que um grupo de tópicos funcione como o seu próprio feed.",
+  "news_topic_add_button": "Adicionar",
+  "news_topic_group_empty": "Ainda sem tópicos neste grupo."
 }

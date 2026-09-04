@@ -435,5 +435,8 @@
   "verification_fee_network": "ネットワーク手数料（概算）",
   "verification_fee_loading": "認証にかかる費用を確認しています…",
   "verification_fee_unknown": "このノードは現在の手数料を取得できません。確認前にウォレットが正確な金額を表示します。",
-  "verification_fee_unlocks": "認証すると、投稿やメッセージの編集、チャンネルの作成と管理、モデレーションが利用できます。"
+  "verification_fee_unlocks": "認証すると、投稿やメッセージの編集、チャンネルの作成と管理、モデレーションが利用できます。",
+  "news_topics_manage_hint": "個々のハッシュタグをフォローするか、グループ化してトピックグループを独自のフィードのように扱えます。",
+  "news_topic_add_button": "追加",
+  "news_topic_group_empty": "このグループにはまだトピックがありません。"
 }
