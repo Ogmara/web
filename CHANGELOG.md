@@ -5,6 +5,28 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.76.2] - 2026-09-04
+
+### Changed
+
+- Clarified `deviceEnc.ts`'s `getOrCreateDeviceId()` doc comment, which
+  called the value a *"stable per-install device identifier"* — misleading,
+  since it's actually per-ACCOUNT by construction (`deviceId` is a
+  `PER_WALLET` key in `settings.ts`, transparently resolved to
+  `ogmara.deviceId::<address>`). Investigated after a desktop security audit
+  raised it as a possible cross-account privacy leak (a shared `device_id`
+  would publicly link two wallet addresses as the same physical device,
+  docs/specs/05-clients.md §5.5.1a) — confirmed the underlying behavior was
+  already correct on both desktop and web; only the comment was stale. Added
+  `deviceIdScope.test.ts`, a behavioral regression test (two accounts on one
+  install resolve to two different `device_id` values, stored under distinct
+  address-suffixed keys) exercising the real modules end to end, since the
+  only existing coverage checked classification, not runtime behavior.
+  Required enabling `allowImportingTsExtensions` in `tsconfig.json` (already
+  set on desktop) so `settings.ts` could use an explicit `.ts` import
+  specifier `node --test` can resolve, matching this project's existing
+  convention for test-reachable modules.
+
 ## [0.76.1] - 2026-09-04
 
 ### Fixed

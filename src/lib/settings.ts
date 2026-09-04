@@ -4,7 +4,7 @@
  * Keys and defaults from spec 06-frontend.md section 4.1.
  */
 
-import { scopedKey } from './walletScope';
+import { scopedKey } from './walletScope.ts';
 
 export interface Settings {
   lang: string;

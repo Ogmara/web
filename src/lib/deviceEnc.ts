@@ -11,8 +11,10 @@
  *     (`ogd1…` key) — there IS a separate L2 device signer.
  *   - Built-in wallet: there is NO separate device signing key (L2 ops are
  *     signed with the wallet key directly), so we mint a stable random
- *     per-install `device_id` — same model desktop uses. (Accepted spec
- *     deviation, see `getOrCreateDeviceId`.)
+ *     `device_id` instead — same model desktop uses. PER ACCOUNT, not per
+ *     install (§5.5.1a) — see `getOrCreateDeviceId`. (The random-vs-derived
+ *     choice is the accepted spec deviation; the per-account scope is not
+ *     a deviation, it's required.)
  *
  * NOTE (P1 prerequisite): the enc private key is stored in IndexedDB (no OS keyring
  * on web). Before P3 ships, fold it into the wallet-encrypted key vault (§2.5).
@@ -36,15 +38,25 @@ const bytesToHex = (b: Uint8Array): string =>
   Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 
 /**
- * Stable per-install device identifier (32-byte hex) for the BUILT-IN wallet
- * model. Public, persisted once.
+ * Stable device identifier (32-byte hex) for the BUILT-IN wallet model,
+ * random rather than key-derived. Public.
  *
- * ACCEPTED SPEC DEVIATION (protocol §2.4): §2.4 defines `device_id` as the
- * device's Ed25519 *signing* key. A built-in wallet has no separate device
- * signing key (it signs with the wallet key directly), so we mint a random
- * stable per-install `device_id` instead. The node accepts this (router
- * validation only checks the value is 32-byte hex). Mirrors desktop. Behavior
- * is intentional — do not "fix" by deriving it from a key.
+ * PER ACCOUNT, not per install — `deviceId` is in `settings.ts`'s
+ * `PER_WALLET` set (§5.5.1a: sharing a `device_id` across accounts would
+ * publicly link them), so `getSetting`/`setSetting` below transparently
+ * resolve it to `ogmara.deviceId::<address>` via `walletScope.ts`. This
+ * function has no scoping logic of its own — it relies entirely on
+ * `settings.ts` already treating this key as account-scoped. Do not
+ * "simplify" by switching to a raw storage key: that would silently make
+ * it per-install again.
+ *
+ * ACCEPTED SPEC DEVIATION (protocol §2.4) — about DERIVATION, not scope:
+ * §2.4 defines `device_id` as the device's Ed25519 *signing* key. A
+ * built-in wallet has no separate device signing key (it signs with the
+ * wallet key directly), so we mint a random stable `device_id` instead.
+ * The node accepts this (router validation only checks the value is
+ * 32-byte hex). Mirrors desktop. Behavior is intentional — do not "fix" by
+ * deriving it from a key.
  */
 export function getOrCreateDeviceId(): string {
   let id = getSetting('deviceId');
