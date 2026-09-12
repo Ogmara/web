@@ -439,5 +439,8 @@
   "verification_fee_unlocks": "認証すると、投稿やメッセージの編集、チャンネルの作成と管理、モデレーションが利用できます。",
   "news_topics_manage_hint": "個々のハッシュタグをフォローするか、グループ化してトピックグループを独自のフィードのように扱えます。",
   "news_topic_add_button": "追加",
-  "news_topic_group_empty": "このグループにはまだトピックがありません。"
+  "news_topic_group_empty": "このグループにはまだトピックがありません。",
+  "bot_badge": "ボット",
+  "bot_badge_tooltip": "自己申告 — Ogmara による検証はありません",
+  "bot_commands_label": "ボットコマンド"
 }

@@ -439,5 +439,8 @@
   "verification_fee_unlocks": "Die Verifizierung schaltet das Bearbeiten deiner Beiträge und Nachrichten, das Erstellen und Verwalten von Kanälen sowie Moderation frei.",
   "news_topics_manage_hint": "Folge einzelnen Hashtags oder gruppiere sie, sodass eine Themengruppe wie ein eigener Feed funktioniert.",
   "news_topic_add_button": "Hinzufügen",
-  "news_topic_group_empty": "Noch keine Themen in dieser Gruppe."
+  "news_topic_group_empty": "Noch keine Themen in dieser Gruppe.",
+  "bot_badge": "Bot",
+  "bot_badge_tooltip": "Selbst angegeben — nicht von Ogmara verifiziert",
+  "bot_commands_label": "Bot-Befehle"
 }
