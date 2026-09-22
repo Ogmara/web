@@ -16,6 +16,7 @@ import type { DmDisplay } from '../lib/dmCrypto';
 import { MentionPopover } from '../components/MentionPopover';
 import { CommandPopover } from '../components/CommandPopover';
 import { BotBadge } from '../components/BotBadge';
+import { MessageButtons } from '../components/MessageButtons';
 import { navigate } from '../lib/router';
 import { setSetting } from '../lib/settings';
 import { FormattedText } from '../components/FormattedText';
@@ -23,7 +24,7 @@ import { EncryptedAttachments } from '../components/EncryptedAttachments';
 import { EmojiPicker } from '../components/EmojiPicker';
 import { MediaUpload, type MediaAttachment } from '../components/MediaUpload';
 import { uploadEncryptedFile } from '../lib/mediaCrypto';
-import { getPayloadContent, getPayloadAttachments, getPayloadMentions, decodePayload, buildOptimisticChatPayload, rewriteContentInPayload, safeAttachmentName } from '../lib/payload';
+import { getPayloadContent, getPayloadAttachments, getPayloadMentions, getPayloadButtons, getPayloadViaButton, decodePayload, buildOptimisticChatPayload, rewriteContentInPayload, safeAttachmentName } from '../lib/payload';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
 import { showMobileList } from '../lib/mobile-nav';
 import { isModernStyle } from '../lib/theme';
@@ -340,6 +341,9 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         // load older messages even if the previous channel had a fetch in
         // flight when we switched away.
         setLoadingOlder(false);
+        // An attempt count exhausted by a griefed channel must not carry
+        // over and deny recovery attempts in the NEXT channel switched to.
+        setStrandedRecoverAttempts(0);
       }
       // Mark prior in-flight fetch as stale. The SDK doesn't accept an
       // AbortSignal yet — the underlying fetch still runs to completion,
@@ -646,6 +650,23 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const d = chanDisplays()[msg.msg_id];
     return d && d.kind === 'text' && d.media ? d.media : [];
   };
+  // `buttons`/`via_button` stay PLAINTEXT even in encrypted channels (protocol
+  // §3.3) — same treatment as `mentions` above, so no isEncrypted() split.
+  const msgButtons = (msg: any) => getPayloadButtons(msg.payload);
+  // `getPayloadViaButton` is a full msgpack decode; `visibleMessages` below
+  // calls this once per message on every `allMessages()` recompute (every WS
+  // message, poll tick, reaction, edit). Message objects from `allMessages`
+  // are stable references (see its own comment — filtered/sorted, never
+  // recreated) and `via_button` never changes for a given message once set,
+  // so a WeakMap cache turns this back into O(1) amortized instead of a
+  // full re-decode of the whole visible window on every change.
+  const viaButtonCache = new WeakMap<object, boolean>();
+  const msgViaButton = (msg: any): boolean => {
+    if (viaButtonCache.has(msg)) return viaButtonCache.get(msg)!;
+    const v = getPayloadViaButton(msg.payload);
+    viaButtonCache.set(msg, v);
+    return v;
+  };
 
   const MAX_LOCAL_MESSAGES = 200;
 
@@ -727,8 +748,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           const next = [...filtered, msg];
           return next.length > MAX_LOCAL_MESSAGES ? next.slice(-MAX_LOCAL_MESSAGES) : next;
         });
-        // Increment new-message badge if user is scrolled away
-        if (messagesRef && msg.author !== walletAddress()) {
+        // Increment new-message badge if user is scrolled away. Skip a
+        // button press (protocol §3.3) — it's suppressed from the default
+        // feed render (see `visibleMessages`), so counting it here would
+        // show "N new" with nothing new to scroll to.
+        if (messagesRef && msg.author !== walletAddress() && !msgViaButton(msg)) {
           const { scrollTop, scrollHeight, clientHeight } = messagesRef;
           if (scrollHeight - scrollTop - clientHeight >= SCROLL_NEAR_BOTTOM_PX) {
             setNewMsgCount((c) => c + 1);
@@ -807,6 +831,52 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     });
     deduped.sort((a, b) => normalizeTs(a.timestamp) - normalizeTs(b.timestamp));
     return deduped;
+  });
+
+  // Button-press messages (via_button: true) are suppressed from the default
+  // feed — frontend spec §6.1.3: "the user only wants to see the bot's
+  // reply, not their own tap." `allMessages()` stays the unfiltered source of
+  // truth (reply-preview lookups, edit prefill, scroll-to-message all still
+  // need to resolve ANY message by id); this derived list is what actually
+  // renders, including date-separator/continuation grouping — a hidden press
+  // sitting between two real messages must not visually break or extend a
+  // continuation run either.
+  // A button-press message (via_button) is suppressed from the default feed
+  // render below — but a permalink/share-link (`?msg=`) MUST still be able
+  // to land on one (frontend spec §6.1.3: "Search results, permalinks, and
+  // any moderation/report view MUST render every message unconditionally").
+  // The deep-link effect further down sets this to the target hex id while
+  // it's actively trying to resolve `?msg=<hex>`.
+  const [deepLinkPinnedId, setDeepLinkPinnedId] = createSignal<string | null>(null);
+  const visibleMessages = createMemo(() => {
+    const pinned = deepLinkPinnedId();
+    return allMessages().filter((m) => !msgViaButton(m) || msgIdToHex(m.msg_id) === pinned);
+  });
+
+  // `via_button` carries NO server-side authority (protocol §3.3 — any
+  // wallet can set it on an ordinary message), so a loaded page that's
+  // entirely button-presses is directly attacker-reachable: post enough of
+  // them and `visibleMessages()` goes empty while `allMessages()` isn't.
+  // `.chat-messages` then has no rendered children, so `scrollHeight ===
+  // clientHeight` and the scroll-driven `handleScroll` pagination
+  // (`loadOlderMessages`'s only other caller besides the deep-link effect)
+  // can never fire — the channel would otherwise render permanently blank.
+  // Drive recovery from here instead of from a scroll event that can't
+  // happen; capped so a very long, entirely-suppressed run can't turn into
+  // unbounded background fetching — beyond the cap this falls through to
+  // the ordinary empty-state fallback below.
+  const [strandedRecoverAttempts, setStrandedRecoverAttempts] = createSignal(0);
+  const MAX_STRANDED_RECOVER = 10;
+  createEffect(() => {
+    if (visibleMessages().length === 0 && allMessages().length > 0
+        && hasMoreOlder() && !loadingOlder()) {
+      if (strandedRecoverAttempts() < MAX_STRANDED_RECOVER) {
+        setStrandedRecoverAttempts((n) => n + 1);
+        loadOlderMessages();
+      }
+    } else if (visibleMessages().length > 0) {
+      setStrandedRecoverAttempts(0);
+    }
   });
 
   // Resolve profiles for all unique authors
@@ -973,12 +1043,20 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const targetRaw = queryParam('msg');
     const channelAtEntry = props.channelId;
     // Only honour well-formed 64-char hex msg_ids; anything else is a malformed
-    // share link or hostile URL — silently drop.
-    const target = targetRaw && /^[0-9a-fA-F]{64}$/.test(targetRaw) ? targetRaw : null;
-    if (!target) { deepLinkSatisfiedKey = null; deepLinkAttempts = 0; return; }
+    // share link or hostile URL — silently drop. Lowercased: `data-msg-id`
+    // and `msgIdToHex()` (used for the `visibleMessages` pin comparison) are
+    // always lowercase, so an uppercase-hex share link would otherwise never
+    // match either — the exact "permalinks MUST render unconditionally"
+    // case this pin exists for.
+    const target = targetRaw && /^[0-9a-fA-F]{64}$/.test(targetRaw) ? targetRaw.toLowerCase() : null;
+    if (!target) { deepLinkSatisfiedKey = null; deepLinkAttempts = 0; setDeepLinkPinnedId(null); return; }
     const key = `${channelAtEntry}:${target}`;
     if (deepLinkSatisfiedKey === key) return;
     if (messages.loading) return;
+    // Exempt this id from the via_button feed filter for as long as we're
+    // trying to resolve it — a shared link to a button press must still
+    // render (see `visibleMessages` above).
+    setDeepLinkPinnedId(target);
     setTimeout(() => {
       // Race guard: channel may have changed during the 100ms delay.
       if (props.channelId !== channelAtEntry) return;
@@ -987,12 +1065,22 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         scrollToMessage(target);
         deepLinkSatisfiedKey = key;
         deepLinkAttempts = 0;
+        // Deliberately do NOT clear the pin here: `visibleMessages()` is a
+        // Solid memo, so clearing it synchronously un-suppresses the row
+        // out from under `scrollToMessage()`'s smooth-scroll before the
+        // user ever sees it — the row would disappear mid-animation. The
+        // pin already self-clears on every OTHER exit from this effect
+        // (target removed from the URL, or a new target overwrites it), so
+        // leaving it set here just means a visited permalink stays visible
+        // in the feed for the rest of this view's lifetime — harmless, and
+        // arguably correct (the user explicitly navigated to it).
       } else if (hasMoreOlder() && deepLinkAttempts < MAX_DEEPLINK_PAGINATES && !loadingOlder()) {
         deepLinkAttempts++;
         loadOlderMessages();
       } else {
         deepLinkSatisfiedKey = key;
         deepLinkAttempts = 0;
+        setDeepLinkPinnedId(null);
         flashShareToast(t('share_link_unavailable'));
       }
     }, 100);
@@ -1113,6 +1201,33 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       // Focus after sending is cleared (textarea is no longer disabled)
       setTimeout(() => inputRef()?.focus(), 0);
     }
+  };
+
+  /**
+   * Sends a button press (protocol §3.3): an ordinary signed message whose
+   * content is the literal `command`, replying to `origin` and flagged
+   * `via_button`. Branches on encryption exactly like `handleSend` above —
+   * spec §6.1.3: "Private and encrypted channels. Buttons work there
+   * unchanged" — only `content` is ever sealed, so a press needs the
+   * channel's epoch key the same way a typed message does. Passed to
+   * `MessageButtons` as `onPress`; it has no channel-crypto access itself.
+   */
+  const pressButton = async (
+    origin: { channelId: number; msgId: string; author: string },
+    command: string,
+  ) => {
+    const client = getClient();
+    if (isEncrypted()) {
+      const built = await buildEncryptedChannelMsg(origin.channelId, canEstablishKey(), command, {
+        replyTo: origin.msgId, mentions: [origin.author], viaButton: true,
+      }, encFloor());
+      if (built === 'waiting') {
+        throw new Error(t('channel_waiting_for_key'));
+      }
+      await client.sendMessageEnvelope(built);
+      return;
+    }
+    await client.pressButton(origin, command);
   };
 
   const handleReply = (msg: any) => {
@@ -1354,12 +1469,24 @@ export const ChatView: Component<ChatViewProps> = (props) => {
           </Show>
         <div class="chat-messages" ref={messagesRef} onScroll={handleScroll}>
           <Show
-            when={allMessages().length > 0}
+            // Stay "shown" (rendering nothing, which is fine — the effect
+            // above drives recovery without needing a scroll event) only
+            // while recovery is actually still possible: there's more older
+            // history to fetch AND we haven't exhausted the attempt cap.
+            // `hasMoreOlder() === false` means every message in this channel
+            // is already loaded and they're all suppressed presses — no
+            // further fetch will ever change that, so this must fall through
+            // to the empty-state text instead of looping the condition true
+            // forever (`strandedRecoverAttempts` only increments inside the
+            // `hasMoreOlder()` branch of the effect above, so without this
+            // check it would stay under the cap, and thus "shown", forever).
+            when={visibleMessages().length > 0
+              || (allMessages().length > 0 && hasMoreOlder() && strandedRecoverAttempts() < MAX_STRANDED_RECOVER)}
             fallback={<div class="chat-empty"><p>{t('chat_no_messages')}</p></div>}
           >
-            <For each={allMessages()}>
+            <For each={visibleMessages()}>
               {(msg, index) => {
-                const msgs = allMessages();
+                const msgs = visibleMessages();
                 const prevMsg = index() > 0 ? msgs[index() - 1] : null;
                 const currentDate = getDateLabel(msg.timestamp);
                 const prevDate = prevMsg ? getDateLabel(prevMsg.timestamp) : null;
@@ -1431,6 +1558,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                             <div class="message-body"><FormattedText content={displayContent(msg)} attachments={msgAttachments(msg)} /><EncryptedAttachments media={msgMedia(msg)} /></div>
                           </Show>
                         </Show>
+                        <Show when={!msg.deleted && (!msg.muted || expandedMuted().has(msgHex))}>
+                          <Show when={canPostHere()}>
+                            <MessageButtons rows={msgButtons(msg)} channelId={props.channelId!} msgId={msgHex} author={msg.author} onPress={pressButton} />
+                          </Show>
+                        </Show>
                         <Show when={walletAddress() && !msg.deleted}>
                           <div class="msg-react-hover">
                             {['👍', '👎', '❤️', '🔥', '😂', '😮'].map((emoji) => (
@@ -1499,6 +1631,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
                                   <span class="message-time">{formatMessageTime(msg.timestamp)}</span>
                                 </span>
                               </div>
+                            </Show>
+                          </Show>
+                          <Show when={!msg.deleted && (!msg.muted || expandedMuted().has(msgHex))}>
+                            <Show when={canPostHere()}>
+                              <MessageButtons rows={msgButtons(msg)} channelId={props.channelId!} msgId={msgHex} author={msg.author} onPress={pressButton} />
                             </Show>
                           </Show>
                           <Show when={msg.reactions && Object.keys(msg.reactions).length > 0}>

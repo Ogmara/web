@@ -333,6 +333,13 @@ export async function buildEncryptedChannelMsg(
     /** Encrypted-media descriptors (P5) — sealed inside the content; only stripped
      *  `{cid,size}` reaches the wire. Preferred over plaintext `attachments`. */
     media?: MediaDescriptor[];
+    /**
+     * Set when this message IS a button press (protocol §3.3). Forwarded
+     * verbatim to the SDK, which stamps it into the PLAINTEXT outer payload
+     * (never sealed) — feed-suppression rendering hints work identically to
+     * a plaintext channel's messages.
+     */
+    viaButton?: boolean;
   },
   floor = 0,
 ): Promise<Uint8Array | 'waiting'> {
@@ -345,7 +352,7 @@ export async function buildEncryptedChannelMsg(
     channelId, convKey: established.convKey, epoch: established.epoch,
     text, replyTo: opts?.replyTo, mentions: opts?.mentions,
     contentRating: opts?.contentRating, attachments: opts?.attachments,
-    media: opts?.media,
+    media: opts?.media, viaButton: opts?.viaButton,
   });
 }
 
