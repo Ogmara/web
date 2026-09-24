@@ -88,6 +88,7 @@ import {
 import { downloadChannelOrg } from '../lib/settings-sync';
 import { NewsFeedTopics } from './NewsFeedTopics';
 import { hideConversation, isConversationHidden } from '../lib/dm-hide';
+import { clearCachedMessages } from '../lib/messageCache';
 import { keepMenuInViewport } from '../lib/menu-position';
 import { vaultExportKey } from '../lib/vault';
 import { scopedGet, scopedSet } from '../lib/walletScope';
@@ -394,6 +395,32 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     if (!ctx) return;
     if (!window.confirm(t('dm_delete_confirm'))) return;
     hideConversation(ctx.address);
+    // If this conversation is the one currently open, its view is still
+    // mounted, still polling every 8s, and would silently re-persist the
+    // cache a clear below is about to wipe (re-audit finding). Navigate
+    // away first — mirroring "leave channel"'s identical fix — so the
+    // unmount cleanup's flush happens BEFORE the clear, not after.
+    if (route().view === 'dm-conversation' && route().params.address === ctx.address) {
+      navigate('/dm');
+    }
+    // Clears the message-history cache too, not just the list entry — a
+    // hidden conversation isn't a real delete (it reappears on a new
+    // message from the peer), but there's no reason to keep the old
+    // history at rest once the user has explicitly said "hide this".
+    // Deferred a tick for the same reason as "leave channel": `navigate()`
+    // (`router.ts`) sets `window.location.hash`, and the route disposal
+    // that unmounts the conversation view (running its unmount flush) is
+    // driven by the resulting `hashchange` — a macrotask, not a
+    // microtask. `setTimeout(0)` queues after it in every current browser
+    // because it's a same-priority macrotask enqueued strictly later, so
+    // this clear correctly lands after that flush rather than before it —
+    // but that ordering rests on browsers' de facto same-source task
+    // ordering, not a documented guarantee. Round-3 re-audit: verified
+    // correct today; a deterministic alternative (e.g. a short-lived
+    // tombstone `writeCachedMessages` itself honors) would remove the
+    // reliance on it if this ever needs to be bulletproof rather than
+    // "correct in every current engine".
+    setTimeout(() => clearCachedMessages('dm', ctx.address, getCurrentNodeUrl()), 0);
   };
 
   // Close context menus on any click
@@ -1401,6 +1428,16 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
               clearPlacement(ctx.channelId); // drop its group placement (syncs)
               window.dispatchEvent(new Event('ogmara:channels-changed'));
               navigate('/news');
+              // Deliberately AFTER navigate, and deferred a tick: if this
+              // channel was the one currently open, navigating away
+              // unmounts ChatView, whose OWN unmount cleanup flushes any
+              // still-pending debounced cache write straight back — a
+              // clear issued before that flush would just get silently
+              // resurrected (re-audit finding). See the identical
+              // `setTimeout(0)` in `handleDmDelete` above for exactly why
+              // this ordering holds (a `hashchange`-macrotask timing
+              // argument, not a microtask one) and its caveat.
+              setTimeout(() => clearCachedMessages('ch', ctx.channelId, getCurrentNodeUrl()), 0);
             } catch (e: any) {
               alert(e?.message || 'Failed to leave channel');
             }

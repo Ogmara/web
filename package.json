@@ -1,6 +1,6 @@
 {
   "name": "@ogmara/web",
-  "version": "0.79.1",
+  "version": "0.80.0",
   "private": true,
   "description": "Ogmara web application \u2014 decentralized chat and news PWA",
   "scripts": {
@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "test": "node --test src/**/*.test.ts"
+    "test": "node --conditions=browser --test src/**/*.test.ts"
   },
   "dependencies": {
     "@msgpack/msgpack": "^3.0.0",

@@ -5,6 +5,405 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.80.0] - 2026-09-24
+
+### Added
+
+- **Local message-history cache for channel chat and DMs** (Phase 1 of a
+  cross-client caching plan; desktop and mobile follow in later phases):
+  reopening a channel or DM you were already in now paints instantly from
+  the last-seen snapshot instead of blanking and reloading from the network
+  every time. New `src/lib/messageCache.ts`, wired into `ChatView.tsx` and
+  `DmConversationView.tsx`.
+  - **Security-critical design constraint, empirically confirmed against a
+    live node (Phase 0)**: an `after`-cursor delta fetch can never
+    resurface an edit, deletion, or reaction change on a message that
+    predates the cursor — it's simply absent from the response, not stale,
+    not updated, just missing (edits/deletes are a read-time projection
+    server-side; the column families that record them have no REST
+    reader). The cache is therefore capped at 50 rows — the smallest
+    `limit` either caller's real unconditional fetch actually requests
+    (not the node's 100 page-size clamp, which is merely an upper bound on
+    what CAN be requested — see the Security section below, this was
+    initially shipped wrong at 100) — so every cached row is revalidated
+    by the very next such fetch. The cache is never refreshed via `after`;
+    that stays exactly where it already was, in the existing
+    live/steady-state poll.
+  - Reconciliation (`mergeMessages`): on a fresh fetch, any id also present
+    in the cache is replaced WHOLESALE by the fresh row (never a
+    field-level merge, which could resurrect a cached body for a message
+    the server now reports deleted); a fetch that shares zero overlap with
+    the cache AND returned a full page is treated as a disconnected,
+    unverifiable island and the cache is discarded outright rather than
+    risk rendering it.
+  - Ciphertext, not plaintext, is cached for encrypted channels/DMs — ADR
+    documented in `messageCache.ts`'s header comment.
+  - Wallet- and node-scoped storage keys (via the existing `walletScope.ts`
+    primitive), a 50-row-per-conversation cap, a 512 KiB per-conversation
+    serialized-size self-trim and a 64 KiB per-row payload cap (see
+    Security below), a 7-day TTL, a 30-conversation cross-conversation
+    LRU, and rate-limited quota-exceeded eviction-and-retry.
+  - 42 unit tests: 38 in `src/lib/messageCache.test.ts` covering all
+    `mergeMessages` branches, the optimistic/local-id filter, wallet AND
+    node scoping (the cross-account/cross-node leakage class of bug),
+    corrupt/schema-mismatched/expired-cache fallthrough, byte-bound
+    rejection and self-trim, client-only-field stripping, malformed-payload
+    rejection, and quota/eviction handling including the rate-limit; plus
+    4 in the new `src/pages/conversationCacheWiring.test.ts`, which drives
+    the real Solid `createResource`/`createEffect` scheduling directly
+    (`npm test` now passes `--conditions=browser`, which resolves
+    `solid-js` to `dist/solid.js` — the same production reactive build
+    `vite build` ships — so this actually exercises real reactive
+    behavior; Node's default resolution instead picks `solid-js`'s
+    non-reactive SSR build) — added after the cross-conversation bug below
+    was found a THIRD time, since nothing testing only `messageCache.ts`'s
+    pure functions could ever catch a bug that lives entirely in Solid's
+    scheduling.
+
+### Fixed
+
+- `ChatView.tsx`'s initial-page sizing was capped at 200 messages
+  client-side, but the node silently clamps `GET /channels/:id/messages`
+  at 100 — the 200 ceiling never actually took effect. Corrected to 100.
+
+### Security
+
+Two rounds of Code + Security audit (Agent tool, `model: opus`, run in
+parallel each round, per this project's mandatory pipeline) on the feature
+above. Round 1 found real, sometimes-critical issues in the FIRST
+implementation, all fixed before anything shipped:
+
+- **Cross-conversation content leak, two independent forms — the
+  headline finding of round 1.** `createResource` (Solid) retains the
+  PREVIOUS conversation's fetched value while a new fetch is in flight; a
+  channel/DM switch does not make it `undefined`. Two effects read it
+  without accounting for this:
+  - The reconcile-against-cache effect could run mid-switch with the OLD
+    conversation's messages, merging them into the NEW conversation's
+    freshly-seeded cache and rendering them there.
+  - The debounced persist effect read `props.channelId`/`peerAddress` and
+    the live message list INSIDE its `setTimeout` callback (at fire time,
+    not schedule time) — reachable by simply opening a conversation and
+    navigating away within one second (the debounce window): the write
+    landed under the NEW conversation's cache key with the OLD
+    conversation's content. The `onCleanup` unmount flush hit this on
+    *every* navigation, since `props.channelId` already reads `null` by
+    the time a route's component is disposed.
+  - Fixed with two independent layers: a `messages.loading` guard (defers
+    reconciliation until the fetch for the CURRENT conversation has
+    actually resolved — verified against the real `solid-js` runtime, not
+    just reasoned about) plus a content-based spot-check (every message
+    must actually carry this conversation's `channel_id`, or for DMs be
+    authored by one of the two participants); and capturing the
+    conversation id + a message-list snapshot at effect-*schedule* time
+    into a small pending-write record, so the timeout/flush/cleanup paths
+    never re-read live props at fire time.
+- **The cache cap (100) exceeded what either caller's fetch actually
+  validates (50)**, silently defeating the safety property in the module's
+  own design doc for the older half of every cached conversation — an
+  edit or delete in that half could re-render from cache indefinitely.
+  Cap corrected to 50 (see Added, above).
+- **No byte bound on a message's payload or a conversation's total
+  serialized size** — a hostile channel member (no special access needed)
+  could post enough near-max-size (64 KiB) messages to blow the origin's
+  storage quota, which previously triggered evicting the VICTIM's OTHER,
+  unrelated cached conversations on every failed write, with no backoff.
+  Fixed with a per-row payload cap matching the protocol's own
+  `MAX_CHAT_PAYLOAD_BYTES`, a per-conversation self-trim budget (trims
+  that SAME conversation's own oldest rows, never a sibling's), and a
+  rate limit on how often a failed write may trigger evicting other
+  conversations at all.
+- **No TTL** — a conversation whose access was later revoked (left/removed
+  from a private channel, channel deleted, node lost the data) kept
+  painting its last-cached content on every open, forever; a generic fetch
+  failure (including a 403/404, i.e. actual revocation, not a network
+  blip) was also never distinguished from "transient, keep the cache."
+  Added a 7-day TTL and explicit cache-clearing on a 403/404 response.
+  `clearCachedMessages` (present since round 1 but never called by
+  anything) is now wired into "Delete conversation" and "Leave channel"
+  too.
+- `mergeMessages`'s discard branch aliased and in-place-sorted the
+  `messages` resource's own backing array rather than copying it first —
+  latent, not yet observed to cause a visible bug, but a real shared-
+  mutable hazard against Solid's own reactive value. Fixed to copy first.
+- A message's client-only annotations (anything starting with `_`) are now
+  stripped by name pattern rather than by only excluding the two fields
+  known to exist today — one of them, an optimistic row's `_media`, would
+  carry a plaintext per-file content key were it ever cached (it currently
+  isn't, by coincidence of the optimistic-row filter already catching it,
+  not by design).
+- A malformed `payload` (e.g. a plain string, reachable via an existing
+  optimistic-edit fallback path) previously silently zero-filled instead
+  of being rejected, which would have cached a corrupted body under a
+  REAL message id. Now dropped instead of cached.
+- `msg_id` normalization now matches the app's own `msgIdToHex` handling
+  (hex string, `number[]`, or `Uint8Array`) — previously only accepted a
+  hex string, silently dropping any row that legitimately arrives in one
+  of the other two shapes from cache write/merge.
+- A version-mismatched cache blob (from a future `CACHE_VERSION` bump) is
+  now removed from disk on read instead of being left stranded and
+  untracked by the LRU forever.
+- A pathologically long conversation id (e.g. a crafted `/dm/<junk>` link)
+  is now rejected as a no-op rather than becoming a storage key and an LRU
+  churn source.
+
+**Round 2 re-audit: the headline round-1 fix was INCOMPLETE, not wrong in
+direction.** Per this project's mandatory re-audit-the-fixed-tree rule —
+round 1's "content spot-check" mitigation for the cross-conversation
+persist leak turned out not to hold weight:
+
+- **CRITICAL, still open after round 1.** The persist effect's
+  `channel_id`-based filter was **vacuous** — a REST-fetched chat envelope
+  never carries a `channel_id` field at all (only WS frames do, and those
+  flow through a separate path), so the filter passed every row through
+  unfiltered. The DM equivalent (`author === peer || author === me`)
+  rejected the wrong peer's inbound messages but passed through every
+  message *I* had ever sent, to *any* peer, since I'm the author of all of
+  them. Reproduced empirically on a rapid A→B→C channel switch: channel
+  A's history landed under channel B's cache key. Root cause was the same
+  one round 1 already fixed for the MERGE effect but never applied to the
+  PERSIST effect: `createResource` retains the previous conversation's
+  value while a new fetch is in flight, and the persist effect (unlike
+  the merge effect) had no `messages.loading` guard. Fixed by applying
+  the identical guard — read unconditionally so it stays tracked, arming
+  a new pending write skipped while `true` — and removing the vacuous
+  content filters entirely rather than leaving them in as inert,
+  misleadingly-reassuring "defense in depth". Re-verified empirically
+  against the real `solid-js` runtime with the exact rapid-switch
+  reproduction that found it: zero contamination.
+- **MEDIUM.** Clearing the cache on a 403/404 (access revoked) only wiped
+  disk and the module's in-memory `warm` layer — the view's own LIVE
+  `cachedMessages` signal, already seeded earlier in the same fetch cycle,
+  kept rendering the pre-revocation content for the rest of the session.
+  Now also reset on detection.
+- **MEDIUM.** "Delete conversation" (DM hide) and "Leave channel" could
+  have their cache-clear silently undone: if the conversation being
+  cleared was the one currently open, its view stayed mounted (hide) or
+  its unmount cleanup fired its own flush immediately after (leave),
+  re-writing the cache moments after it was cleared. Both actions now
+  navigate away from that conversation first (when it's the one open) and
+  defer the clear a tick, so it lands after any unmount flush rather than
+  before it.
+- **MEDIUM.** `readCachedMessages` could throw on a corrupted disk blob
+  with a malformed (e.g. `null`) row element, and it's called synchronously
+  inside a `createResource` fetcher's channel-switch branch, BEFORE that
+  fetcher's own `try` — an uncaught throw put the whole resource into an
+  error state, breaking the entire view for the rest of the session (not
+  just a bad row). Reachable by anyone who can write `localStorage` for
+  this origin (XSS, devtools, a malicious extension) — already named as
+  in-scope in this module's own threat model. Now defensive per-row, and
+  the whole function is wrapped as a second safety net.
+- **MEDIUM.** The per-conversation byte-budget self-trim re-stringified
+  the ENTIRE (shrinking-by-one-row) object on every trim iteration —
+  O(n²) — measured at ~94ms of blocking main-thread work per persist tick
+  for a hostile channel's 50 near-max-size messages, repeatable up to once
+  per second while messages flow. Rewritten to size each row once and
+  take a single cumulative-size slice — O(n).
+- **NOTE.** The in-memory `warm` layer could hold a different (untrimmed)
+  row count than what a self-trim actually wrote to disk, so the same tab
+  could read back more rows than were ever really persisted. `warm` is
+  now set from what `writeConvToDisk` reports was actually written.
+- **NOTE.** `isAccessRevokedError`'s regex is now anchored to the start of
+  the message — unanchored, a non-403/404 error whose response body
+  happened to quote 404-shaped text could false-positive.
+- **NOTE.** `CACHE_VERSION` bumped 1→2 alongside the `cachedAt` (TTL)
+  field, closing a gap where a hypothetical pre-`cachedAt` blob would read
+  as permanently expired without ever being cleaned up (harmless in
+  practice — this feature had not shipped, so there were no real v1
+  blobs — but free to close before anything ships).
+
+**Round 3 re-audit: the cross-conversation bug reopened a THIRD time, via
+a path neither prior round touched — the `createResource` SOURCE
+function.**
+
+- **MEDIUM, the headline finding.** `DmConversationView.tsx`'s resource
+  source was `authStatus() === 'ready' ? props.peerAddress : undefined` —
+  conditionally `undefined`. Solid's `createResource` SHORT-CIRCUITS
+  entirely when its source is falsy: no fetch starts, and critically
+  `loading` stays `false` while `value()` keeps whatever the PREVIOUS
+  peer's fetch last returned. That silently bypassed round 2's
+  `messages.loading` guard specifically across a disconnect/reconnect
+  (the one path where `authStatus` actually leaves `'ready'` mid-session),
+  reopening the exact write-under-the-wrong-key bug for the third time.
+  Reproduced empirically. `ChatView.tsx`'s source was already an
+  always-truthy object (`{ channelId, auth }`) and was never affected —
+  the DM view's source is now the same shape (`{ peer, auth }`), with the
+  ready/not-ready decision moved inside the fetcher where returning
+  `undefined` doesn't short-circuit anything.
+- **MEDIUM.** `writeCachedMessages`/`readCachedMessages` never actually
+  checked for an active wallet themselves — they relied on `scopedKey`
+  returning `null` deep inside `writeConvToDisk`/`readConvFromDisk` to
+  make the DISK operations no-op, but `warm.set`/`warm.get` don't go
+  through `scopedKey` at all. A debounced write already armed when
+  `setWalletScope(null)` fires (e.g. mid-disconnect) could repopulate the
+  in-memory `warm` layer moments after the wallet-switch reset had just
+  cleared it — served from memory to whatever reads that key next, until
+  the following account-switch self-heals it. Both functions now check
+  for an active wallet up front, closing the gap at its actual source
+  instead of leaving it implicit two layers down.
+- **LOW.** The now-removed-elsewhere-but-still-present `channel_id`/
+  `author` "defense in depth" filters were still in the MERGE effects
+  (round 2 removed them from the persist effects only). Confirmed harmless
+  today (same reason as before — the fields they check don't exist on a
+  REST envelope, or match unconditionally) but a LATENT hazard in the
+  other direction: if the node ever attached `channel_id` in an
+  unrecognized shape, the check would silently disable that channel's
+  cache reconciliation forever — precisely the "stale content renders
+  indefinitely" failure this whole module exists to prevent. Removed for
+  consistency with the persist-effect decision.
+- **LOW.** `touch()` (the cross-conversation LRU bookkeeping) ran even
+  when a write totally failed, spending one of 30 LRU slots — and
+  potentially evicting a genuinely-persisted sibling — for nothing. Now
+  only records a conversation as touched when a write actually landed.
+  **This was itself reversed by round 4 below** — that "for nothing" framing
+  missed that skipping `touch()` on failure left the failed conversation
+  permanently un-evictable instead.
+- **NOTE.** The `setTimeout(0)`-deferred cache-clear ordering in
+  `Sidebar.tsx` (added in round 2) works correctly, verified empirically,
+  but its comment described the wrong mechanism (claimed a microtask
+  boundary; the real reason is that `navigate()` changes
+  `window.location.hash`, and the resulting route disposal is itself a
+  same-priority `hashchange`-driven macrotask that a `setTimeout(0)`
+  reliably queues after in every current engine). Comment corrected to
+  describe the real, if less formally guaranteed, ordering.
+- **Added `src/pages/conversationCacheWiring.test.ts`** (4 tests) — a
+  regression test for the WIRING pattern itself (source + fetcher + merge
+  effect + persist effect) against the real Solid scheduler, including a
+  negative control proving the harness actually detects the bug class.
+  `npm test` now passes `--conditions=browser --conditions=development`
+  (verified: no effect on the other 63 pre-existing tests) so this
+  actually runs reactively instead of against Solid's non-functional SSR
+  build.
+- **Deliberately not done, recorded rather than silently skipped:**
+  extracting the duplicated merge/persist-effect wiring out of
+  `ChatView.tsx` and `DmConversationView.tsx` into one shared, single-
+  source-of-truth helper. That duplication is the actual reason this bug
+  needed independent discovery and fixing in each file, twice. Not
+  attempted in this pass — a fourth non-trivial change to this exact
+  fragile area, needing its own audit round, was judged a worse trade
+  than shipping the now-triple-verified fix and recording the follow-up
+  explicitly. The new wiring test above at least means a future version
+  of this bug gets caught before an audit round has to find it again.
+
+**Round 4 re-audit — the cross-conversation wiring bug itself: NOT found
+again.** This round deliberately went looking for a fourth mechanism (an
+adversarial harness modeling the DM view's manual 8s poll `refetch()`,
+`authStatus()` transitions mid-switch, and 60 randomized interleaved
+switches — none of which any prior round's reproduction covered), traced
+Solid's actual scheduler source directly rather than just re-reading the
+guard code, and found the round-1/2/3 fixes hold: `refetch()` takes an
+identical path to a source-change load (so the manual poll doesn't bypass
+the guard), an abandoned in-flight fetch (manual or source-driven) can
+never commit its value regardless of what races it, and the merge/persist
+effects' ordering relative to the resource's own load is structurally
+guaranteed by Solid's queue separation (pure computations before user
+effects), not incidental timing. Two NEW findings, both confined to
+`messageCache.ts` alone (not the wiring):
+
+- **MEDIUM.** `writeCachedMessages` ran the expensive part (base64-
+  encoding every message's payload) on the ENTIRE incoming snapshot before
+  capping to `MAX_ROWS_PER_CONV`, rather than after. `ChatView.tsx` can
+  pass up to 1000 rows (`MAX_TOTAL_MESSAGES`, after sustained scroll-up)
+  to keep the newest 50 — measured at up to ~530ms of blocking work for a
+  hostile channel's near-max-size flood, landing on every channel switch
+  (`onCleanup`) and every tab hide (`visibilitychange`). The exact same
+  shape as the O(n²) `trimToByteBudget` finding from round 2 (there:
+  ~94ms/tick), reintroduced one layer earlier. Fixed by deduping, sorting,
+  and capping the RAW messages first, and only then projecting the
+  surviving <= 50 rows through the (expensive) encoding step.
+- **MEDIUM.** Round 3's own `touch()` fix — only recording a conversation
+  as LRU-touched when its write actually succeeded — meant a conversation
+  whose write fails even after eviction-and-retry (the exact hostile-flood
+  scenario this module is hardened against) lands in the in-memory `warm`
+  layer but NEVER in the LRU index, and `warm` is only ever pruned by
+  walking that index. Such an entry — holding the pre-trim, potentially
+  multi-megabyte version of the conversation by design — became
+  permanently un-evictable, defeating the 30-conversation bound
+  specifically under sustained quota pressure (round 5 found this
+  unconditional `touch()` still wasn't sufficient on its own when
+  `localStorage` is entirely unwritable — see below). Both findings' fixes
+  are covered by 2 new tests, each verified against a negative control
+  (temporarily reverting the fix) to confirm the test actually catches the
+  regression, not just that it passes.
+- `package.json`'s test script dropped the `--conditions=development` flag,
+  keeping `--conditions=browser` alone. Round 5 later corrected the reasoning
+  recorded here at the time: the two condition sets do NOT resolve `solid-js`
+  to byte-identical files (`--conditions=browser` alone resolves to
+  `dist/solid.js`; adding `development` resolves to a different file,
+  `dist/dev.js`) — the change is still correct, just for a different
+  reason than originally stated: `dist/solid.js` is the exact production
+  reactive build `vite build` actually ships, so testing under it (rather
+  than the dev build) tests the real thing with one fewer moving part.
+- **Deferred, recorded explicitly, not reachable today:** (a) a debounced
+  write armed under wallet A could in principle write into wallet B's
+  namespace if it fires after `setWalletScope(B)` — the round-3 guard
+  checks "is a wallet active", not "is it the SAME wallet that was active
+  when this write was scheduled". No extension `accountsChanged` listener
+  exists in this codebase, and every actual account-switch path already
+  unmounts and flushes the chat views first, so this has no live trigger
+  today; worth closing before any code path changes that. (b) On a cold
+  boot, `bootstrapNodeSelection()` can silently switch the active node
+  (no reload, unlike a user-driven node switch) while a chat view is
+  already mounted against the previously-selected node, opening a narrow
+  window where a persist tick writes under the new node's cache key —
+  same wallet, same channel id, so the blast radius is stale/wrong-node
+  content, not a privacy or cross-account boundary.
+- **Not done, recorded as a worthwhile follow-up:** broadening
+  `conversationCacheWiring.test.ts` to also model `refetch()`, the seed
+  effect, and the merge effect together (the round-4 audit's own
+  ephemeral harness did this and is what actually found there was no
+  fourth mechanism) — the shipped test currently covers the persist
+  effect in isolation. Not folded into the committed suite this round;
+  the wiring class is confirmed closed for now via the audit's own
+  (unshipped) harness, so this is a coverage improvement, not an open
+  finding.
+
+**Round 5 re-audit — scoped narrowly to the two `messageCache.ts` fixes
+above (not the wiring, per round 4's own recommendation), and specifically
+verified rather than just re-read: differential fuzzing (6,000 randomized
+cases) confirmed the raw-message dedup/sort/cap reordering is behaviorally
+equivalent to the old projected-then-capped approach for well-formed
+input; the performance claim was actually measured (1000×64 KiB snapshot:
+~620ms old vs. ~31–35ms new, ~20x); the "does frequent `touch()`-ing of a
+perpetually-failing conversation poison the LRU" hypothesis was probed
+directly and is not a real concern (one idempotent slot, not one per
+attempt); both new tests' negative controls were independently re-verified
+(temporarily reverting each fix, confirming the corresponding test fails,
+restoring). No critical/high/medium findings — the round-4 fixes hold.**
+
+- **LOW.** `warm`'s bound still depended on the LRU index itself being
+  writable — if `localStorage` is entirely unwritable for this origin
+  (private-mode "block all site data", a near-zero quota, or quota already
+  exhausted by non-cache data), the index can never be recorded, so
+  neither `touch()`'s own cap nor `evictOldestHalf` can ever run, and
+  `warm` grows without bound regardless. Measured: 200/200 conversations
+  retained with `localStorage` fully unwritable, before this fix. Added a
+  second, unconditional bound directly on `warm.size`, independent of
+  whether any disk write ever succeeds — oldest-first by insertion order
+  (not true recency-LRU, since `Map` re-`set` of an existing key doesn't
+  refresh its position, but a hard bound that doesn't depend on the index).
+  Covered by a new test forcing every write to fail and confirming the
+  earliest conversation is still evicted from `warm`.
+- **NOTE.** The new raw-level dedup assumes its input is already deduped
+  by `msg_id` — true of both real call sites today, but if a later id
+  collision's SECOND occurrence were rejected by `toCacheRow` (oversized/
+  malformed payload), the id is now dropped entirely rather than falling
+  back to an earlier good copy (a narrow divergence from the pre-round-4
+  behavior). Recorded in a code comment rather than fixed, since it isn't
+  reachable through either current caller.
+- **NOTE.** The raw-level sort's timestamp handling didn't match
+  `toCacheRow`'s own normalization (`?? 0`, which only guards `null`/
+  `undefined`, vs. `toCacheRow`'s `typeof === 'number' ? x : 0`, which
+  also catches a non-numeric timestamp) — a bogus timestamp from a
+  malicious/buggy node could sort differently between the two and
+  displace a legitimate row from the 50-row cap. Now uses the same
+  normalization in both places.
+- CHANGELOG numbers and claims in the round-3/round-4 sections above
+  reconciled to their final values (they had drifted mid-edit across
+  rounds — e.g. an intermediate "37 tests" that was already stale by the
+  time round 5 started, and the byte-identical claim corrected as
+  described above).
+
 ## [0.79.1] - 2026-09-23
 
 ### Fixed

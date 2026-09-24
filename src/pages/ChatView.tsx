@@ -5,7 +5,8 @@
 
 import { Component, createResource, createSignal, createEffect, createMemo, For, Show, onCleanup, untrack } from 'solid-js';
 import { t } from '../i18n/init';
-import { getClient } from '../lib/api';
+import { getClient, getCurrentNodeUrl } from '../lib/api';
+import { readCachedMessages, writeCachedMessages, clearCachedMessages, mergeMessages, isAccessRevokedError } from '../lib/messageCache';
 import { avatarUrl } from '../lib/ownAvatar';
 import { authStatus, getSigner, walletAddress, isRegistered } from '../lib/auth';
 import { onWsEvent, wsSubscribeChannels, wsUnsubscribeChannels } from '../lib/ws';
@@ -139,6 +140,14 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   const [pendingMentions, setPendingMentions] = createSignal<string[]>([]);
   const [replyTo, setReplyTo] = createSignal<{ msgId: string; author: string; preview: string } | null>(null);
   const [localMessages, setLocalMessages] = createSignal<any[]>([]);
+  // Local message-history cache (`lib/messageCache.ts`) — paints a channel
+  // instantly from the last-seen snapshot instead of blanking on every
+  // (re-)open. Seeded synchronously on channel switch, in the SAME tick as
+  // `setLocalMessages([])` below (so there's no frame where the PREVIOUS
+  // channel's rows are on screen); reconciled against the next
+  // unconditional fetch via `mergeMessages` (see that function's doc
+  // comment for why an `after`-cursor fetch cannot be used to refresh it).
+  const [cachedMessages, setCachedMessages] = createSignal<any[]>([]);
   const [sending, setSending] = createSignal(false);
   const [showEmoji, setShowEmoji] = createSignal(false);
   const [profiles, setProfiles] = createSignal<Map<string, CachedProfile>>(new Map());
@@ -309,10 +318,18 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   let initialLoad = true;
   const [lastReadTs, setLastReadTs] = createSignal<number | null>(null);
   // Dynamic page sizing: 50 by default, grow to fit unread + 20 lines of context.
-  // Capped at 200 to keep first-paint fast; user can scroll up for more.
+  // Capped at the node's actual page-size clamp (100 — `l2-node/src/api/
+  // routes.rs`; requesting more is silently truncated server-side, so 200
+  // here was a no-op ceiling that never took effect) to keep first-paint
+  // fast; user can scroll up for more.
   const INITIAL_PAGE = 50;
   const OLDER_PAGE = 50;
-  const MAX_INITIAL = 200;
+  const MAX_INITIAL = 100;
+  // Set right before the fetcher returns, so the post-resolve merge effect
+  // knows how big a page was actually requested — `mergeMessages` uses it
+  // to tell "the cache is a disconnected, unverifiable island older than
+  // this full page" apart from "there just isn't more history yet".
+  let lastFetchRequestedLimit = INITIAL_PAGE;
   // Hard ceiling on `localMessages` to prevent unbounded growth in a long
   // session of repeated scroll-ups. Higher than `MAX_LOCAL_MESSAGES` (which
   // governs WS receive) because user-initiated scroll-up is intentional and
@@ -345,6 +362,12 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       // Only clear local messages on channel switch
       if (channelId !== lastChannelId) {
         setLocalMessages([]);
+        // Seed from the local cache in the SAME tick as the reset above —
+        // paints the channel instantly from its last-seen snapshot instead
+        // of a blank screen while this fetch is in flight. Validated (or
+        // discarded, if stale beyond recovery) once the fetch below
+        // resolves; see the merge effect after this resource.
+        setCachedMessages(readCachedMessages('ch', channelId, getCurrentNodeUrl()));
         lastChannelId = channelId;
         prevMsgCount = 0;
         initialLoad = true;
@@ -388,12 +411,78 @@ export const ChatView: Component<ChatViewProps> = (props) => {
         const capped = (resp.messages || []).slice(0, limit);
         // If we got fewer messages than asked for, there's nothing older.
         if (capped.length < limit) setHasMoreOlder(false);
+        lastFetchRequestedLimit = limit;
         return capped;
-      } catch {
+      } catch (e) {
+        // 403/404 means access was actually revoked (removed from a
+        // private channel, channel deleted) — as opposed to a generic
+        // network blip, which a stale local cache should survive. Clear
+        // the cache too, not just the live view: otherwise the next open
+        // paints the same now-inaccessible content from disk again.
+        if (isAccessRevokedError(e)) {
+          clearCachedMessages('ch', channelId, getCurrentNodeUrl());
+          // `clearCachedMessages` only wipes disk + the module's in-memory
+          // `warm` layer — the LIVE `cachedMessages` signal, already
+          // seeded for this channel earlier in this same fetcher run,
+          // would otherwise keep rendering the pre-revocation content for
+          // the rest of the session regardless (re-audit finding: the
+          // merge effect's empty-`fresh` case is a no-op union, so it
+          // would never clear this on its own).
+          setCachedMessages([]);
+        }
         return [];
       }
     },
   );
+
+  // Reconcile the cache seed against the fetch above once it resolves —
+  // NOT via an `after`-cursor refresh (see `mergeMessages`'s doc comment
+  // for why that can never surface an edit/delete on an already-cached
+  // row). An empty/failed fetch (`messages()` still `[]`) is a no-op union
+  // that leaves the cache seed exactly as it was, so a transient failure
+  // right after a channel switch doesn't wipe the instant-paint content.
+  //
+  // CRITICAL (re-audit finding, empirically confirmed against the real
+  // solid-js runtime — including a rapid A→B[slow]→C switch and a
+  // switch-away-and-back-before-the-abandoned-fetch-resolves case):
+  // `createResource` RETAINS the PREVIOUS channel's `value()` while a new
+  // fetch is in flight — `messages()` does not become `undefined` on a
+  // channel switch, it keeps returning the OLD channel's rows until the
+  // NEW fetch's `completeLoad` runs. This effect tracks `props.channelId`
+  // (read below) too, so on a switch it re-runs in the SAME reactive
+  // batch, BEFORE the new fetch resolves — merging the previous channel's
+  // messages into the just-seeded cache for the NEW channel.
+  //
+  // Closed by `messages.loading` — true for the whole window described
+  // above; skipping the merge while it's true defers to the next re-run,
+  // which happens once loading flips back to false (i.e. once `value()`
+  // is guaranteed to be the CURRENT channel's data). An EARLIER version of
+  // this fix also added a `channel_id` spot-check on `fresh` as
+  // "belt-and-suspenders" — removed (round-3 re-audit finding): REST-
+  // fetched chat envelopes never carry a `channel_id` field at all (only
+  // WS frames do, via a separate path into `localMessages`), so the check
+  // validated nothing today, and worse, would silently disable this
+  // effect FOREVER for a channel if the node ever started attaching
+  // `channel_id` in a shape the check doesn't recognize — exactly the
+  // "edit/delete renders from cache forever" failure this whole cache
+  // exists to prevent. Removed rather than left in as an inert check that
+  // reads as a stronger guarantee than it provides.
+  //
+  // This effect's `messages()`/`props.channelId` source is always-truthy
+  // (`{ channelId, auth }`), so `createResource` never short-circuits and
+  // `loading` always cycles through its real lifecycle — the DM
+  // equivalent originally used a `peerAddress-or-undefined` source, which
+  // short-circuited on `undefined` and left `loading` permanently `false`
+  // during that window, bypassing its own version of this same guard
+  // (round-3 re-audit finding; see `DmConversationView.tsx`'s resource
+  // definition for the fix).
+  createEffect(() => {
+    if (messages.loading) return;
+    const fresh = messages();
+    const channelId = props.channelId;
+    if (!channelId || fresh === undefined) return;
+    setCachedMessages((prev) => mergeMessages(prev, fresh, lastFetchRequestedLimit));
+  });
 
   /** Load an older page and prepend it without flicker. */
   const loadOlderMessages = async () => {
@@ -834,8 +923,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
       );
     });
     // localMessages first so in-place updates (delete, edit, react) applied to
-    // the localMessages copy take priority in the dedup.
-    const combined = [...filteredLocal, ...apiMsgs];
+    // the localMessages copy take priority in the dedup; cachedMessages last
+    // (lowest priority) — it's already been reconciled against the fetch
+    // above by the merge effect, but local/api still win on anything newer
+    // than that reconciliation (a WS edit landing mid-fetch, e.g.).
+    const combined = [...filteredLocal, ...apiMsgs, ...cachedMessages()];
     const deduped = combined.filter((msg) => {
       const id = msgIdToHex(msg.msg_id);
       if (!id || seen.has(id)) return false;
@@ -845,6 +937,76 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     deduped.sort((a, b) => normalizeTs(a.timestamp) - normalizeTs(b.timestamp));
     return deduped;
   });
+
+  // Persist the live, merged view (not just the raw fetch — this captures
+  // WS-applied edits/deletes/reactions too, since `allMessages()` is the
+  // full union). Debounced: an undebounced write would re-serialize the
+  // whole conversation on every single WS message.
+  //
+  // CRITICAL, round 2 (re-audit finding — round 1's fix here was
+  // INCOMPLETE, not wrong in direction): capturing `{ channelId, snapshot
+  // }` at schedule time (rather than re-reading at fire time) closes the
+  // "switch-then-flush" race, but `allMessages()` — the snapshot itself —
+  // still transitively includes `messages()`, and `createResource` (Solid)
+  // RETAINS the PREVIOUS channel's `value()` while a new fetch is in
+  // flight (`messages()` does not go `undefined` on a channel switch).
+  // So on a switch, THIS effect re-runs (it reads `props.channelId`)
+  // BEFORE the new fetch resolves, and the snapshot it captures for the
+  // NEW channel id is built from the OLD channel's still-resident
+  // `messages()` value. Round 1's mitigation for this — filtering the
+  // snapshot by `m.channel_id === channelId` — was VACUOUS: `channel_id`
+  // is not a field the node puts on a REST-fetched envelope at all (only
+  // WS frames carry it, and those flow through `localMessages`
+  // separately), so the filter passed every row through unfiltered.
+  // Reproduced empirically against a rapid A→B→C switch with the round-1
+  // fix in place: channel A's history landed under channel B's cache key.
+  //
+  // Fixed the same way the merge effect above already guards itself:
+  // `messages.loading` is read UNCONDITIONALLY every run (so it stays a
+  // tracked dependency and this effect re-runs the moment it flips), and
+  // arming a NEW pending write is skipped for as long as it's `true` —
+  // deferring to the next run, which happens once the fetch for the
+  // CURRENT channel has actually resolved and `allMessages()` is
+  // guaranteed to reflect it. The channel_id filter is removed rather than
+  // kept as inert "defense in depth" — it validated nothing and its
+  // presence read as a stronger guarantee than actually existed.
+  let persistTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingPersist: { channelId: number; snapshot: any[] } | null = null;
+  const writePending = () => {
+    if (!pendingPersist) return;
+    const { channelId, snapshot } = pendingPersist;
+    pendingPersist = null;
+    writeCachedMessages('ch', channelId, snapshot, getCurrentNodeUrl());
+  };
+  const flushCachePersist = () => {
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
+    writePending();
+  };
+  createEffect(() => {
+    const channelId = props.channelId;
+    const snapshot = allMessages(); // always read — keeps this effect's
+    const loading = messages.loading; // tracking complete regardless of
+    if (persistTimer) clearTimeout(persistTimer); // which branch below runs.
+    // A channel switch mid-debounce would otherwise silently drop the
+    // PREVIOUS channel's still-unwritten snapshot (about to be overwritten
+    // below) — flush it first so a switch loses at most nothing, rather
+    // than up to a full debounce window's worth of state.
+    if (pendingPersist && pendingPersist.channelId !== channelId) writePending();
+    if (!channelId) { pendingPersist = null; return; }
+    // Don't arm a write while the resource is between channels — this run
+    // will fire again the moment `loading` flips back to `false`, at
+    // which point `allMessages()` (re-read fresh on that run) is
+    // guaranteed to reflect the CURRENT channel.
+    if (loading) return;
+    pendingPersist = { channelId, snapshot };
+    persistTimer = setTimeout(writePending, 1000);
+  });
+  onCleanup(flushCachePersist);
+  if (typeof document !== 'undefined') {
+    const onVisChange = () => { if (document.visibilityState === 'hidden') flushCachePersist(); };
+    document.addEventListener('visibilitychange', onVisChange);
+    onCleanup(() => document.removeEventListener('visibilitychange', onVisChange));
+  }
 
   // Button-press messages (via_button: true) are suppressed from the default
   // feed — frontend spec §6.1.3: "the user only wants to see the bot's
