@@ -5,6 +5,32 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.81.0] - 2026-10-06
+
+### Security
+
+- **Private channel creation no longer computes `channel_id` locally** —
+  `ChannelCreateView` now lets `OgmaraClient.createChannel` (sdk-js
+  0.63.0+) derive it, using the signer's resolved wallet identity.
+  Closes l2-node 0.139.0's `federate_channel` first-sight-trust residual
+  from the client side: the node now verifies this derivation, which
+  only works if the client actually sends the `id_derivation_ts` it was
+  computed with — see that release's CHANGELOG for the full rationale.
+  No user-visible behavior change (private channel creation looks and
+  works identically).
+- **Dependency audit**: fixed 1 high (`source-map-js`, event-loop DoS via
+  indexed source-map section offsets, build-tooling only — `tsup` →
+  `postcss`, never shipped) and 3 critical (`seroval`, two advisories —
+  Promise-thenable assimilation bypass + unchecked TypedArray-length
+  memory exhaustion in JSON deserialization — a **runtime** dependency of
+  `solid-js` itself). No stable `solid-js` 1.x release pulls a patched
+  `seroval` (every one pins `~1.5.x`, all vulnerable; the fix landed in
+  `seroval` 1.6.3, with only the `solid-js` 2.0.0 release-candidate line
+  adopting it). Pinned via `overrides` (`seroval`/`seroval-plugins` `>=
+  1.6.3`) rather than adopting an RC — same approach already used in this
+  file for `postcss`/`esbuild`. Verified: typecheck, build (identical
+  bundle size), and the full `node --test` suite (70/70) all still pass.
+
 ## [0.80.0] - 2026-09-24
 
 ### Added

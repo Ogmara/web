@@ -1,6 +1,6 @@
 {
   "name": "@ogmara/web",
-  "version": "0.80.0",
+  "version": "0.81.0",
   "private": true,
   "description": "Ogmara web application \u2014 decentralized chat and news PWA",
   "scripts": {
@@ -27,6 +27,8 @@
   },
   "overrides": {
     "postcss": ">=8.5.10",
-    "esbuild": ">=0.28.1"
+    "esbuild": ">=0.28.1",
+    "seroval": ">=1.6.3",
+    "seroval-plugins": ">=1.6.3"
   }
 }
