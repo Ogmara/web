@@ -2,7 +2,7 @@
  * App — root component with hash-based routing and auth context.
  */
 
-import { Component, Show, Switch, Match } from 'solid-js';
+import { Component, Show, Switch, Match, createEffect, on } from 'solid-js';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { mobileListOpen, showMobileList, showMobileDetail, isMobileViewport } from './lib/mobile-nav';
@@ -31,9 +31,24 @@ import { NoNodeLandingPage } from './components/NoNodeLandingPage';
 import { activeNodeUrl } from './lib/api';
 import { DeviceMappingBanner } from './components/DeviceMappingBanner';
 import { ImageLightbox } from './components/ImageLightbox';
-import { route, goBack } from './lib/router';
+import { route, goBack, redirectNow } from './lib/router';
+import { walletAddress } from './lib/auth';
+import { routeAfterAccountChange } from './lib/accountRoutes';
 
 export const App: Component = () => {
+  // A per-account detail route (a channel, a DM, channel settings, an invite)
+  // must not carry over into a DIFFERENT account in the same page
+  // (A -> disconnect -> B). Compared against the last NON-NULL wallet, so the
+  // first login keeps deep links. Created before any view mounts, so it runs
+  // ahead of the views' own wallet-keyed effects, and the redirect applies the
+  // new route synchronously.
+  let lastSeenWallet: string | null = null;
+  createEffect(on(walletAddress, (w) => {
+    const target = routeAfterAccountChange(route(), lastSeenWallet, w);
+    if (w) lastSeenWallet = w;
+    if (target) redirectNow(target);
+  }));
+
   const channelId = () => {
     const r = route();
     if (r.view === 'chat' && r.params.channelId) {

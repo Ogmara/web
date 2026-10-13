@@ -22,6 +22,7 @@
 
 import { createSignal } from 'solid-js';
 import { getSetting } from './settings';
+import { registerWalletSwitchReset } from './walletScope';
 
 export type ViewName =
   | 'chat'
@@ -144,9 +145,33 @@ function parseHash(hash: string): Route {
 
 const [route, setRoute] = createSignal<Route>(parseHash(window.location.hash));
 
-// Listen for hash changes
+// Listen for hash changes. An identical route is not re-published (see
+// `redirectNow`, which applies its route synchronously before this fires).
 window.addEventListener('hashchange', () => {
-  setRoute(parseHash(window.location.hash));
+  const next = parseHash(window.location.hash);
+  if (!sameRoute(route(), next)) setRoute(next);
+});
+
+/** Structural equality for two parsed routes (view + params + query). */
+function sameRoute(a: Route, b: Route): boolean {
+  if (a.view !== b.view) return false;
+  const eq = (x: Record<string, string>, y: Record<string, string>) => {
+    const kx = Object.keys(x);
+    if (kx.length !== Object.keys(y).length) return false;
+    return kx.every((k) => Object.prototype.hasOwnProperty.call(y, k) && x[k] === y[k]);
+  };
+  return eq(a.params, b.params) && eq(a.query, b.query);
+}
+
+// `parseHash` resolves a bare `#/chat` to the ACTIVE account's per-wallet
+// `lastChannel`, but only when the hash is parsed. A wallet switch does not
+// change the hash, so the route kept pointing at the PREVIOUS account's last
+// channel (possibly a private one) until the next navigation. Re-parse on
+// every wallet-scope change and publish only a real difference, so an
+// unchanged route does not re-trigger every route-dependent effect.
+registerWalletSwitchReset(() => {
+  const next = parseHash(window.location.hash);
+  if (!sameRoute(route(), next)) setRoute(next);
 });
 
 export { route };
@@ -155,6 +180,24 @@ export { route };
 // "came from elsewhere in the app" case apart from a fresh deep link (where
 // window.history has entries, but none of them are ours to return to).
 let navCount = 0;
+
+/**
+ * Replace the current route IMMEDIATELY (no history entry, no wait for the
+ * async `hashchange`). Used when the current route must not stay mounted for
+ * even one more task — e.g. a previous account's channel/DM after an account
+ * change (see lib/accountRoutes.ts).
+ */
+export function redirectNow(path: string): void {
+  const p = path.startsWith('/') ? path : `/${path}`;
+  const hash = `#${p}`;
+  try {
+    window.history.replaceState(window.history.state, '', hash);
+  } catch {
+    window.location.replace(hash);
+  }
+  const next = parseHash(hash);
+  if (!sameRoute(route(), next)) setRoute(next);
+}
 
 /** Navigate to a new route. */
 export function navigate(path: string): void {

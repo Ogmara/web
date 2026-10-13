@@ -20,7 +20,7 @@ import {
   deviceVaultGetSigner,
   deviceVaultAdoptFromMainIfEmpty,
 } from './vault';
-import { getClient, awaitNodeUrl, getCurrentNodeUrl } from './api';
+import { getClient, awaitNodeUrl, getCurrentNodeUrl, resetClient } from './api';
 import { getSetting, setSetting } from './settings';
 import { signMessage, setBuiltinWalletActive } from './klever';
 import { setActiveSigner, getActiveSigner } from './signerRef';
@@ -31,6 +31,7 @@ import {
   runWalletScopeMigrationOnce,
   runWalletSwitchResets,
 } from './walletScope';
+import { markFreshAccount } from './freshAccount';
 
 /** Attach a signer to the API client AND record it as the active L2 signer so
  *  non-auth modules (api/ws/boot) can read it without an import cycle. */
@@ -126,11 +127,12 @@ export async function initAuth(): Promise<void> {
       if (signer) {
         attachSigner(signer);
         if (savedSource === 'builtin' && savedAddress) {
+          // The vault's own address is authoritative here — it can differ from
+          // the persisted one if the stored key changed. Scope before address,
+          // as in every connect path.
+          setWalletScope(address);
           setL2Address(address);
           setWalletAddress(address);
-          // The vault's own address is authoritative here — it can differ from
-          // the persisted one if the stored key changed.
-          setWalletScope(address);
           setWalletSource('builtin');
           setBuiltinWalletActive(true);
           setAuthStatus('ready');
@@ -157,8 +159,12 @@ export async function connectWithKey(hexKey: string): Promise<string> {
   const address = await vaultStore(hexKey);
   const signer = vaultGetSigner()!;
   attachSigner(signer);
-  setWalletAddress(address);
+  // Scope FIRST, then the address (same order as connectKleverExtension and
+  // desktop): per-wallet stores reset and reload on the scope flip, so by the
+  // time `walletAddress()` changes and its effects run, every scoped read
+  // already resolves to THIS account rather than the previous one.
   setWalletScope(address);
+  setWalletAddress(address);
   setL2Address(address);
   setWalletSource('builtin');
   setBuiltinWalletActive(true);
@@ -179,8 +185,14 @@ export async function generateWallet(): Promise<string> {
   const address = await vaultGenerate();
   const signer = vaultGetSigner()!;
   attachSigner(signer);
-  setWalletAddress(address);
+  // Scope first, then the address — see connectWithKey.
   setWalletScope(address);
+  // A key minted just now has no history anywhere: let the Sidebar baseline
+  // the default channel as read once its first live list arrives, instead of
+  // opening with the channel's entire backlog as "unread". Set ONLY here, not
+  // on import/extension connect (those accounts may have real unread state).
+  markFreshAccount();
+  setWalletAddress(address);
   setL2Address(address);
   setWalletSource('builtin');
   setBuiltinWalletActive(true);
@@ -545,6 +557,12 @@ export async function disconnectWallet(): Promise<void> {
   // groups and channel lists surviving into the next wallet.
   if (leaving) wipeWalletScope(leaving);
   setActiveSigner(null);
+  // Detach the signer from the shared API client too. The SDK has no
+  // "remove signer" call, so drop the instance: the next `getClient()` builds
+  // a fresh one with no signer (or the next account's, via attachSigner).
+  // Without this the signed-out page kept signing requests as the departed
+  // account, and its per-instance response caches stayed live for the next.
+  resetClient();
   setWalletAddress(null);
   setL2Address(null);
   setWalletSource(null);

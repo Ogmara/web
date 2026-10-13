@@ -45,6 +45,20 @@ let activeWallet: string | null = null;
  */
 const switchResets = new Set<() => void>();
 
+/**
+ * Monotonic counter bumped on every wallet-scope change and on every
+ * pre-teardown reset. Async flows that hold account-bound material across an
+ * await (key-vault restore/backup) capture it at their start and treat ANY
+ * change as stale — it catches an A -> B -> A round trip that a wallet-address
+ * comparison alone would miss.
+ */
+let switchGeneration = 0;
+
+/** Current switch generation (see `switchGeneration`). */
+export function getSwitchGeneration(): number {
+  return switchGeneration;
+}
+
 /** Register a cache/timer to be cleared on every wallet-scope change. */
 export function registerWalletSwitchReset(fn: () => void): void {
   switchResets.add(fn);
@@ -59,6 +73,7 @@ export function registerWalletSwitchReset(fn: () => void): void {
  * down second.
  */
 export function runWalletSwitchResets(): void {
+  switchGeneration++;
   for (const reset of switchResets) {
     try {
       reset();
@@ -88,6 +103,7 @@ export function setWalletScope(address: string | null): void {
   // the new account while the caches still hold the old one; any read in that
   // window returns the wrong account's data.
   if (changed) {
+    switchGeneration++;
     for (const reset of switchResets) {
       try {
         reset();
@@ -149,6 +165,16 @@ export function scopedRemove(base: string): void {
 }
 
 /**
+ * Per-wallet caches that predate this module's `::` separator and are keyed
+ * `<prefix><nodeUrl>:<address>` (single colon) — the Sidebar's channel-list
+ * and DM-conversation caches. The `::<address>` suffix match below misses
+ * them, so they are matched by prefix + `:<address>` suffix instead. Keys are
+ * NOT renamed: renaming would orphan every existing cache. Only these
+ * prefixes are matched, so no unrelated key ending in an address is touched.
+ */
+const SINGLE_COLON_WALLET_PREFIXES = ['channelsCache:', 'dmConvsCache:'] as const;
+
+/**
  * Delete every key belonging to `address` (defaults to the active wallet).
  *
  * Called on disconnect so a signed-out account leaves nothing behind in the
@@ -161,13 +187,19 @@ export function wipeWalletScope(address?: string | null): void {
   const target = address ?? activeWallet;
   if (!target) return;
   const suffix = `${SEP}${target}`;
+  const legacySuffix = `:${target}`;
   try {
     // Collect first: removing while iterating localStorage's live index skips
     // entries, which would leave some of the account's data behind.
     const mine: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.endsWith(suffix)) mine.push(k);
+      if (!k) continue;
+      if (k.endsWith(suffix)) mine.push(k);
+      else if (
+        k.endsWith(legacySuffix) &&
+        SINGLE_COLON_WALLET_PREFIXES.some((p) => k.startsWith(p))
+      ) mine.push(k);
     }
     for (const k of mine) localStorage.removeItem(k);
   } catch {

@@ -35,32 +35,67 @@ import {
   importChannelKeysFromVault,
 } from './channelCrypto';
 import { e2elog } from './e2eDebug';
+import { getSwitchGeneration } from './walletScope';
+import { runRestore, runPublish, type OwnedKey } from './keyVaultCore';
 
 let bk: Uint8Array | null = null;
 let bkWallet: string | null = null;
-let bkInflight: Promise<Uint8Array | null> | null = null;
+let bkInflight: Promise<OwnedKey | null> | null = null;
+/** Wallet + switch generation the in-flight derivation was started for. */
+let bkInflightWallet: string | null = null;
+let bkInflightGen = -1;
+/** Identifies the in-flight derivation (a token, not the promise: the promise
+ *  is not assigned yet if the derivation settles synchronously). */
+let bkToken = 0;
+let bkInflightToken = 0;
 
 /** Derive (once per session) and cache the wallet backup key. Dedupes concurrent
- *  callers so restore + backup racing produce a single wallet popup. */
-async function ensureBackupKey(): Promise<Uint8Array | null> {
+ *  callers so restore + backup racing produce a single wallet popup — but only
+ *  callers of the SAME wallet and switch generation: a derivation started for
+ *  another account is never handed out. Returns the key WITH the wallet it was
+ *  derived for, so callers can verify ownership. */
+async function ensureBackupKey(): Promise<OwnedKey | null> {
   const wallet = walletAddress();
   if (!wallet) return null;
-  if (bk && bkWallet === wallet) return bk;
-  if (bkInflight) return bkInflight;
-  bkInflight = (async () => {
+  const gen = getSwitchGeneration();
+  if (bk && bkWallet === wallet) return { key: bk, wallet };
+  if (bkInflight && bkInflightWallet === wallet && bkInflightGen === gen) return bkInflight;
+  const token = ++bkToken;
+  bkInflightToken = token;
+  const run: Promise<OwnedKey | null> = (async () => {
     try {
       const sig = await walletSignFn()(VAULT_SIGN_CLAIM);
-      bk = deriveVaultBackupKey(sig);
+      const derived = deriveVaultBackupKey(sig);
+      // The account may have changed while the wallet was signing: never cache
+      // (or return) a key under a wallet that is no longer the one it was for.
+      if (walletAddress() !== wallet || getSwitchGeneration() !== gen) {
+        derived.fill(0);
+        return null;
+      }
+      bk = derived;
       bkWallet = wallet;
-      return bk;
+      return { key: derived, wallet };
     } catch (e) {
       e2elog('keyvault: backup-key derivation failed/declined', { err: (e as Error)?.message });
       return null;
     } finally {
-      bkInflight = null;
+      // Only clear the slot if it is still ours (a switch may have replaced it).
+      if (bkInflightToken === token) {
+        bkInflightToken = 0;
+        bkInflight = null;
+        bkInflightWallet = null;
+        bkInflightGen = -1;
+      }
     }
   })();
-  return bkInflight;
+  // Publish the slot only if the derivation hasn't already settled (a
+  // synchronous failure runs `finally` before we get here).
+  if (bkInflightToken === token) {
+    bkInflight = run;
+    bkInflightWallet = wallet;
+    bkInflightGen = gen;
+  }
+  return run;
 }
 
 /** Forget the cached backup key + all session state (call on wallet disconnect/switch).
@@ -69,6 +104,16 @@ export function clearKeyVaultSession(): void {
   bk?.fill(0);
   bk = null;
   bkWallet = null;
+  // Forget an in-flight derivation too: it belongs to the departing account
+  // and must never be handed to the next one (it also refuses to cache itself
+  // once it sees the account changed).
+  bkInflight = null;
+  bkInflightWallet = null;
+  bkInflightGen = -1;
+  bkInflightToken = 0;
+  // Invalidate any restore still in flight so its completion can't touch the
+  // next account's restore state.
+  restoreRun++;
   restoreState = 'idle';
   pendingBackup = false;
   if (backupTimer) {
@@ -112,26 +157,24 @@ function scheduleBackup(): void {
 
 async function publishBackup(): Promise<void> {
   if (publishing) return;
-  const sealWallet = walletAddress();
-  const keyring = currentKeyring();
-  if (isEmptyKeyring(keyring)) return; // nothing to back up
-  const key = await ensureBackupKey();
-  if (!key) return; // no wallet / user declined the signMessage
-  // Guard a wallet switch between scheduling and now: only seal under the wallet
-  // the keyring + backup key belong to (defence-in-depth alongside the disconnect
-  // timer cancel — never write account A's keys into account B's vault).
-  if (walletAddress() !== sealWallet || bkWallet !== sealWallet) return;
   publishing = true;
   try {
-    const sealed = sealKeyVault(key, keyring);
-    await getClient().syncKeyVault(sealed);
-    e2elog('keyvault: backup published', {
-      conv: Object.keys(keyring.conv).length,
-      chan: Object.keys(keyring.chan).length,
-      bytes: sealed.encrypted_vault.length,
+    // Seals and publishes only if the wallet + switch generation captured at
+    // the start still hold after the key derivation AND the key was derived
+    // for that wallet (lib/keyVaultCore.ts) — never A's keys into B's vault.
+    await runPublish({
+      currentWallet: walletAddress,
+      generation: getSwitchGeneration,
+      ensureBackupKey,
+      log: e2elog,
+      snapshot: currentKeyring,
+      isEmpty: isEmptyKeyring,
+      seal: sealKeyVault,
+      publish: async (sealed) => {
+        await getClient().syncKeyVault(sealed);
+        e2elog('keyvault: backup published', { bytes: sealed.encrypted_vault.length });
+      },
     });
-  } catch (e) {
-    e2elog('keyvault: backup failed', { err: (e as Error)?.message });
   } finally {
     publishing = false;
   }
@@ -140,6 +183,9 @@ async function publishBackup(): Promise<void> {
 // --- restore (session-once, background) -------------------------------------
 
 let restoreState: 'idle' | 'inflight' | 'done' = 'idle';
+/** Bumped per restore and by clearKeyVaultSession; a run only writes the
+ *  restore state while it is still the latest. */
+let restoreRun = 0;
 
 /** Pull + decrypt the vault and merge restored keys into the in-memory caches.
  *  Session-once and idempotent; safe to call from a decrypt-miss render path. A
@@ -148,37 +194,35 @@ let restoreState: 'idle' | 'inflight' | 'done' = 'idle';
 export function tryRestoreKeyVault(): void {
   if (restoreState !== 'idle') return;
   restoreState = 'inflight';
+  const myRun = ++restoreRun;
   void (async () => {
     try {
-      const key = await ensureBackupKey();
-      if (!key) {
-        restoreState = 'idle'; // no wallet / declined popup — allow a later retry
-        return;
-      }
-      let resp;
-      try {
-        resp = await getClient().getKeyVault(); // null only on a true 404
-      } catch (e) {
-        restoreState = 'idle'; // transient (network/5xx) — retry on next trigger
-        e2elog('keyvault: restore fetch failed (will retry)', { err: (e as Error)?.message });
-        return;
-      }
-      if (resp) {
-        try {
-          const keyring = openKeyVault(key, resp);
-          const conv = importConvKeysFromVault(keyring.conv);
-          const chan = importChannelKeysFromVault(keyring.chan);
-          e2elog('keyvault: restored', { conv, chan });
-        } catch (e) {
-          // Corrupt/foreign/auth-fail blob — terminal; don't re-pop the wallet.
-          e2elog('keyvault: restore decrypt failed', { err: (e as Error)?.message });
-        }
-      }
-      restoreState = 'done';
+      // Wallet + switch generation are captured inside runRestore and
+      // re-checked after every await, before the imports and before a
+      // terminal result (lib/keyVaultCore.ts).
+      const outcome = await runRestore({
+        currentWallet: walletAddress,
+        generation: getSwitchGeneration,
+        ensureBackupKey,
+        log: e2elog,
+        fetchVault: () => getClient().getKeyVault(), // null only on a true 404
+        open: openKeyVault,
+        importKeys: (keyring) => ({
+          conv: importConvKeysFromVault(keyring.conv),
+          chan: importChannelKeysFromVault(keyring.chan),
+        }),
+      });
+      // A superseded run (account changed / session cleared) leaves the
+      // CURRENT account's restore state alone.
+      if (myRun !== restoreRun) return;
+      restoreState = outcome === 'done' ? 'done' : 'idle';
+    } catch (e) {
+      if (myRun === restoreRun) restoreState = 'idle';
+      e2elog('keyvault: restore failed', { err: (e as Error)?.message });
     } finally {
       // If a key was cached while restore was in flight, publish now that the
       // remote keyring is merged (no longer at risk of clobbering it).
-      if (restoreState === 'done' && pendingBackup) {
+      if (myRun === restoreRun && restoreState === 'done' && pendingBackup) {
         pendingBackup = false;
         scheduleBackup();
       }

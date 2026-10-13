@@ -11,7 +11,13 @@ import { avatarUrl } from '../lib/ownAvatar';
 import { authStatus, getSigner, walletAddress, isRegistered } from '../lib/auth';
 import { onWsEvent, wsSubscribeChannels, wsUnsubscribeChannels } from '../lib/ws';
 import { canPost, CHANNEL_TYPE_READ_PUBLIC, CHANNEL_TYPE_PRIVATE, type MediaDescriptor } from '@ogmara/sdk';
-import { resolveIsEncrypted } from '../lib/channelEncryption';
+import {
+  resolveIsEncrypted,
+  isChannelRecordUsable,
+  shouldAutoJoinEncryptedChannel,
+} from '../lib/channelEncryption';
+import { ensureEncryptedChannelMembership } from '../lib/autoJoin';
+import { initialChannelInfoRetry, nextChannelInfoRetry } from '../lib/channelInfoRetry';
 import { buildEncryptedChannelMsg, decryptChannelMessage, coverChannelMembers, rotateChannelKey } from '../lib/channelCrypto';
 import type { DmDisplay } from '../lib/dmCrypto';
 import { MentionPopover } from '../components/MentionPopover';
@@ -552,8 +558,11 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     },
   );
 
+  // `wallet` is in the source so a wallet change always starts a fresh load
+  // (state leaves 'ready'): every side effect below is gated on a usable
+  // record, and a record fetched for the PREVIOUS account must never count.
   const [channelInfo, { refetch: refetchChannelInfo }] = createResource(
-    () => ({ channelId: props.channelId, auth: authStatus() }),
+    () => ({ channelId: props.channelId, auth: authStatus(), wallet: walletAddress() }),
     async ({ channelId }) => {
       if (!channelId) return null;
       try { return await getClient().getChannel(channelId); }
@@ -643,19 +652,66 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   // The rotation floor only applies to private channels (public never rotates).
   const encFloor = () => (isPrivate() ? (channelInfo()?.channel?.key_epoch_floor ?? 0) : 0);
 
+  // The channel record is a definite answer for THIS channel (resolved, non-null,
+  // typed, not the restricted non-member summary). Side effects gate on this —
+  // never on `isEncrypted()`, which is fail-closed (`true` while unknown).
+  const channelRecordUsable = (opts?: { allowRestricted?: boolean }) => {
+    const info = channelInfo();
+    const ch = info?.channel;
+    if (!isChannelRecordUsable(
+      channelInfo.state,
+      ch,
+      opts?.allowRestricted ? undefined : (info as { restricted?: boolean } | null | undefined)?.restricted,
+    )) return false;
+    return ch!.channel_id === undefined || ch!.channel_id === props.channelId;
+  };
+
+  // A failed channel fetch resolves to `null` and nothing else refetches it
+  // (only `channel_members_changed` does), so with send now gated on a usable
+  // record the composer would stay blocked until the channel is reopened.
+  // Retry a bounded number of times, spaced out, per wallet:channel — a channel
+  // that really doesn't exist (404) costs at most a handful of requests.
+  // Parity with desktop; schedule in lib/channelInfoRetry.ts.
+  let infoRetry = initialChannelInfoRetry();
+  createEffect(() => {
+    const cid = props.channelId;
+    const me = walletAddress();
+    if (!cid || channelInfo.state !== 'ready' || channelInfo() != null) return;
+    const step = nextChannelInfoRetry(infoRetry, `${me ?? ''}:${cid}`);
+    infoRetry = step.state;
+    if (step.delayMs === null) return;
+    const timer = setTimeout(() => { void refetchChannelInfo(); }, step.delayMs);
+    onCleanup(() => clearTimeout(timer));
+  });
+
   // P4: reading or posting in an encrypted channel requires membership — the node
   // only wraps the epoch key to members (anyone may join a public channel
   // permissionlessly and obtain the key). Lurking-without-joining works for
   // plaintext channels but not encrypted ones, so ensure membership once when
-  // opening an encrypted channel. Idempotent on the node; private channels are
-  // joined through the normal invite/join flow, so only auto-join non-private.
-  const autoJoined = new Set<number>();
+  // opening an encrypted channel. Private channels are joined only through the
+  // invite/join flow.
+  //
+  // POSITIVE EVIDENCE ONLY (web 0.82.0): this used to be gated on
+  // `isEncrypted() && !isPrivate()`. `isEncrypted()` fails closed (true while the
+  // record is loading / errored / 404) and `isPrivate()` is false in the same
+  // window, so the join fired for ANY channel — including private ones — before
+  // its record loaded; the node accepted it, creating real membership and key
+  // cover. `shouldAutoJoinEncryptedChannel` requires a usable record that says
+  // non-private AND `encryption_enabled === true`. Bookkeeping is per
+  // wallet:channel in lib/autoJoin.ts.
   createEffect(() => {
     const cid = props.channelId;
-    if (!cid || !walletAddress() || !isEncrypted() || isPrivate()) return;
-    if (autoJoined.has(cid)) return;
-    autoJoined.add(cid);
-    void getClient().joinChannel(cid).catch(() => autoJoined.delete(cid));
+    const me = walletAddress();
+    if (!cid || !me || authStatus() !== 'ready') return;
+    const info = channelInfo();
+    if (!shouldAutoJoinEncryptedChannel(
+      channelInfo.state,
+      info?.channel,
+      CHANNEL_TYPE_PRIVATE,
+      (info as { restricted?: boolean } | null | undefined)?.restricted,
+    )) return;
+    if (info!.channel!.channel_id !== undefined && info!.channel!.channel_id !== cid) return;
+    void ensureEncryptedChannelMembership(cid, me, (id) => getClient().joinChannel(id));
   });
 
   // Per-message decrypted display for private channels, keyed by msg_id. Decryption
@@ -877,28 +933,45 @@ export const ChatView: Component<ChatViewProps> = (props) => {
   });
   onCleanup(wsCleanup);
 
-  // Reactive channel subscription
+  // Reactive channel subscription (WS only — keyed on the channel id alone).
   let prevChannelId: string | null = null;
   createEffect(() => {
     const id = props.channelId ? String(props.channelId) : null;
     if (prevChannelId) wsUnsubscribeChannels([prevChannelId]);
     if (id) {
       wsSubscribeChannels([id]);
-      // Remember last opened channel for the Chat nav link
-      setSetting('lastChannel', parseInt(id, 10));
-      // Defer side effects so the channel-switch click doesn't share a frame
-      // with the network request + reactive cascade. Keeps fast channel
-      // hopping responsive. The auth re-check inside the microtask guards
-      // against a logout-in-flight signing the read-marker with a stale
-      // signer for the wrong wallet.
-      queueMicrotask(() => {
-        if (authStatus() !== 'ready') return;
-        try { getClient().markChannelRead(parseInt(id, 10)).catch(() => {}); }
-        catch { /* SDK method may not exist on older builds */ }
-      });
       setTimeout(() => inputRef()?.focus(), 50);
     }
     prevChannelId = id;
+  });
+
+  // Remember the channel (per-wallet `lastChannel`) and mark it read — only once
+  // the record is a usable answer for THIS channel and THIS signed-in wallet.
+  // These used to run on mount, keyed on the channel id alone: they fired with
+  // no wallet (writing the bare, un-namespaced key), for channels whose record
+  // 404'd, and — after a wallet change with the view still on screen — recorded
+  // the previous account's channel as the new account's last channel, which the
+  // tab memory then navigated back into. De-duplicated per `wallet:channel`, so
+  // a record refetch does not re-mark, but reopening the channel does.
+  let lastRememberedKey: string | null = null;
+  createEffect(() => {
+    const cid = props.channelId;
+    const me = walletAddress();
+    if (!cid || !me || authStatus() !== 'ready') return;
+    if (!channelRecordUsable()) return;
+    const key = `${me}:${cid}`;
+    if (key === lastRememberedKey) return;
+    lastRememberedKey = key;
+    setSetting('lastChannel', cid);
+    // Deferred so the channel-switch click doesn't share a frame with the
+    // network request + reactive cascade. The re-check guards against a
+    // logout / wallet change in between signing the read-marker for the
+    // wrong wallet.
+    queueMicrotask(() => {
+      if (authStatus() !== 'ready' || walletAddress() !== me) return;
+      try { getClient().markChannelRead(cid).catch(() => {}); }
+      catch { /* SDK method may not exist on older builds */ }
+    });
   });
   onCleanup(() => {
     if (prevChannelId) wsUnsubscribeChannels([prevChannelId]);
@@ -1291,6 +1364,16 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const atts = attachments();
     if ((!text && atts.length === 0) || !props.channelId) return;
     if (!getSigner() || !walletAddress()) { navigate('/wallet'); return; }
+    // `isPrivate()` reads false until the record resolves, so `canEstablishKey()`
+    // and `encFloor()` below would be computed for a PUBLIC channel — a regular
+    // member of a private channel could seed an epoch key, below the rotation
+    // floor. Refuse until the record is in; the text stays in the composer.
+    // (Restricted summaries are allowed through: the type is known there and
+    // the node itself rejects a non-member's post.)
+    if (!channelRecordUsable({ allowRestricted: true })) {
+      flashShareToast(t('chat_channel_info_loading'));
+      return;
+    }
 
     setSending(true);
     setSendError(null);
@@ -1393,6 +1476,13 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     command: string,
   ) => {
     const client = getClient();
+    // Same reason as handleSend: canEstablishKey()/encFloor() are wrong until
+    // the channel record resolves. Also refuse a press whose origin is not the
+    // channel on screen: the encryption/key decisions below are computed from
+    // THIS channel's record (parity with desktop).
+    if (!channelRecordUsable({ allowRestricted: true }) || origin.channelId !== props.channelId) {
+      throw new Error(t('chat_channel_info_loading'));
+    }
     if (isEncrypted()) {
       const built = await buildEncryptedChannelMsg(origin.channelId, canEstablishKey(), command, {
         replyTo: origin.msgId, mentions: [origin.author], viaButton: true,
@@ -1478,6 +1568,23 @@ export const ChatView: Component<ChatViewProps> = (props) => {
     const edit = editingMsg();
     const newContent = messageInput().trim();
     if (!edit || !newContent || !props.channelId) return;
+    // Edits are sent as plaintext and only allowed on non-encrypted channels
+    // (canEdit); never send one while the record that decided that is unknown.
+    if (!channelRecordUsable({ allowRestricted: true })) {
+      flashShareToast(t('chat_channel_info_loading'));
+      return;
+    }
+    // The channel turned out to be encrypted after the edit started (canEdit
+    // hides Edit there). Plaintext edits are not supported on encrypted
+    // channels, so leave edit mode without sending rather than claim the
+    // record is still loading. The typed text stays in the composer (only the
+    // edit target is dropped) so nothing the user wrote is lost. No dedicated
+    // i18n string exists; the Edit action simply disappears, as it does
+    // everywhere else on such channels.
+    if (isEncrypted()) {
+      setEditingMsg(null);
+      return;
+    }
     setSending(true);
     setSendError(null);
     try {

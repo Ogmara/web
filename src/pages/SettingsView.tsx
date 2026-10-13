@@ -6,7 +6,6 @@ import { authStatus, walletAddress, walletSource } from '../lib/auth';
 import { navigate } from '../lib/router';
 import { getClient } from '../lib/api';
 import { uploadSettings, downloadSettings } from '../lib/settings-sync';
-import { vaultExportKey } from '../lib/vault';
 import { enablePush, disablePush } from '../lib/push';
 
 const LANGUAGE_NAMES: Record<string, string> = {
@@ -251,9 +250,10 @@ export const SettingsView: Component = () => {
               onClick={async () => {
                 setSyncStatus('');
                 try {
-                  const key = await vaultExportKey();
-                  if (!key) { setSyncStatus('No key available'); return; }
-                  await uploadSettings(key);
+                  // Owner captured + key exported inside uploadSettings.
+                  const res = await uploadSettings();
+                  if (res === 'no-key') { setSyncStatus('No key available'); return; }
+                  if (res === 'stale') return; // account changed meanwhile
                   setSyncStatus(t('settings_sync_success'));
                 } catch (e: any) {
                   setSyncStatus(e?.message || 'Sync failed');
@@ -267,9 +267,7 @@ export const SettingsView: Component = () => {
               onClick={async () => {
                 setSyncStatus('');
                 try {
-                  const key = await vaultExportKey();
-                  if (!key) { setSyncStatus('No key available'); return; }
-                  const ok = await downloadSettings(key);
+                  const ok = await downloadSettings();
                   if (ok) {
                     setSyncStatus(t('settings_sync_success'));
                     // Refresh UI with downloaded settings

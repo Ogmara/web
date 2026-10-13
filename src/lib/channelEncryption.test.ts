@@ -55,3 +55,81 @@ test('refreshing with a stale-but-plaintext-looking payload still fails closed',
   // stale payload looks.
   assert.equal(resolveIsEncrypted('refreshing', { channel_type: PUBLIC, encryption_enabled: false }, PRIVATE), true);
 });
+
+// ---------------------------------------------------------------------------
+// Side-effect gates (web 0.82.0). `resolveIsEncrypted` answers "treat content
+// as encrypted?" and fails CLOSED (true while unknown). These answer "may I
+// act?" and must fail the other way: false unless positively known.
+// ---------------------------------------------------------------------------
+import { isChannelRecordUsable, shouldAutoJoinEncryptedChannel, type ChannelInfoState } from './channelEncryption.ts';
+
+const STATES = ['unresolved', 'pending', 'ready', 'refreshing', 'errored'] as const;
+
+test('isChannelRecordUsable: only a resolved, non-null, typed, unrestricted record', () => {
+  for (const st of STATES) {
+    const expectReady = st === 'ready';
+    assert.equal(isChannelRecordUsable(st, { channel_type: PUBLIC }), expectReady, `state ${st}`);
+    assert.equal(isChannelRecordUsable(st, null), false, `state ${st} null`);
+    assert.equal(isChannelRecordUsable(st, undefined), false, `state ${st} undefined`);
+  }
+  assert.equal(isChannelRecordUsable('ready', {}), false, 'missing channel_type');
+  assert.equal(isChannelRecordUsable('ready', { channel_type: null }), false, 'null channel_type');
+  assert.equal(isChannelRecordUsable('ready', { channel_type: PRIVATE }, true), false, 'restricted summary');
+  assert.equal(isChannelRecordUsable('ready', { channel_type: PRIVATE }, false), true);
+  assert.equal(isChannelRecordUsable('ready', { channel_type: PRIVATE }, null), true);
+});
+
+test('shouldAutoJoinEncryptedChannel: explicit expected-value table', () => {
+  // [state, channel, restricted, expected] — expected values written out by
+  // hand, NOT derived from the predicate's own logic.
+  const E = { channel_type: PUBLIC, encryption_enabled: true };
+  const table: [ChannelInfoState, any, boolean | undefined, boolean][] = [
+    // the only joins: usable, non-private, flag exactly true
+    ['ready', E, undefined, true],
+    ['ready', E, false, true],
+    ['ready', { channel_type: 1, encryption_enabled: true }, undefined, true],
+    // not resolved
+    ['unresolved', E, undefined, false],
+    ['pending', E, undefined, false],
+    ['refreshing', E, undefined, false],
+    ['errored', E, undefined, false],
+    // no / malformed record
+    ['ready', undefined, undefined, false],
+    ['ready', null, undefined, false],
+    ['ready', {}, undefined, false],
+    ['ready', { encryption_enabled: true }, undefined, false],
+    ['ready', { channel_type: null, encryption_enabled: true }, undefined, false],
+    // restricted summary
+    ['ready', E, true, false],
+    // flag not exactly true
+    ['ready', { channel_type: PUBLIC }, undefined, false],
+    ['ready', { channel_type: PUBLIC, encryption_enabled: false }, undefined, false],
+    ['ready', { channel_type: PUBLIC, encryption_enabled: null }, undefined, false],
+    ['ready', { channel_type: PUBLIC, encryption_enabled: 'true' }, undefined, false],
+    ['ready', { channel_type: PUBLIC, encryption_enabled: 1 }, undefined, false],
+    // private, any flag
+    ['ready', { channel_type: PRIVATE }, undefined, false],
+    ['ready', { channel_type: PRIVATE, encryption_enabled: true }, undefined, false],
+    ['ready', { channel_type: PRIVATE, encryption_enabled: true }, false, false],
+    ['pending', { channel_type: PRIVATE, encryption_enabled: true }, undefined, false],
+  ];
+  for (const [st, ch, restricted, expected] of table) {
+    assert.equal(
+      shouldAutoJoinEncryptedChannel(st, ch, PRIVATE, restricted),
+      expected,
+      `state=${st} ch=${JSON.stringify(ch)} restricted=${restricted}`,
+    );
+  }
+});
+
+test('the reported bug: a private / not-yet-loaded / 404 channel is never auto-joined, though isEncrypted() says true', () => {
+  // Loading: isEncrypted() fails closed to true and isPrivate() reads false —
+  // the old `isEncrypted() && !isPrivate()` gate joined here.
+  assert.equal(resolveIsEncrypted('pending', undefined, PRIVATE), true);
+  assert.equal(shouldAutoJoinEncryptedChannel('pending', undefined, PRIVATE), false);
+  // 404 / fetch error: the fetcher returns null -> state 'ready', no record.
+  assert.equal(resolveIsEncrypted('ready', null, PRIVATE), true);
+  assert.equal(shouldAutoJoinEncryptedChannel('ready', null, PRIVATE), false);
+  // Resolved private channel.
+  assert.equal(shouldAutoJoinEncryptedChannel('ready', { channel_type: PRIVATE, encryption_enabled: true }, PRIVATE), false);
+});

@@ -16,7 +16,7 @@
 
 import { createSignal } from 'solid-js';
 import { normalizeHashtag } from '@ogmara/sdk';
-import { scopedGet, scopedSet, registerWalletSwitchReset } from './walletScope';
+import { scopedGet, scopedSet, registerWalletSwitchReset, getWalletScope } from './walletScope';
 
 /** A user-named subgroup of followed hashtags. Render order = array order. */
 export interface TopicGroup {
@@ -271,13 +271,16 @@ function scheduleUpload(): void {
   if (uploadTimer) clearTimeout(uploadTimer);
   uploadTimer = setTimeout(async () => {
     uploadTimer = null;
+    // The account this upload is for, captured BEFORE any await: the imports
+    // and the key export below can span an account change, and
+    // uploadSettings refuses to seal/upload unless this account is still the
+    // active one.
+    const owner = getWalletScope();
     try {
-      const [{ vaultExportKey }, { uploadSettings }] = await Promise.all([
-        import('./vault'),
-        import('./settings-sync'),
-      ]);
-      const key = await vaultExportKey();
-      if (key) await uploadSettings(key);
+      // Dynamic import breaks the static cycle (settings-sync imports us back).
+      // The key is exported inside uploadSettings, after `owner` was captured.
+      const { uploadSettings } = await import('./settings-sync');
+      await uploadSettings(owner);
     } catch {
       /* best-effort; local copy already persisted */
     }

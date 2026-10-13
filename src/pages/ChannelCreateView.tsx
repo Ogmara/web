@@ -15,6 +15,8 @@ import { authStatus, walletAddress, walletSource, getSigner, isRegistered } from
 import { navigate, goBack } from '../lib/router';
 import { kleverAvailable, createChannelOnChain, getChannelIdFromTx } from '../lib/klever';
 import { addJoinedChannel } from '../components/Sidebar';
+import { stillSameAccount } from '../lib/accountGuard';
+import { getWalletScope } from '../lib/walletScope';
 
 export const ChannelCreateView: Component = () => {
   const [slug, setSlug] = createSignal('');
@@ -26,11 +28,29 @@ export const ChannelCreateView: Component = () => {
   const [error, setError] = createSignal('');
 
   const [status, setStatus] = createSignal('');
+  // Set when the account changed mid-creation after the on-chain step. Shown
+  // OUTSIDE the form, which is hidden while signed out / for an unverified
+  // account — exactly the states a switch passes through.
+  const [interrupted, setInterrupted] = createSignal<
+    'channel_create_interrupted' | 'channel_create_interrupted_private' | 'channel_create_interrupted_published' | null
+  >(null);
 
   const handleCreate = async () => {
     const s = slug().trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
     if (!s) { setError('Slug is required'); return; }
     if (!getSigner() || !walletAddress()) { setError(t('auth_required')); return; }
+    // The account this creation belongs to. `getClient()` is shared and a
+    // reconnect re-attaches the signer to it, so after any await below the
+    // L2 envelope would be signed by — and the joined-set entry written for —
+    // whichever account is active THEN. Re-checked before both — against the
+    // wallet, the storage scope AND the client's signer (a reconnect can
+    // re-attach a different signer; for extension wallets the signer is a
+    // device key, so it is compared to itself, not to the wallet address).
+    const me = walletAddress();
+    const signerAtStart = getClient().address ?? null;
+    const sameAccount = () =>
+      stillSameAccount(me, walletAddress(), getWalletScope()) &&
+      stillSameAccount(signerAtStart, getClient().address);
 
     const isPrivate = channelType() === 2;
 
@@ -43,9 +63,9 @@ export const ChannelCreateView: Component = () => {
 
     setSubmitting(true);
     setError('');
+    setInterrupted(null);
 
     try {
-      const client = getClient();
       let channelId: number | undefined;
 
       if (!isPrivate) {
@@ -58,9 +78,18 @@ export const ChannelCreateView: Component = () => {
       }
       // Private: channelId stays undefined — createChannel derives it.
 
+      if (!sameAccount()) {
+        // Never publish the L2 ChannelCreate as another account. For public
+        // channels the on-chain step already completed under `me`.
+        setInterrupted(isPrivate ? 'channel_create_interrupted_private' : 'channel_create_interrupted');
+        return;
+      }
+
       // Publish L2 ChannelCreate envelope with the assigned/derived channel_id
       setStatus(isPrivate ? 'Creating private channel...' : 'Publishing channel to L2 network...');
-      const resp = await client.createChannel({
+      // The client is re-read here (verified just above), never a reference
+      // captured before the awaits.
+      const resp = await getClient().createChannel({
         channelId,
         slug: s,
         channelType: channelType(),
@@ -73,6 +102,16 @@ export const ChannelCreateView: Component = () => {
         encryptionEnabled: true,
       });
 
+      if (!sameAccount()) {
+        // Created under `me` (the SDK binds the signer at call time); never
+        // record it in another account's joined set. Filing it under `me`
+        // instead is deliberately NOT done: on web an account change is a
+        // disconnect, which wipes `me`'s namespace, and writing into it would
+        // resurrect data the user just removed. A private channel reappears
+        // for `me` from the node's list on next login; a public one via Search.
+        setInterrupted('channel_create_interrupted_published');
+        return;
+      }
       addJoinedChannel(resp.channel_id);
       window.dispatchEvent(new Event('ogmara:channels-changed'));
       navigate(`/chat/${resp.channel_id}`);
@@ -90,6 +129,10 @@ export const ChannelCreateView: Component = () => {
         <button class="create-back" onClick={() => goBack()}>← {t('nav_back')}</button>
         <h2>{t('channel_create')}</h2>
       </div>
+
+      <Show when={interrupted()}>
+        {(key) => <div class="create-error">{t(key())}</div>}
+      </Show>
 
       <Show when={authStatus() !== 'ready'}>
         <div class="create-auth-prompt">

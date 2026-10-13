@@ -5,7 +5,7 @@
  * Messages, Bookmarks, Search, Settings.
  */
 
-import { Component, JSX, createResource, createSignal, createEffect, createMemo, For, Show, onCleanup } from 'solid-js';
+import { Component, JSX, createResource, createSignal, createEffect, createMemo, For, Show, onCleanup, on, untrack } from 'solid-js';
 import {
   DragDropProvider,
   DragDropSensors,
@@ -90,8 +90,10 @@ import { NewsFeedTopics } from './NewsFeedTopics';
 import { hideConversation, isConversationHidden } from '../lib/dm-hide';
 import { clearCachedMessages } from '../lib/messageCache';
 import { keepMenuInViewport } from '../lib/menu-position';
-import { vaultExportKey } from '../lib/vault';
-import { scopedGet, scopedSet } from '../lib/walletScope';
+import { scopedGet, scopedSet, getWalletScope } from '../lib/walletScope';
+import { shouldReconcileJoined } from '../lib/channelListSync';
+import { sumVisibleUnread } from '../lib/unreadTotals';
+import { isFreshAccount, clearFreshAccount } from '../lib/freshAccount';
 
 // Re-exported for existing importers (ChannelJoinView, ChannelCreateView) that
 // historically imported these from the Sidebar; the implementation now lives in
@@ -243,7 +245,15 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
 
   createEffect(() => {
     const addr = walletAddress();
-    if (addr) resolveProfile(addr).then(setBurgerProfile);
+    // Reset first: the sidebar never unmounts, so without this the previous
+    // account's display name/avatar stays under the new account's address
+    // until (or, with no profile, forever after) the lookup resolves.
+    setBurgerProfile({});
+    if (addr) {
+      resolveProfile(addr).then((p) => {
+        if (walletAddress() === addr) setBurgerProfile(p);
+      });
+    }
   });
 
   // Avatar shown in the burger menu (the OWN user). Prefer the locally-cached
@@ -286,21 +296,40 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     return getSetting('defaultFeed') === 'following' ? 'following' : 'global';
   };
 
-  // Remember last route per tab so switching tabs restores the previous view
-  let lastChatRoute = `/chat/${getSetting('lastChannel') || ''}`;
-  let lastFeedRoute = `/news?feed=${
-    getSetting('defaultFeed') === 'following' ? 'following' : 'global'
-  }`;
+  // Remember last route per tab so switching tabs restores the previous view.
+  //
+  // The Chats tab has no closure memory any more: it resumes the per-wallet
+  // `lastChannel` setting, and only when that channel is in the visible set
+  // (see the tab button). The closure variable it replaced was never reset on
+  // a wallet change, so the Chats tab navigated the next account straight
+  // into the previous account's channel — private ones included (web 0.82.0).
+  //
+  // Feed/DM memory stays in closure variables but is OWNED by the wallet that
+  // produced it (`tabMemOwner`): reset on every wallet change, and re-checked
+  // at click time so a click racing the reset can never use another account's
+  // DM peer.
+  const defaultFeedRoute = () =>
+    `/news?feed=${getSetting('defaultFeed') === 'following' ? 'following' : 'global'}`;
+  let lastFeedRoute = defaultFeedRoute();
   let lastDmRoute = '/dm';
+  let tabMemOwner: string | null = walletAddress();
+  const resetTabMemory = () => {
+    lastFeedRoute = defaultFeedRoute();
+    lastDmRoute = '/dm';
+    tabMemOwner = walletAddress();
+  };
+  const ownTabMemory = () => {
+    if (tabMemOwner !== walletAddress()) resetTabMemory();
+  };
 
   // Track current route changes to update last-per-tab.
   // Only stick on the LIST views (`/news`, `/dm`) — clicking the tab should
   // always return to the feed/list, not to a previously-open detail or
-  // compose screen. (For chat we do stick on the channel because each
-  // channel is its own context the user wants to resume.)
+  // compose screen.
   createEffect(() => {
     const r = route();
-    if (r.view === 'chat' && r.params.channelId) lastChatRoute = `/chat/${r.params.channelId}`;
+    // Never record into memory that belongs to another account.
+    untrack(ownTabMemory);
     if (r.view === 'news') {
       // Preserve the active feed mode so clicking the News tab from
       // Chat/DMs lands back on the same Global/Following view the user
@@ -315,13 +344,22 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     if (r.view === 'dm-conversation' && r.params.address) lastDmRoute = `/dm/${r.params.address}`;
   });
 
-  // DM conversations for modern sidebar
-  const [dmConversations, { refetch: refetchDmConvs }] = createResource(
-    () => activeTab() === 'dms' && authStatus() === 'ready',
-    async (shouldFetch) => {
-      if (!shouldFetch) return [];
+  // DM conversations for modern sidebar.
+  // The source is the WALLET (or `false` when not fetching), not a boolean: a
+  // boolean stays `true` across a disconnect + connect of another wallet that
+  // keeps the DMs tab open, so no new load started and the previous account's
+  // conversation list stayed on screen; Solid also only discards an
+  // out-of-order resolution when a newer load has actually started.
+  const [dmConversations, { refetch: refetchDmConvs, mutate: mutateDmConvs }] = createResource(
+    () => (activeTab() === 'dms' && authStatus() === 'ready') ? walletAddress() : false,
+    async (walletKey) => {
+      if (!walletKey) return [];
       try {
         const resp = await getClient().getDmConversations({ limit: 50 });
+        // The fetcher body keeps running after a wallet change even though
+        // Solid drops its result; never write one account's DM peers into
+        // the cache key of whichever wallet is active when it resolves.
+        if (walletAddress() !== walletKey) return getCachedDmConvs();
         for (const conv of resp.conversations) {
           if (!memberProfiles().has(conv.peer)) {
             resolveProfile(conv.peer).then((p) => {
@@ -595,19 +633,40 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
 
   const [channelVersion, setChannelVersion] = createSignal(0);
   const [hasLoadedOnce, setHasLoadedOnce] = createSignal(false);
-  const [allChannels, { refetch: refetchChannels }] = createResource(
-    () => channelVersion(),
-    async () => {
+  // The wallet the CURRENT `allChannels` value was live-fetched for. Set only
+  // on a live success for the still-active wallet — never from the cache seed,
+  // a fallback, or a stale response — and read by the joined-set reconcile
+  // gate below (lib/channelListSync.ts).
+  const [liveListOwner, setLiveListOwner] = createSignal<string | null>(null);
+  // Source includes the wallet: the private channels in this list are filtered
+  // server-side by the caller, so the list is per account. Keyed on
+  // `channelVersion()` alone, a disconnect + connect of another wallet in the
+  // same page kept account A's list (A's private channels) as the value, and
+  // the reconcile effect copied them into B's joined set (web 0.82.0).
+  const [allChannels, { refetch: refetchChannels, mutate: mutateAllChannels }] = createResource(
+    () => [channelVersion(), walletAddress()] as const,
+    async ([, wallet]) => {
+      // Ownership is re-earned by every fetch: cleared here, set again ONLY on
+      // a live success below. Otherwise a failed refetch (fallback to the
+      // cache) kept the previous success's owner, and the add-only reconcile
+      // could re-pin a private channel the user had just left.
+      setLiveListOwner(null);
       try {
         const client = getClient();
         const resp = await client.listChannels(1, 50);
+        // Stale: the wallet changed while this was in flight. Solid discards
+        // the value, but this body still runs — never cache it under the new
+        // wallet's key or claim ownership for it.
+        if (walletAddress() !== wallet) return getCachedChannels();
         // Cache the fresh list so the next boot renders instantly (logos
         // are already browser-cached, so they paint with no flicker).
         setCachedChannels(resp.channels);
+        setLiveListOwner(wallet);
         return resp.channels;
       } catch {
         // On failure keep showing the cached list rather than emptying the
-        // sidebar (which would also drop the logos).
+        // sidebar (which would also drop the logos). Never claims ownership:
+        // a cache is not a live answer for reconcile.
         return getCachedChannels();
       } finally {
         setHasLoadedOnce(true);
@@ -618,16 +677,79 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     { initialValue: getCachedChannels() },
   );
 
+  /** Wallet whose fresh-account baseline was already attempted (see below). */
+  let freshBaselineDone: string | null = null;
+
+  // On every wallet change, show THIS account's own cached lists right away
+  // instead of the previous account's real ones for the round trip the new
+  // fetch (already started by the source change) takes; and drop all
+  // account-bound UI state the never-unmounting sidebar holds.
+  createEffect(on(walletAddress, () => {
+    setLiveListOwner(null);
+    mutateAllChannels(getCachedChannels());
+    mutateDmConvs(getCachedDmConvs());
+    resetTabMemory();
+    setChannelMembers({});
+    setExpandedMembers(new Set<number>());
+    setContextMenu(null);
+    setDmContextMenu(null);
+    setMemberMenu(null);
+    setGroupMenu(null);
+    setRenamingGroup(null);
+    freshBaselineDone = null;
+  }, { defer: true }));
+
   // Sync joined set with API data whenever the channel list refreshes.
   // Handles first-time migration and auto-adds private channels.
+  // Only reconcile against a LIVE list fetched for the CURRENT wallet, with
+  // storage pointed at that wallet and no fetch in flight: `syncJoinedWithApi`
+  // is add-only and seeds every private channel into a fresh account, so a
+  // stale cache (audit 2026-06-11) or another account's list (web 0.82.0)
+  // would be persisted permanently.
   createEffect(() => {
     const all = allChannels();
-    // Only reconcile joined-state against the LIVE list, never the seeded
-    // cache: `syncJoinedWithApi` is add-only, so a stale cache could otherwise
-    // re-pin a private channel the user has since left (audit 2026-06-11).
-    if (hasLoadedOnce() && authStatus() === 'ready' && all && all.length > 0) {
-      syncJoinedWithApi(all);
-    }
+    const ok = shouldReconcileJoined({
+      authReady: authStatus() === 'ready',
+      liveListOwner: liveListOwner(),
+      wallet: walletAddress(),
+      scope: getWalletScope(),
+      loading: allChannels.loading,
+      listLength: all?.length ?? 0,
+    });
+    // untrack: syncJoinedWithApi reads joinedSignal(); tracking it would re-run
+    // this on every join/leave and on the scope-flip store reload.
+    if (ok && all) untrack(() => syncJoinedWithApi(all));
+  });
+
+  // Fresh-account baseline (lib/freshAccount.ts): a wallet created on this
+  // device has never read the default channel, so its whole backlog would show
+  // as unread. After the first live list for that wallet, mark the default
+  // channel read once and consume the flag.
+  createEffect(() => {
+    const me = walletAddress();
+    const owner = liveListOwner();
+    if (!me || owner !== me || authStatus() !== 'ready' || allChannels.loading) return;
+    if (freshBaselineDone === me) return;
+    if (getWalletScope() !== me) return;
+    // The flag is only ever set before the address is published, so a
+    // wallet that isn't fresh now never becomes fresh: stop re-checking.
+    if (!untrack(isFreshAccount)) { freshBaselineDone = me; return; }
+    const def = (allChannels() ?? []).find((ch) => ch.slug === DEFAULT_CHANNEL_SLUG);
+    if (!def) return;
+    freshBaselineDone = me;
+    getClient().markChannelRead(def.channel_id).then(() => {
+      if (walletAddress() !== me || getWalletScope() !== me) return;
+      clearFreshAccount();
+      setUnreadCounts((prev) => {
+        if (!(String(def.channel_id) in prev)) return prev;
+        const next = { ...prev };
+        delete next[String(def.channel_id)];
+        return next;
+      });
+    }).catch(() => {
+      // Keep the flag; retry on the next live list for this wallet.
+      if (freshBaselineDone === me) freshBaselineDone = null;
+    });
   });
 
   // Filter: show only joined channels + default "ogmara" channel.
@@ -642,6 +764,11 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
       ch.slug === DEFAULT_CHANNEL_SLUG || joined.has(ch.channel_id),
     );
   });
+
+  // Aggregate unread badges count only channels the sidebar actually shows.
+  // The raw `unreadCounts` map (per-row lookups) stays untouched.
+  const visibleChannelIds = createMemo(() => new Set(channels().map((ch) => ch.channel_id)));
+  const visibleChannelUnread = createMemo(() => sumVisibleUnread(unreadCounts(), visibleChannelIds()));
 
   // --- Channel organization (groups + custom ordering) ---
   // Resolved, ordered sidebar layout. Reacts to both the channel list and the
@@ -661,10 +788,9 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
   // once when the wallet becomes ready, so a fresh device shows the user's
   // groups + ordering + followed topics. Best-effort, LWW-guarded.
   let orgPulled = false;
+  // The owner is captured and the key exported inside downloadChannelOrg.
   const pullSyncedObjects = () => {
-    vaultExportKey()
-      .then((key) => { if (key) downloadChannelOrg(key).catch(() => {}); })
-      .catch(() => {});
+    downloadChannelOrg().catch(() => {});
   };
   createEffect(() => {
     if (authStatus() === 'ready' && !orgPulled) {
@@ -913,6 +1039,10 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   const pollData = async () => {
     if (authStatus() !== 'ready') return;
+    // Captured up front: results of a poll still in flight when the wallet
+    // changes belong to the OLD account and must not land in the counters
+    // the UI now attributes to the new one.
+    const polledFor = walletAddress();
     try {
       const client = getClient();
       const lastSeenNotif = parseInt(scopedGet('ogmara.lastSeenNotifTs') || '0', 10);
@@ -923,6 +1053,7 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
         // Refresh channel list
         refetchChannels(),
       ]);
+      if (walletAddress() !== polledFor) return;
       setUnreadCounts(unread.unread ?? {});
       setMentionCounts(unread.mentions ?? {});
       const dmCounts = dmUnread.unread ?? {};
@@ -935,8 +1066,18 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
     } catch { /* ignore */ }
   };
   createEffect(() => {
+    // Track the wallet as well as authStatus: re-arm polling under the new
+    // account immediately, and zero every counter so no previous-account
+    // number stays on screen in between (or indefinitely after a disconnect,
+    // which cleared the timer but never the display).
+    const wallet = walletAddress();
     if (pollTimer) clearInterval(pollTimer);
-    if (authStatus() === 'ready') {
+    pollTimer = null;
+    setUnreadCounts({});
+    setMentionCounts({});
+    setDmUnreadTotal(0);
+    setNotifUnread(0);
+    if (authStatus() === 'ready' && wallet) {
       pollData();
       pollTimer = setInterval(pollData, 12000);
     }
@@ -1116,11 +1257,18 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
       {/* Tab bar — pill buttons with accent-bg tint on active */}
       <div style="display:flex; gap:4px; padding:8px 12px; border-bottom:1px solid var(--color-border)">
         <button style={`flex:1; padding:8px 10px; font-size:var(--font-size-sm); font-weight:600; border-radius:9999px; transition:background 0.15s, color 0.15s; text-align:center; ${activeTab() === 'chats' ? 'background:var(--color-accent-bg); color:var(--color-accent-primary)' : 'background:transparent; color:var(--color-text-secondary)'}`}
-          onClick={() => { setActiveTab('chats'); if (lastChatRoute && lastChatRoute !== '/chat/') go(lastChatRoute); }}>{t('nav_chat')}</button>
+          onClick={() => {
+            setActiveTab('chats');
+            // Resume this wallet's own last channel, and only if it is one
+            // the sidebar shows (joined or default) — never a channel id
+            // remembered from another account or since left.
+            const last = Number(getSetting('lastChannel'));
+            if (Number.isSafeInteger(last) && visibleChannelIds().has(last)) go(`/chat/${last}`);
+          }}>{t('nav_chat')}</button>
         <button style={`flex:1; padding:8px 10px; font-size:var(--font-size-sm); font-weight:600; border-radius:9999px; transition:background 0.15s, color 0.15s; text-align:center; ${activeTab() === 'feed' ? 'background:var(--color-accent-bg); color:var(--color-accent-primary)' : 'background:transparent; color:var(--color-text-secondary)'}`}
-          onClick={() => { setActiveTab('feed'); go(lastFeedRoute); }}>{t('nav_news')}</button>
+          onClick={() => { setActiveTab('feed'); ownTabMemory(); go(lastFeedRoute); }}>{t('nav_news')}</button>
         <button style={`flex:1; padding:8px 10px; font-size:var(--font-size-sm); font-weight:600; border-radius:9999px; transition:background 0.15s, color 0.15s; text-align:center; ${activeTab() === 'dms' ? 'background:var(--color-accent-bg); color:var(--color-accent-primary)' : 'background:transparent; color:var(--color-text-secondary)'}`}
-          onClick={() => { setActiveTab('dms'); if (lastDmRoute !== '/dm') go(lastDmRoute); }}>{t('nav_dms')}</button>
+          onClick={() => { setActiveTab('dms'); ownTabMemory(); if (lastDmRoute !== '/dm') go(lastDmRoute); }}>{t('nav_dms')}</button>
       </div>
 
       {/* Tab content */}
@@ -1579,9 +1727,9 @@ export const Sidebar: Component<{ onNavigate?: () => void }> = (props) => {
           >
             <span class={`collapse-arrow ${channelsOpen() ? 'open' : ''}`}>▸</span>
             <h3 class="sidebar-heading">{t('sidebar_channels')}</h3>
-            <Show when={!channelsOpen() && Object.values(unreadCounts()).reduce((a, b) => a + b, 0) > 0}>
+            <Show when={!channelsOpen() && visibleChannelUnread() > 0}>
               <span class="unread-badge">
-                {Object.values(unreadCounts()).reduce((a, b) => a + b, 0)}
+                {visibleChannelUnread()}
               </span>
             </Show>
           </button>

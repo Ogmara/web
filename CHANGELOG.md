@@ -5,6 +5,192 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.82.0] - 2026-10-12
+
+Multi-account hardening: several pieces of account-bound state survived a
+disconnect followed by connecting a different wallet in the same page.
+
+### Security
+
+- **Another account's private channels could be seeded into the new
+  account's joined set.** The Sidebar's channel-list resource was keyed on a
+  version counter only, so after disconnect + connect of wallet B it still
+  held wallet A's list (A's private channels) while B's fetch was in flight,
+  and the reconcile effect ran `syncJoinedWithApi` on it under B — which,
+  for a fresh account, persists every private channel it is handed. The
+  resource now keys on the wallet, stale responses are discarded, ownership
+  of the live list is tracked (`liveListOwner`, set only on a live success
+  for the still-active wallet), and reconcile requires a live list for the
+  current wallet, storage scoped to that same wallet and no fetch in flight
+  (`lib/channelListSync.ts`, wiring test with negative control). The list is
+  also reset to the new account's own cache the instant the wallet changes.
+  Ownership is cleared at the start of every fetch and set only on a live
+  success, so a failed refetch that falls back to the cached list can no
+  longer re-pin a private channel the user just left.
+- **Per-account detail routes no longer carry over to the next account.**
+  With `#/chat/<id>`, `#/chat/<id>/settings` or `#/dm/<peer>` open, disconnecting and connecting a different wallet kept that route, so
+  account B could be auto-joined to an encrypted public channel A was viewing
+  (and record it as B's `lastChannel`) or open A's DM partner. When the
+  wallet becomes a different one than the last wallet seen in the page, the
+  app now redirects synchronously to the neutral `/chat` or `/dm`
+  (`lib/accountRoutes.ts`, `redirectNow` in the router). The first login in
+  a page does not redirect, so deep links keep working. Invite links
+  (`#/join/<id>`) are deliberately left alone on an account change too, so an
+  invite opened before connecting the right account still works (matches
+  desktop); joining there is an explicit click and re-checks the wallet.
+- **Button presses refuse a mismatched origin.** A press whose origin
+  channel is not the channel on screen is refused, since its encryption and
+  key decisions come from the on-screen channel's record (parity with
+  desktop).
+- **Channel and DM list caches removed on disconnect.** The Sidebar caches
+  (`channelsCache:<node>:<addr>`, `dmConvsCache:<node>:<addr>`) use a single
+  `:` separator, so the disconnect wipe (which matched `::<addr>`) left the
+  private channel list and DM peer list on disk. `wipeWalletScope` now also
+  matches these two prefixes; keys are not renamed.
+- **E2E debug trace cleared on wallet change.** The in-memory trace buffer
+  (addresses, channel and device ids) is now dropped on every wallet-scope
+  change.
+- **Channel join view re-checks the account.** The channel preview is keyed
+  on the wallet, and join / federate-and-join abort silently if the wallet or
+  the channel on screen changed during an await, so a join or joined-set
+  entry is never recorded for an account that became active mid-flow. The
+  preview fetcher's stale check compares the channel id as well as the
+  wallet.
+- **Channel creation can no longer be completed as a different account.**
+  The shared API client is re-signed on reconnect, so an account change
+  during the ~40 s on-chain confirmation wait made the L2 `ChannelCreate`
+  get signed by the NEW account and the channel written into its joined set.
+  Creation now aborts before publishing and before recording the channel if
+  the wallet, the storage scope or the client's signer changed (signer
+  compared to itself, so extension device keys work; `lib/accountGuard.ts`,
+  same rule as desktop). The client is re-read right before publishing
+  rather than captured before the awaits. A notice explains what happened:
+  registered on-chain under the previous account, nothing created (private),
+  or published under the previous account (`channel_create_interrupted`,
+  `_private`, `_published`, all 7 locales, wording shared with desktop).
+  A channel published just before the switch is not filed into the previous
+  account's joined set: on web the switch is a disconnect that wipes that
+  account's local data, and writing into it would bring data back that the
+  user just removed. Private channels come back from the node's list on the
+  next login; public ones are found via Search.
+- **Settings sync re-checks the account after decrypting.** The derive and
+  decrypt awaits in `decryptAndApplySettings` could span a disconnect +
+  connect, after which the previous account's pinned/muted channels, channel
+  organisation, hidden DMs and topics were written into the new account's
+  namespace. Nothing is applied now unless the starting wallet is still
+  active in both the address and the storage scope (`lib/ownedAwait.ts`,
+  with tests); the on-login pull checks the scope as well.
+- **Settings upload re-checks the account.** `uploadSettings` now seals and
+  uploads only if the account it is for is still active (address and
+  storage scope) after the encryption await. The debounced upload timers
+  (channel organisation, hidden DMs, followed topics) capture that account
+  before exporting the key, so an upload that fires across an account change
+  never seals one account's data or uploads it under another's session.
+- **Key-recovery vault restore/backup can no longer cross accounts.** A
+  restore in flight across disconnect(A) / connect(B) imported A's DM and
+  channel keys into the key caches serving B (B's next backup then sealed
+  them into B's node vault); if the decrypt failed instead, restore was
+  marked done for B's session, suppressing B's own restore so the next
+  backup overwrote B's remote vault with a partial keyring. The backup-key
+  derivation in flight was also handed to callers of another wallet. Now
+  the restore and backup flows capture the wallet and a new wallet-switch
+  generation (`getSwitchGeneration`, bumped on every scope change and
+  pre-teardown reset) and re-check after every await: a stale run never
+  imports, never publishes and never marks restore done; a decrypt failure
+  is terminal only for the account whose own key failed; a backup key is
+  used only for the wallet it was derived for; an in-flight derivation is
+  shared only within the same wallet and generation, and is dropped by
+  `clearKeyVaultSession` (`lib/keyVaultCore.ts`, with mutation-style tests
+  and a negative control reproducing the pre-fix leak).
+- **Settings-sync key exported only after the account is captured.** The
+  Sidebar's on-login pull, the Settings page upload/download buttons and the
+  debounced upload timers used to export the key first and pass it in, so
+  the key could belong to an account that was replaced before the sync
+  function captured its owner. The sync functions now capture the owner,
+  export the key themselves, and re-check after the export; for built-in
+  wallets the stored key must also be the owner's (`exportKeyForOwner` in
+  `lib/ownedAwait.ts`). Extension wallets have no cheap check of this kind
+  and rely on the ownership re-check.
+- **Signer detached from the API client on disconnect.** `disconnectWallet`
+  cleared the active-signer reference but left the signer attached to the
+  shared client, so a signed-out page kept signing as the departed account.
+  The SDK has no detach call, so the client instance is now reset; the next
+  one is built without a signer (or with the next account's).
+- **Unintended channel joins closed.** ChatView's auto-join was gated on
+  `isEncrypted() && !isPrivate()`; `isEncrypted()` is fail-closed (true while
+  the channel record is loading, errored or 404) and `isPrivate()` is false
+  in the same window, so the join fired for any channel — private ones
+  included — before its record loaded, and the node accepted it (real
+  membership plus key cover). Auto-join now needs positive evidence
+  (`shouldAutoJoinEncryptedChannel`: resolved, non-restricted record,
+  non-private, `encryption_enabled === true`), a signed-in wallet with auth
+  ready, and is tracked once per wallet per channel per session
+  (`lib/autoJoin.ts`, cleared on wallet change, retried after a failure).
+- **DM conversation list carried over to the next account.** The DM list
+  resource was keyed on a boolean that stayed `true` across the switch; it
+  now keys on the wallet, guards the cache write against a mid-flight switch,
+  and resets to the new account's cache immediately.
+- **Tab route memory carried over to the next account.** The Chats tab
+  remembered the last channel in a closure variable that was never reset, so
+  the next account was navigated into the previous account's channel
+  (including private ones). The Chats tab now resumes the per-wallet
+  `lastChannel` only when that channel is in the visible list; News/DM tab
+  memory is owned by the wallet that produced it and reset on every wallet
+  change (also re-checked at click time). Member lists, expanded member
+  panels, context menus and the burger-menu profile are reset too.
+- **Route re-parsed on wallet change.** A bare `#/chat` resolves to the
+  active account's `lastChannel` only when parsed; the router now re-parses
+  on every wallet-scope change (publishing only a real difference).
+- **`lastChannel` / mark-read no longer recorded for the wrong account.**
+  Previously written on ChatView mount regardless of wallet, auth or whether
+  the channel record loaded (writing the un-namespaced key when signed out).
+  Now only once the record is usable for this channel and this wallet,
+  de-duplicated per wallet:channel. The channel-record resource also keys on
+  the wallet so a record fetched for the previous account never counts.
+
+### Fixed
+
+- **Sending is blocked until the channel record resolves.** While loading,
+  `isPrivate()` read false, so `canEstablishKey()`/`encFloor()` were computed
+  as for a public channel. Send, edit and button presses now return early
+  with a "channel info is still loading" notice (new
+  `chat_channel_info_loading` key in all 7 locales, wording from mobile).
+- **Send no longer stays blocked after a failed channel-record fetch.** A
+  failed fetch resolved to `null` and nothing refetched it, so the "still
+  loading" notice persisted until the channel was reopened. The record is
+  now retried up to 4 times per wallet:channel (after 3/6/9/12 s; timers
+  cleared on unmount), matching desktop (`lib/channelInfoRetry.ts`).
+- **Edit on a channel that turned out to be encrypted** now leaves edit mode
+  without sending instead of showing the misleading "still loading" notice;
+  the typed text stays in the composer.
+- **Aggregate channel unread limited to visible channels.** The collapsed
+  Channels header summed the raw unread map, including channels the sidebar
+  does not show (`lib/unreadTotals.ts` `sumVisibleUnread`). Per-row badges
+  are unchanged.
+- **Unread counters no longer show the previous account's numbers.** The
+  poll re-arms on wallet change, zeroes every counter immediately, and drops
+  results of a poll started for a different wallet.
+- **Auth ordering:** `connectWithKey`, `generateWallet` and the built-in
+  restore path now set the per-wallet storage scope BEFORE publishing the
+  wallet address (extension connect already did), so effects keyed on the
+  address never read the previous account's scoped stores.
+- **Fresh accounts no longer open with the default channel's whole backlog
+  as unread.** A wallet created on this device (`generateWallet` only — not
+  import or extension connect) marks the default channel read once after its
+  first live channel list (`lib/freshAccount.ts`).
+
+### Changed
+
+- `package-lock.json` root version re-synced (was still 0.81.0).
+- The router no longer re-publishes an identical route on `hashchange`.
+
+### Known limitations
+
+- ChatView's `messages`, pinned-message and role resources are still keyed
+  on channel + auth status, not the wallet. Safe today because web can only
+  connect from the signed-out state (auth passes through `none`, which
+  refetches them); revisit if in-place account switching is ever added.
+
 ## [0.81.1] - 2026-10-06
 
 ### Fixed
