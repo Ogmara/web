@@ -2,15 +2,24 @@
  * ChannelSettingsView — channel admin page.
  *
  * Sections: Info (edit name/desc), Moderators (add/remove), Bans (unban),
- * Pins (unpin), Invite link.
+ * Pins (unpin), Invite link (Public / ReadPublic only), Invite by address
+ * (Private: validity picker + personal invite link, spec 06 §6.5).
  * Visible to channel owner and moderators with relevant permissions.
  */
 
 import { Component, createResource, createSignal, createEffect, For, Show } from 'solid-js';
-import { t } from '../i18n/init';
+import { t, currentLanguage } from '../i18n/init';
 import { getClient, getCurrentNodeUrl } from '../lib/api';
-import { buildChannelInviteUrl } from '../lib/share';
+import { buildPrivateChannelInviteUrl } from '@ogmara/sdk';
+import { buildChannelInviteUrl, copyToClipboard } from '../lib/share';
 import { walletAddress } from '../lib/auth';
+import { getSwitchGeneration } from '../lib/walletScope';
+import {
+  INVITE_TTL_OPTIONS,
+  DEFAULT_INVITE_TTL_OPTION_MS,
+  inviteTtlFromPicker,
+  isInviteGatedChannel,
+} from '../lib/privateInvite';
 import { navigate, goBack } from '../lib/router';
 import { resolveProfile, type CachedProfile } from '../lib/profile';
 import { getPayloadContent } from '../lib/payload';
@@ -216,6 +225,15 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
   const isPrivateChannel = () => channelType() === 2;
   const isReadPublicChannel = () => channelType() === 1;
   const channelTypeKnown = () => channelType() !== null;
+  // Invite-gate decision (shared isInviteGatedChannel, floor-aware). The bare
+  // copy-link needs POSITIVE evidence: the loaded record is for THIS channel
+  // id and is explicitly Public/ReadPublic with an id below the private floor.
+  // Anything else (Private, unknown type, private-range id, stale record) is
+  // fail-closed: no bare link, invites get the validity picker + personal link.
+  const recordIsForRoute = () => detail()?.channel?.channel_id === channelIdNum();
+  const isExplicitPublicChannel = () =>
+    channelTypeKnown() && recordIsForRoute() && !isInviteGatedChannel(channelType(), channelIdNum());
+  const isGatedChannel = () => channelTypeKnown() && !isExplicitPublicChannel();
   const handleTogglePostingMode = async () => {
     if (isPrivateChannel()) return; // sanity guard; UI hides the toggle anyway
     setPostingModeSaving(true);
@@ -269,19 +287,79 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
   const [inviteAddress, setInviteAddress] = createSignal('');
   const [inviteError, setInviteError] = createSignal('');
   const [inviteSuccess, setInviteSuccess] = createSignal(false);
+  const [inviteBusy, setInviteBusy] = createSignal(false);
+  // Validity of a Private-channel invite (1h / 24h / 7d / 14d, default 7d).
+  const [inviteTtlMs, setInviteTtlMs] = createSignal(DEFAULT_INVITE_TTL_OPTION_MS);
+  // The personal invite link for the LAST invitee (Private only). Tagged with
+  // the wallet, switch generation and channel it was made under: it is shown
+  // only while all three still match, so it can never surface for another
+  // account or channel.
+  const [lastInvite, setLastInvite] = createSignal<{
+    wallet: string; gen: number; channelId: string; address: string; url: string; expiresAt: number;
+  } | null>(null);
+  const [personalLinkCopied, setPersonalLinkCopied] = createSignal(false);
+  const currentLastInvite = () => {
+    const li = lastInvite();
+    if (!li) return null;
+    if (li.wallet !== walletAddress() || li.gen !== getSwitchGeneration() || li.channelId !== props.channelId) return null;
+    return li;
+  };
 
   const handleInviteUser = async () => {
     const addr = inviteAddress().trim();
     if (!addr.startsWith('klv1')) return;
+    // The channel type decides validity + personal link: wait for the record.
+    if (inviteBusy() || !channelTypeKnown()) return;
+    // Captured first; re-checked after the await (spec 06 §6.10).
+    const me = walletAddress();
+    const gen = getSwitchGeneration();
+    const id = props.channelId;
+    const cid = channelIdNum();
+    const priv = isGatedChannel();
+    const changed = () => walletAddress() !== me || getSwitchGeneration() !== gen || props.channelId !== id;
+    if (!me) return;
     setInviteError('');
     setInviteSuccess(false);
+    setLastInvite(null);
+    setPersonalLinkCopied(false);
+    setInviteBusy(true);
     try {
-      await getClient().inviteUser(channelIdNum(), addr);
+      const ttlMs = priv ? inviteTtlFromPicker(inviteTtlMs()) : undefined;
+      const res = await getClient().inviteUser(cid, addr, ttlMs !== undefined ? { ttlMs } : undefined);
+      if (changed()) return;
       setInviteAddress('');
       setInviteSuccess(true);
       setTimeout(() => setInviteSuccess(false), 2000);
+      if (priv) {
+        // This node is the invitee's federation host hint.
+        let url = '';
+        try { url = buildPrivateChannelInviteUrl(cid, res.inviteEnvelope, getCurrentNodeUrl()); } catch { /* link unavailable; the notification still delivers the invite */ }
+        if (url) setLastInvite({ wallet: me, gen, channelId: id, address: addr, url, expiresAt: res.expiresAt });
+      }
     } catch (e: any) {
-      setInviteError(e?.message || 'Failed');
+      // An account switch mid-call (the SDK also refuses to sign for a swapped
+      // signer) is not an error for the account now on screen.
+      if (changed()) return;
+      setInviteError(e?.message || t('error_generic'));
+    } finally {
+      setInviteBusy(false);
+    }
+  };
+
+  const handleCopyPersonalLink = async () => {
+    const li = currentLastInvite();
+    if (!li) return;
+    if (await copyToClipboard(li.url)) {
+      setPersonalLinkCopied(true);
+      setTimeout(() => setPersonalLinkCopied(false), 2000);
+    }
+  };
+
+  const formatDate = (ms: number): string => {
+    try {
+      return new Date(ms).toLocaleString(currentLanguage(), { dateStyle: 'medium', timeStyle: 'short' });
+    } catch {
+      return new Date(ms).toISOString();
     }
   };
 
@@ -301,16 +379,15 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
     } catch { /* ignore */ }
   };
 
-  // --- Invite link ---
+  // --- Invite link (Public / ReadPublic only) ---
+  // A Private channel has NO bare link: a URL alone never granted access and
+  // now cannot (l2-node 0.140.0+ invite gate). Its only link is the personal
+  // one produced by inviting a specific address above (spec 06 §6.5).
   const [linkCopied, setLinkCopied] = createSignal(false);
   const handleCopyLink = () => {
-    // Private channels live only on their host node — embed the current node so a
-    // recipient on another node can find + switch to it. Public channels omit it
-    // (they're chain-discoverable everywhere).
-    const url = buildChannelInviteUrl(
-      channelIdNum(),
-      isPrivateChannel() ? getCurrentNodeUrl() : undefined,
-    );
+    if (!isExplicitPublicChannel()) return;
+    // Public channels are chain-discoverable everywhere: no host hint.
+    const url = buildChannelInviteUrl(channelIdNum());
     if (!url) return;
     navigator.clipboard.writeText(url).then(() => {
       setLinkCopied(true);
@@ -347,16 +424,19 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
         </div>
       </Show>
 
-      {/* Invite link */}
-      <div class="ch-section">
-        <button class="ch-link-btn" onClick={handleCopyLink}>
-          {linkCopied() ? t('channel_link_copied') : t('channel_copy_link')}
-        </button>
-      </div>
+      {/* Bare invite link — Public / ReadPublic only, once the type is known. */}
+      <Show when={isExplicitPublicChannel()}>
+        <div class="ch-section">
+          <button class="ch-link-btn" onClick={handleCopyLink}>
+            {linkCopied() ? t('channel_link_copied') : t('channel_copy_link')}
+          </button>
+        </div>
+      </Show>
 
       {/* Invite by address. For a PRIVATE channel this is load-bearing: a URL
-          alone can't grant access (protocol spec §3.9/§5.5.4), so the target
-          address must be explicitly invited before it can send ChannelJoin.
+          alone can't grant access (protocol spec §3.9/§3.9.1), every node
+          requires the signed invite inside the invitee's ChannelJoin; the
+          invite has a validity (picker) and yields a personal invite link.
           For a PUBLIC channel anyone can already self-join freely, so this
           grants no access — but ChannelInvite still generates a
           channel_invite notification (l2-node 0.128.0+) addressed to the
@@ -373,12 +453,37 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
               value={inviteAddress()}
               onInput={(e) => setInviteAddress(e.currentTarget.value)}
             />
-            <button class="ch-add-btn" onClick={handleInviteUser} disabled={!inviteAddress().trim()}>
-              {inviteSuccess() ? t('channel_invite_sent') : t('channel_invite')}
+            <button class="ch-add-btn" onClick={handleInviteUser} disabled={!inviteAddress().trim() || inviteBusy() || !channelTypeKnown()}>
+              {inviteBusy() ? t('loading') : inviteSuccess() ? t('channel_invite_sent') : t('channel_invite')}
             </button>
           </div>
+          <Show when={isGatedChannel()}>
+            <label class="ch-ttl-row">
+              <span>{t('channel_invite_validity')}</span>
+              <select
+                class="ch-select"
+                value={String(inviteTtlMs())}
+                onChange={(e) => setInviteTtlMs(inviteTtlFromPicker(e.currentTarget.value))}
+              >
+                <For each={INVITE_TTL_OPTIONS}>
+                  {(opt) => <option value={String(opt.ms)}>{t(opt.key)}</option>}
+                </For>
+              </select>
+            </label>
+          </Show>
           <Show when={inviteError()}>
             <span class="ch-error">{inviteError()}</span>
+          </Show>
+          <Show when={isGatedChannel() && currentLastInvite()}>
+            <div class="ch-personal-link">
+              <span class="ch-personal-link-target">{truncAddr(currentLastInvite()!.address)}</span>
+              <button class="ch-link-btn" onClick={handleCopyPersonalLink}>
+                {personalLinkCopied() ? t('channel_link_copied') : t('channel_invite_copy_personal_link')}
+              </button>
+              <span class="ch-personal-link-exp">
+                {t('channel_invite_valid_until', { date: formatDate(currentLastInvite()!.expiresAt) })}
+              </span>
+            </div>
           </Show>
         </div>
       </Show>
@@ -730,6 +835,31 @@ export const ChannelSettingsView: Component<ChannelSettingsProps> = (props) => {
         .ch-remove-btn:hover { background: rgba(255,68,68,0.1); }
         .ch-add-row { display: flex; gap: var(--spacing-sm); margin-top: var(--spacing-sm); }
         .ch-add-row .ch-input { flex: 1; margin-bottom: 0; }
+        .ch-ttl-row {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-sm);
+          margin-top: var(--spacing-sm);
+          font-size: var(--font-size-sm);
+          color: var(--color-text-secondary);
+        }
+        .ch-select {
+          padding: var(--spacing-xs) var(--spacing-sm);
+          border: 1px solid var(--color-border);
+          border-radius: var(--radius-md);
+          background: var(--color-bg-tertiary);
+          color: var(--color-text-primary);
+          font-family: inherit;
+          font-size: var(--font-size-sm);
+        }
+        .ch-personal-link {
+          display: flex;
+          flex-direction: column;
+          gap: var(--spacing-xs);
+          margin-top: var(--spacing-sm);
+        }
+        .ch-personal-link-target { font-family: monospace; font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+        .ch-personal-link-exp { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
 
         .ch-avatar-row {
           display: flex;

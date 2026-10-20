@@ -23,6 +23,7 @@
 import { createSignal } from 'solid-js';
 import { getSetting } from './settings';
 import { registerWalletSwitchReset } from './walletScope';
+import { splitHashRoute } from './hashQuery';
 
 export type ViewName =
   | 'chat'
@@ -52,18 +53,11 @@ export interface Route {
 function parseHash(hash: string): Route {
   // Remove leading # and /
   const raw = hash.replace(/^#\/?/, '');
-  // Split query string
-  const [path, queryStr] = raw.split('?');
+  // Path ends at the first `?`; each pair splits on its first `=`; a malformed
+  // escape drops that pair instead of throwing; null-prototype query object
+  // (lib/hashQuery.ts, shared with desktop).
+  const { path, query } = splitHashRoute(raw);
   const segments = path.split('/').filter(Boolean);
-
-  // Parse query params
-  const query: Record<string, string> = {};
-  if (queryStr) {
-    for (const pair of queryStr.split('&')) {
-      const [k, v] = pair.split('=');
-      if (k) query[decodeURIComponent(k)] = decodeURIComponent(v || '');
-    }
-  }
 
   const first = segments[0] || 'news';
   const second = segments[1] || '';

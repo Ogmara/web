@@ -5,6 +5,129 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.83.0] - 2026-10-20
+
+Client side of the private-channel invite gate (l2-node 0.140.0, sdk-js
+0.64.0; spec 05 §8.4, spec 06 §6.5). Every node now rejects a Private
+`ChannelJoin` / federate request that does not carry a signed invite naming
+the joining wallet.
+
+### Security
+
+- **The join page no longer offers a Join button for a private channel
+  without an invite.** It used to render "Click join to request access" plus
+  a Join button that sent a bare `ChannelJoin` (and a federate) for any
+  private channel id in a URL. The invite now comes from the personal link's
+  `inv=` parameter or from the active wallet's pending `channel_invite`
+  notification (`findPendingInvite`); without a usable one the page shows
+  "This is an invite-only channel", the user's own address and a
+  copy-my-address button, and nothing that joins. An invite for another
+  wallet ("This invite is for a different account") or one past the client
+  expiry margin ("This invite expired on …") also gets no Join button. The
+  same invite bytes go to `federateChannel` and `joinChannel`. A node
+  rejection for a missing/invalid proof falls back to the invite-only state.
+  Channel types other than an explicit Public/ReadPublic take the gated path
+  (fail-closed for gating). Every account-switch guard of 0.82.0 is kept; the
+  private join flow additionally checks the wallet-switch generation after
+  each await (catches A → B → A).
+- **Existing members are not sent to a dead end.** When the active wallet is
+  already the creator or a member of the private channel on this node, the
+  join page offers "You are already a member — open channel" instead of the
+  invite gate. This needs POSITIVE evidence: the home node's channel record
+  names the wallet as creator, or a member list fetched for exactly this
+  (wallet, switch generation, channel) contains it. That list is re-checked
+  after its await. Anything unknown, failed, stale or past the first page
+  (200) falls back to the invite-only state (fail closed). A cross-node
+  preview never counts as membership.
+- **A stale channel record can no longer drive the join page.** The join
+  page's channel resource kept the PREVIOUS route's record while the next one
+  loaded, so going from a public channel's join link to a private one could
+  show the public Join for the private id. That click joined it without an
+  invite and put the channel in the sidebar. The fetcher now returns
+  `{ id, wallet, detail }`, and the view uses a record only when route id,
+  wallet and the record's own `channel_id` all match (`currentChannelRecord`).
+  The same check applies to cross-node previews. Inviter and membership
+  information come from the matched record only. Both public join handlers
+  now require positive evidence (a matched, non-gated record). Covered by a
+  wiring test with a negative control and a source probe.
+- **Floor-aware invite gate.** The new shared `isInviteGatedChannel(type, id)`
+  gates every channel unless its type is exactly 0/1 AND its id is below
+  `PRIVATE_CHANNEL_ID_FLOOR` (2^32). A hostile `?node=` host that answers
+  `channel_type: 0` for a private-range id therefore can no longer show the
+  public cross-node Join. The join page's gate and both public paths use it.
+- **The bare "Copy invite link" is gone for Private channels.** It never
+  granted access and now cannot. It is shown ONLY for an explicitly
+  Public / ReadPublic channel below the private floor, whose loaded record
+  matches the route. Anything else fails closed: no bare link; invites get
+  the validity picker and a personal link.
+- The join page's channel resource now has auth readiness in its key, so a
+  cold start on `#/join/X` re-fetches once auth becomes ready (the not-found
+  branch uses the pending invite's anchor node only when ready).
+- **Hash-route query parsing hardened** (`lib/hashQuery.ts`, ported from
+  desktop): the path ends at the first `?`, each pair splits on its first `=`
+  (values containing `=`/`?` arrive whole), a malformed percent-escape drops
+  that pair instead of throwing out of the router, and the query object has
+  a null prototype (`__proto__` is plain data). A private
+  channel's only link is the personal one produced by inviting an address.
+
+### Added
+
+- Private channel settings: invite validity picker (1 hour / 24 hours /
+  7 days / 14 days, default 7 days, no free-form entry) and, after a
+  successful invite, a "Copy personal invite link" button for that invitee
+  (`buildPrivateChannelInviteUrl` with this node as the federation host) with
+  the expiry date. The link state is tagged with wallet, switch generation
+  and channel and never shown for another account or channel; invite errors
+  (TTL range, unknown creator) are shown, an account switch mid-invite is
+  dropped silently.
+- `lib/privateInvite.ts`: pure invite-gate state machine (`none` /
+  `wrong-account` / `expired` / `inviter-unverifiable` / `valid` / `member`),
+  `membershipEvidence` (positive-evidence-only membership check), link vs
+  pending-invite resolution, invite-proof rejection matcher and TTL options,
+  with `node --test` coverage including negative controls.
+- Tapping a `channel_invite` notification opens the join page
+  (`#/join/{channel_id}`, plus `?node=<anchor_node>` when the notification
+  carries an http(s) anchor node). Before, the click did nothing. The invite
+  envelope is never put in the route; the join page fetches it with
+  `findPendingInvite`. The row also gets an icon and a translated label
+  (`notifications_channel_invite`, all 7 locales; it used to render the raw key).
+- A failed federate/join on a private channel now shows the invite-only state
+  for ANY HTTP 403, not only for the exact "invite proof required" wording
+  (`isPrivateJoinRejection`). Errors on public channels are still shown as-is.
+- **Creator can host their own private channel on a fresh home node.** When a
+  private channel is known only from a cross-node preview, there is no usable
+  invite, and the preview names the active wallet as creator
+  (`isPreviewCreator`, shared), the join page offers "You created this
+  channel — host it on this node". That calls `federateChannel(cid, host)`
+  with NO invite; the node verifies the creator against the host's record
+  and adds them. Every account-switch guard applies (wallet, generation,
+  route, re-checked after the await). Membership detection stays home-only.
+  The preview is untrusted: a host lying about the creator only gets a
+  403/502, which goes through the normal error mapping. Before this, the
+  creator hit the invite-only gate with no way forward.
+- HTTP 429/503 from federate/join now show "The node is busy. Please try
+  again shortly." (`channel_invite_busy_retry`, `isTransientFederateError`,
+  shared) instead of the raw SDK string.
+- Cross-node host hint for the join page falls back to the anchor node named
+  in the link's invite, then in the pending invite, when `?node=` is absent.
+- i18n (all 7 locales): `channel_invite_required`,
+  `channel_invite_required_desc`, `channel_invite_expired`,
+  `channel_invite_wrong_account`, `channel_invite_copy_my_address`,
+  `channel_invite_address_copied`, `channel_invite_copy_personal_link`,
+  `channel_invite_validity`, `channel_invite_valid_until`,
+  `channel_invite_ttl_1h|24h|7d|14d`, `channel_invite_inviter_unverifiable`,
+  `channel_invite_already_member`, `channel_invite_creator_host`,
+  `channel_invite_busy_retry`.
+
+### Changed
+
+- `channel_private_invite_link` reworded in all 7 locales (it was English
+  everywhere and promised a request-access flow that does not exist): a
+  personal invite from a member is required.
+- `@ogmara/sdk` (local) 0.63.0 → 0.64.0 in the lockfile.
+- ChatView auto-join is unchanged and still covers only non-private
+  encrypted channels.
+
 ## [0.82.0] - 2026-10-12
 
 Multi-account hardening: several pieces of account-bound state survived a
