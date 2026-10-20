@@ -30,6 +30,7 @@ import { StatusBar } from './components/StatusBar';
 import { NoNodeLandingPage } from './components/NoNodeLandingPage';
 import { activeNodeUrl } from './lib/api';
 import { DeviceMappingBanner } from './components/DeviceMappingBanner';
+import { KeyVaultBanner } from './components/KeyVaultBanner';
 import { ImageLightbox } from './components/ImageLightbox';
 import { route, goBack, redirectNow } from './lib/router';
 import { walletAddress } from './lib/auth';
@@ -86,6 +87,7 @@ export const App: Component = () => {
         </Show>
       </div>
       <DeviceMappingBanner />
+      <KeyVaultBanner />
       <Show when={activeNodeUrl()} fallback={<NoNodeLandingPage />}>
       <div class={bodyClass()}>
         <Sidebar onNavigate={() => { if (isMobileViewport()) showMobileDetail(); }} />

@@ -29,6 +29,13 @@ export interface Settings {
   /** Cached enc-key binding marker "v2:wallet:enc_pub" to avoid re-publishing (§2.4). */
   encKeyBound: string;
   /**
+   * Key-vault marker (§2.5): holds the wallet address once this device has
+   * opened or published that wallet's key vault. A later 404 for the vault is
+   * then "the node has no copy", not "empty" — backups pause instead of
+   * overwriting the real vault with a partial keyring. '' = never seen.
+   */
+  keyVaultSeen: string;
+  /**
    * Stable per-install device id (32-byte hex) for the BUILT-IN wallet E2E model
    * (§2.4). Minted once; the public device identifier other users wrap keys to.
    * External (Extension/K5) wallets use their delegated device signing key instead.
@@ -112,6 +119,7 @@ const defaults: Settings = {
   nodeUrl: '',
   deviceRegistered: '',
   encKeyBound: '',
+  keyVaultSeen: '',
   deviceId: '',
   pushGatewayUrl: '',
   defaultLandingView: 'chat',
@@ -149,6 +157,8 @@ const PER_WALLET: ReadonlySet<keyof Settings> = new Set([
   'deviceRegistered',
   'encKeyBound',
   'deviceId',
+  // Whether this device has seen the wallet's key vault (keyVault.ts).
+  'keyVaultSeen',
 ] as (keyof Settings)[]);
 
 /** Whether a key is account-scoped rather than browser-scoped. */

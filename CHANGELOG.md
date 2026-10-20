@@ -5,6 +5,114 @@ All notable changes to the Ogmara web application will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.84.0] - 2026-10-20
+
+Key-vault data-loss fixes (spec 01 §2.5, spec 05 §8.5). The E2E key vault is
+one last-write-wins record per wallet, so any publish replaces it on every
+node. New rule: the vault is never overwritten unless this session, for this
+wallet and switch generation, opened it with a backup key verified to belong
+to the wallet, confirmed it verifiably empty, or the user explicitly chose
+"Replace backup". All fixes are in shipped (runtime) code.
+
+### Security
+
+- **The vault backup key is only derived from a signature verified to come
+  from the connected wallet.** The Klever Extension / K5 sign with whatever
+  account is active inside the wallet; after switching accounts there (and
+  reloading) the app still restored the previous wallet, derived the backup
+  key from the other account's signature and tagged it with the connected
+  wallet. The restore then failed to open the vault, was treated as done,
+  and the next backup sealed the keyring under the OTHER account's key into
+  this account's vault, unreadable on every other device. The signature is
+  now checked (new `lib/walletSigVerify.ts`: Klever signed-message format with
+  the UTF-8 byte length, Keccak-256, Ed25519, against the wallet's public key;
+  hex, base64-of-hex, base64 and raw-byte returns) for every wallet source,
+  built-in included. On a mismatch nothing is derived, fetched or published,
+  the wallet is not asked again (no popup per decrypt-miss) until the user
+  presses Retry or the session changes, and a banner says "Your wallet signed
+  as a different account than klv1…". The device-key binding signature path
+  (`walletSignFn`) is unchanged.
+- **A 404 no longer means "no vault anywhere".** Vaults replicate by live
+  gossip only, so a node that joined after the last publish answers 404 for
+  a vault that exists elsewhere, and the next backup overwrote it everywhere
+  with this session's partial keyring. A 404 now counts as empty only when
+  this device has never opened or published the wallet's vault (new
+  per-wallet setting `keyVaultSeen`, set after a successful open or publish).
+  With the marker set, backups pause (`blocked: missing`) and the banner
+  offers Retry (e.g. after switching node) or "Replace backup". Remaining
+  gap: a fresh device on a node without a copy still can't be told apart
+  from a new user until nodes backfill vaults.
+- **An unreadable vault is no longer overwritten.** A vault our own verified
+  key can't open (another key's blob, corruption, an unsupported
+  `format_version` from a newer client) used to end restore as done, and the
+  next backup replaced it. It now pauses backups (`blocked: unreadable`, no
+  GET loop, the backup intent is kept) until the user confirms "Replace
+  backup", which warns that keys only in the old backup are lost.
+- Publishing is gated on restore `done` for the current account both in the
+  controller and again inside the publish run after the key derivation; a
+  restore/done state reached for another wallet or switch generation reads
+  as not done.
+- **"Replace backup" acts only for the account the user confirmed for.** The
+  banner captures the wallet and switch generation before the confirmation
+  opens; if the account changed meanwhile (even A → B → A), Replace returns
+  `stale` and publishes nothing, so confirming for one account can never
+  overwrite another blocked account's vault. The controller re-checks that
+  account again after waiting for an in-flight publish.
+- **A backup key zeroed by a session clear is never used.** A run that held
+  the cached key across a disconnect would open with an all-zero key
+  (misreporting a readable vault as unreadable) or seal a blob no device can
+  open. Restore, publish and the key cache now refuse an empty or all-zero
+  key (same check as desktop and mobile).
+
+### Fixed
+
+- **Key changes during an in-flight backup were dropped.** A key cached while
+  a publish was running was not backed up until the next key change (keys
+  live in memory only). One follow-up publish is now scheduled after the
+  flight, for the account that asked, only while it is still active.
+- **A failed backup was never retried.** Failed publishes now retry after
+  60 s, 5 min and 15 min (at most 3 automatic retries); success or a session
+  clear resets the count.
+- Concurrent restore triggers share one fetch; the controller state machine
+  moved to a pure, injectable `createVaultController` in
+  `lib/keyVaultCore.ts` (tests: `keyVaultController.test.ts`,
+  `walletSigVerify.test.ts`, with negative controls against the pre-fix flow).
+
+### Added
+
+- `KeyVaultBanner` (Retry; "Replace backup" behind a confirmation) with
+  translations in all 7 languages.
+  After a confirmed Replace it says "Backup replaced" only when a vault was
+  actually published; with no keys on this device yet it says the backup was
+  unblocked and will be replaced with the next new key
+  (`keyvault_replace_nothing`), since nothing was sent and the old vault
+  stays on the node until then.
+
+### Known limitations
+
+- **Disconnecting forgets that this device has seen the vault.** The
+  `keyVaultSeen` marker is a per-wallet setting, so `wipeWalletScope` removes
+  it on disconnect / sign-out, and for Klever Extension users disconnect is
+  the account-switch gesture. After the account is added again the device is
+  back in the "fresh device" gap: a 404 from a node without a copy counts as
+  empty and the next backup can overwrite the vault held elsewhere.
+- **A node that missed the latest gossip update can serve an older vault.**
+  An older but readable version opens fine, and the next publish then
+  overwrites the newer version on every node, losing keys only the newer one
+  had. Same root cause as the 404 gap above: vaults have no node backfill and
+  the vault response carries no `updated_at` to compare against.
+- **"It will be retried automatically" stops after 3 failed attempts.** The
+  failed-Replace message and background backups retry after 60 s, 5 min and
+  15 min only; after that the next key change (or Retry / a new session)
+  triggers the next attempt.
+- **A malformed wallet signature is not latched** (pre-existing): only a
+  verified mismatch stops the wallet being asked again, so a wallet that
+  returns garbage prompts again on each decrypt-miss.
+- **On plain `http://` (no `crypto.subtle`) the signature can't be
+  verified** and the banner reports a wallet mismatch. Copy only: nothing is
+  derived or published, so no data is at risk, but the message is
+  misleading.
+
 ## [0.83.0] - 2026-10-20
 
 Client side of the private-channel invite gate (l2-node 0.140.0, sdk-js
